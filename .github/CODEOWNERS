@@ -1,0 +1,21 @@
+# CODEOWNERS
+# Thay thế username bên dưới bằng thành viên thực tế của team.
+# Mặc định owner cho toàn bộ repository:
+* @macdogiahuy
+
+# Frontend
+/frontend/ @macdogiahuy
+
+# Backend
+/backend/ @macdogiahuy
+
+# Infrastructure and CI
+/infra/ @macdogiahuy
+/.github/ @macdogiahuy
+
+# Documentation
+/docs/ @macdogiahuy
+
+# Thêm reviewer khác vào đây, ví dụ:
+# /frontend/ @macdogiahuy @hinouser29
+# /backend/ @macdogiahuy @v-hamy165
