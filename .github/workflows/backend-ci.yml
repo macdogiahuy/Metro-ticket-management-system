@@ -2,16 +2,12 @@ name: Backend CI
 
 on:
   push:
-    paths:
-      - 'backend/**'
-      - '.github/workflows/backend-ci.yml'
+    branches: [main, dev]
   pull_request:
-    paths:
-      - 'backend/**'
-      - '.github/workflows/backend-ci.yml'
+    branches: [main, dev]
 
 jobs:
-  build:
+  backend-build:
     runs-on: ubuntu-latest
     services:
       postgres:
