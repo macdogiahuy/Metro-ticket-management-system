@@ -1,0 +1,45 @@
+name: Backend CI
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: metro_ticket
+          POSTGRES_USER: metro_user
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U metro_user -d metro_ticket"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: Restore
+        working-directory: backend
+        run: dotnet restore Metro.sln
+      - name: Build
+        working-directory: backend
+        run: dotnet build Metro.sln --configuration Release --no-restore
+      - name: Test
+        working-directory: backend
+        run: dotnet test Metro.sln --configuration Release --no-build
+        env:
+          ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=metro_ticket;Username=metro_user;Password=postgres
