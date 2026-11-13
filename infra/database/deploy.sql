@@ -35,7 +35,7 @@ DO $migration_001$
 BEGIN
   IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 1) THEN
     IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 1
-                   AND name = '001_identity_and_access.sql' AND checksum = 'c2bbd2fb01674e04542971d5fa8cfb4d13b7024188a6ff46b8903e8d9c5ff4d9') THEN
+                   AND name = '001_identity_and_access.sql' AND checksum = '85bc754b77bbac2877e8ca4210c8fa3d0040e2983054f14ec4bfe97075103a67') THEN
       RAISE EXCEPTION 'Migration 001 checksum mismatch; add a new migration';
     END IF;
     RAISE NOTICE 'Migration 001 already applied';
@@ -86,6 +86,27 @@ CREATE TABLE IF NOT EXISTS public."AspNetUserTokens" (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "UserNameIndex" ON public."AspNetUsers" ("NormalizedUserName");
 CREATE INDEX IF NOT EXISTS "EmailIndex" ON public."AspNetUsers" ("NormalizedEmail");
+-- FR-01.01 requires one account per email, which is stricter than the ASP.NET Core Identity
+-- default. The application must set UserOptions.RequireUniqueEmail = true so duplicate
+-- registrations produce a validation error instead of a database error. Fail fast with an
+-- actionable message when an existing Identity table already contains duplicates.
+DO $email_uniqueness$
+DECLARE
+    v_duplicate_emails integer;
+BEGIN
+    SELECT count(*) INTO v_duplicate_emails
+    FROM (
+        SELECT "NormalizedEmail"
+        FROM public."AspNetUsers"
+        WHERE "NormalizedEmail" IS NOT NULL
+        GROUP BY "NormalizedEmail"
+        HAVING count(*) > 1
+    ) duplicates;
+    IF v_duplicate_emails > 0 THEN
+        RAISE EXCEPTION 'FR-01.01 requires unique emails but % normalized email value(s) are duplicated in public."AspNetUsers"; resolve them before deploying', v_duplicate_emails;
+    END IF;
+END
+$email_uniqueness$;
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_AspNetUsers_NormalizedEmail"
     ON public."AspNetUsers" ("NormalizedEmail") WHERE "NormalizedEmail" IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS "RoleNameIndex" ON public."AspNetRoles" ("NormalizedName");
@@ -232,7 +253,7 @@ CREATE TABLE metro.retention_policies (
 );
 
   INSERT INTO metro.schema_migrations (version, name, checksum)
-  VALUES (1, '001_identity_and_access.sql', 'c2bbd2fb01674e04542971d5fa8cfb4d13b7024188a6ff46b8903e8d9c5ff4d9');
+  VALUES (1, '001_identity_and_access.sql', '85bc754b77bbac2877e8ca4210c8fa3d0040e2983054f14ec4bfe97075103a67');
 END $migration_001$;
 
 -- 002_network_operations.sql
@@ -534,7 +555,7 @@ DO $migration_003$
 BEGIN
   IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 3) THEN
     IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 3
-                   AND name = '003_ticketing_finance_capacity.sql' AND checksum = '5ab45c075e8c4caa4c235ec35c0eb30032ca3301c6c7e2eef61be003f06a3703') THEN
+                   AND name = '003_ticketing_finance_capacity.sql' AND checksum = 'df85ce6c02fa3dc56c32f95a31e43fc79e1d9caedf19df65196ce1aa64517f18') THEN
       RAISE EXCEPTION 'Migration 003 checksum mismatch; add a new migration';
     END IF;
     RAISE NOTICE 'Migration 003 already applied';
@@ -553,7 +574,8 @@ CREATE TABLE metro.ticket_products (
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(), updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     UNIQUE (operator_id, id), UNIQUE (operator_id, code),
     CHECK ((product_type = 'SINGLE_TRIP' AND duration_value IS NULL AND duration_unit IS NULL AND expiry_rule = 'SINGLE_JOURNEY')
-        OR (product_type <> 'SINGLE_TRIP' AND duration_value > 0 AND duration_unit IS NOT NULL)),
+        OR (product_type <> 'SINGLE_TRIP' AND duration_value IS NOT NULL AND duration_value > 0
+            AND duration_unit IS NOT NULL AND expiry_rule <> 'SINGLE_JOURNEY')),
     CHECK (capacity_controlled = false OR product_type = 'SINGLE_TRIP')
 );
 
@@ -583,7 +605,7 @@ CREATE TABLE metro.fare_matrix_entries (
     FOREIGN KEY (operator_id, line_id) REFERENCES metro.lines (operator_id, id),
     FOREIGN KEY (operator_id, origin_station_id) REFERENCES metro.stations (operator_id, id),
     FOREIGN KEY (operator_id, destination_station_id) REFERENCES metro.stations (operator_id, id),
-    UNIQUE (operator_id, fare_policy_version_id, ticket_product_id, line_id, origin_station_id, destination_station_id, payment_channel, eligibility_group),
+    UNIQUE NULLS NOT DISTINCT (operator_id, fare_policy_version_id, ticket_product_id, line_id, origin_station_id, destination_station_id, payment_channel, eligibility_group),
     CHECK (origin_station_id IS NULL OR destination_station_id IS NULL OR origin_station_id <> destination_station_id)
 );
 
@@ -725,7 +747,9 @@ CREATE TABLE metro.payments (
     correlation_id uuid NOT NULL DEFAULT gen_random_uuid(), created_at timestamptz NOT NULL DEFAULT clock_timestamp(), updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     FOREIGN KEY (operator_id, order_id) REFERENCES metro.orders (operator_id, id),
     UNIQUE (operator_id, id), UNIQUE (operator_id, payment_code), UNIQUE (operator_id, provider, idempotency_key),
-    UNIQUE NULLS NOT DISTINCT (operator_id, provider, provider_payment_reference), UNIQUE (operator_id, correlation_id)
+    -- Provider references are assigned asynchronously: many payments (for example CASH) may have no
+    -- reference at once, so only non-NULL references are unique per operator/provider.
+    UNIQUE (operator_id, provider, provider_payment_reference), UNIQUE (operator_id, correlation_id)
 );
 
 CREATE TABLE metro.payment_events (
@@ -761,7 +785,10 @@ CREATE TABLE metro.ticket_credentials (
     status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUSPENDED','REVOKED','REPLACED','EXPIRED')),
     issued_at timestamptz NOT NULL DEFAULT clock_timestamp(), revoked_at timestamptz, replaced_by_id uuid,
     FOREIGN KEY (operator_id, ticket_id) REFERENCES metro.tickets (operator_id, id),
-    UNIQUE (operator_id, id), UNIQUE (operator_id, token_hash), FOREIGN KEY (replaced_by_id) REFERENCES metro.ticket_credentials (id)
+    UNIQUE (operator_id, id), UNIQUE (operator_id, token_hash),
+    -- Replacement chains stay inside one operator and cannot point at themselves.
+    FOREIGN KEY (operator_id, replaced_by_id) REFERENCES metro.ticket_credentials (operator_id, id),
+    CHECK (replaced_by_id IS NULL OR replaced_by_id <> id)
 );
 
 CREATE TABLE metro.journeys (
@@ -829,7 +856,8 @@ CREATE TABLE metro.refund_transactions (
     FOREIGN KEY (operator_id, refund_request_id) REFERENCES metro.refund_requests (operator_id, id),
     FOREIGN KEY (operator_id, payment_id) REFERENCES metro.payments (operator_id, id),
     UNIQUE (operator_id, id), UNIQUE (operator_id, refund_code), UNIQUE (operator_id, provider, idempotency_key),
-    UNIQUE NULLS NOT DISTINCT (operator_id, provider, provider_refund_reference), UNIQUE (operator_id, correlation_id)
+    -- Refund references arrive later from the provider, so multiple NULLs must be allowed.
+    UNIQUE (operator_id, provider, provider_refund_reference), UNIQUE (operator_id, correlation_id)
 );
 CREATE UNIQUE INDEX uq_unresolved_refund_per_request ON metro.refund_transactions (operator_id, refund_request_id)
     WHERE status IN ('PENDING','PROCESSING','UNKNOWN');
@@ -840,7 +868,9 @@ CREATE TABLE metro.refund_attempts (
     response_hash char(64), status text NOT NULL CHECK (status IN ('SENT','SUCCEEDED','FAILED','TIMEOUT','UNKNOWN')),
     error_code text, attempted_at timestamptz NOT NULL DEFAULT clock_timestamp(), completed_at timestamptz,
     FOREIGN KEY (operator_id, refund_transaction_id) REFERENCES metro.refund_transactions (operator_id, id),
-    UNIQUE (operator_id, refund_transaction_id, attempt_no), UNIQUE NULLS NOT DISTINCT (operator_id, provider_event_id)
+    UNIQUE (operator_id, refund_transaction_id, attempt_no),
+    -- SENT/TIMEOUT attempts may have no provider event yet; only assigned IDs are unique.
+    UNIQUE (operator_id, provider_event_id)
 );
 
 CREATE TABLE metro.refund_payout_revisions (
@@ -864,7 +894,7 @@ CREATE INDEX ix_afc_ticket_time ON metro.afc_events (operator_id, ticket_id, eve
 CREATE INDEX ix_refunds_payment ON metro.refund_requests (operator_id, payment_id, status);
 
   INSERT INTO metro.schema_migrations (version, name, checksum)
-  VALUES (3, '003_ticketing_finance_capacity.sql', '5ab45c075e8c4caa4c235ec35c0eb30032ca3301c6c7e2eef61be003f06a3703');
+  VALUES (3, '003_ticketing_finance_capacity.sql', 'df85ce6c02fa3dc56c32f95a31e43fc79e1d9caedf19df65196ce1aa64517f18');
 END $migration_003$;
 
 -- 004_support_analytics_automation.sql
@@ -1112,7 +1142,7 @@ DO $migration_005$
 BEGIN
   IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 5) THEN
     IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 5
-                   AND name = '005_transactional_capacity_retention.sql' AND checksum = '7d2de3544bbf7d2bccb3d7428d8b47fb3037ff855244595978f341c748c8ac70') THEN
+                   AND name = '005_transactional_capacity_retention.sql' AND checksum = '099237dd7725a028e76b71175a017ec705a687ffbff2d6e95137c2d318e92bef') THEN
       RAISE EXCEPTION 'Migration 005 checksum mismatch; add a new migration';
     END IF;
     RAISE NOTICE 'Migration 005 already applied';
@@ -1137,11 +1167,12 @@ CREATE OR REPLACE FUNCTION metro.hold_trip_capacity(
     p_expires_at timestamptz
 ) RETURNS uuid
 LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = metro, public, pg_catalog
+SECURITY DEFINER
+SET search_path = pg_catalog, metro, public
 AS $function$
 DECLARE
     v_item metro.order_items%ROWTYPE;
+    v_order_id uuid;
     v_order_status text;
     v_capacity_controlled boolean;
     v_origin_sequence smallint;
@@ -1154,10 +1185,41 @@ BEGIN
     IF p_idempotency_key IS NULL OR btrim(p_idempotency_key) = '' THEN
         RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Capacity hold idempotency key is required';
     END IF;
-    IF p_expires_at <= clock_timestamp() THEN
+    IF p_expires_at IS NULL OR p_expires_at <= clock_timestamp() THEN
         RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Capacity hold expiry must be in the future';
     END IF;
 
+    -- Shared lock hierarchy for all ticketing workflows:
+    -- order -> order_item -> capacity_hold -> trip_capacity_segments.
+    -- Reading order_id without a lock allows this workflow to take the order lock first.
+    SELECT order_id INTO v_order_id
+    FROM metro.order_items
+    WHERE operator_id = p_operator_id AND id = p_order_item_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'Order item not found';
+    END IF;
+
+    SELECT o.status INTO v_order_status
+    FROM metro.orders o
+    WHERE o.operator_id = p_operator_id AND o.id = v_order_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'Order not found';
+    END IF;
+
+    SELECT * INTO v_item
+    FROM metro.order_items
+    WHERE operator_id = p_operator_id AND id = p_order_item_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'Order item not found';
+    END IF;
+    IF v_item.order_id <> v_order_id THEN
+        RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'Order item changed while acquiring the capacity hold';
+    END IF;
+
+    -- Recheck the idempotency key only after the order/item locks, so a concurrent
+    -- retry returns the hold created by the transaction it waited for.
     SELECT * INTO v_existing
     FROM metro.capacity_holds
     WHERE operator_id = p_operator_id AND idempotency_key = p_idempotency_key
@@ -1173,22 +1235,12 @@ BEGIN
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'A terminal capacity hold cannot be reused';
     END IF;
 
-    SELECT * INTO v_item
-    FROM metro.order_items
-    WHERE operator_id = p_operator_id AND id = p_order_item_id
-    FOR UPDATE;
-
+    SELECT tp.capacity_controlled INTO v_capacity_controlled
+    FROM metro.ticket_products tp
+    WHERE tp.operator_id = p_operator_id AND tp.id = v_item.ticket_product_id;
     IF NOT FOUND THEN
-        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'Order item not found';
+        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'Ticket product not found';
     END IF;
-
-    SELECT o.status, tp.capacity_controlled
-      INTO v_order_status, v_capacity_controlled
-    FROM metro.orders o
-    JOIN metro.ticket_products tp
-      ON tp.operator_id = p_operator_id AND tp.id = v_item.ticket_product_id
-    WHERE o.operator_id = p_operator_id AND o.id = v_item.order_id
-    FOR UPDATE OF o;
     IF NOT v_capacity_controlled THEN
         RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Ticket product is not capacity controlled';
     END IF;
@@ -1281,8 +1333,8 @@ CREATE OR REPLACE FUNCTION metro.confirm_capacity_hold(
     p_capacity_hold_id uuid
 ) RETURNS boolean
 LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = metro, public, pg_catalog
+SECURITY DEFINER
+SET search_path = pg_catalog, metro, public
 AS $function$
 DECLARE
     v_hold metro.capacity_holds%ROWTYPE;
@@ -1337,8 +1389,8 @@ CREATE OR REPLACE FUNCTION metro.release_capacity_hold(
     p_reason text DEFAULT 'Released by workflow'
 ) RETURNS boolean
 LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = metro, public, pg_catalog
+SECURITY DEFINER
+SET search_path = pg_catalog, metro, public
 AS $function$
 DECLARE
     v_hold metro.capacity_holds%ROWTYPE;
@@ -1398,8 +1450,8 @@ $function$;
 CREATE OR REPLACE FUNCTION metro.expire_capacity_holds(p_batch_size integer DEFAULT 500)
 RETURNS integer
 LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = metro, public, pg_catalog
+SECURITY DEFINER
+SET search_path = pg_catalog, metro, public
 AS $function$
 DECLARE
     v_hold record;
@@ -1435,8 +1487,8 @@ CREATE OR REPLACE FUNCTION metro.confirm_payment_and_issue_tickets(
     p_signature_verified boolean
 ) RETURNS integer
 LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = metro, public, pg_catalog
+SECURITY DEFINER
+SET search_path = pg_catalog, metro, public
 AS $function$
 DECLARE
     v_payment metro.payments%ROWTYPE;
@@ -1444,18 +1496,25 @@ DECLARE
     v_item record;
     v_hold_id uuid;
     v_issued_count integer;
+    v_event_id uuid;
+    v_conflict metro.payment_events%ROWTYPE;
 BEGIN
     IF p_provider_event_id IS NULL OR btrim(p_provider_event_id) = ''
        OR p_event_idempotency_key IS NULL OR btrim(p_event_idempotency_key) = '' THEN
         RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Provider event and idempotency keys are required';
     END IF;
-    IF NOT p_signature_verified THEN
+    IF p_signature_verified IS NOT TRUE THEN
         RAISE EXCEPTION USING ERRCODE = '28000', MESSAGE = 'Payment event signature was not verified';
     END IF;
-    IF p_payload_hash !~ '^[0-9a-f]{64}$' THEN
+    IF p_payload_hash IS NULL OR p_payload_hash !~ '^[0-9a-f]{64}$' THEN
         RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Payment payload hash must be lowercase SHA-256 hex';
     END IF;
+    IF p_received_amount_minor IS NULL OR p_received_currency IS NULL THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Received amount and currency are required';
+    END IF;
 
+    -- Shared lock hierarchy for all ticketing workflows:
+    -- payment -> order -> order_item -> capacity_hold -> trip_capacity_segments.
     SELECT * INTO v_payment
     FROM metro.payments
     WHERE operator_id = p_operator_id AND id = p_payment_id
@@ -1468,27 +1527,67 @@ BEGIN
     FROM metro.orders
     WHERE operator_id = p_operator_id AND id = v_payment.order_id
     FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'Order not found';
+    END IF;
 
-    IF EXISTS (
-        SELECT 1 FROM metro.payment_events
-        WHERE operator_id = p_operator_id
-          AND (provider_event_id = p_provider_event_id OR idempotency_key = p_event_idempotency_key)
-          AND payment_id <> p_payment_id
-    ) THEN
-        RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'Payment event idempotency key belongs to another payment';
+    IF p_received_amount_minor IS DISTINCT FROM v_payment.amount_minor
+       OR p_received_amount_minor IS DISTINCT FROM v_order.total_minor
+       OR p_received_currency IS DISTINCT FROM v_payment.currency
+       OR p_received_currency IS DISTINCT FROM v_order.currency THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'Payment amount or currency does not match the order snapshot';
+    END IF;
+
+    -- Atomically claim the provider event before any success transition. A key owned
+    -- by another payment must abort, including the already-succeeded branch where the
+    -- previous ON CONFLICT DO NOTHING silently ignored the ownership clash.
+    INSERT INTO metro.payment_events (
+        operator_id, payment_id, provider_event_id, idempotency_key, event_type,
+        signature_verified, received_amount_minor, received_currency, payload_hash,
+        outcome, processed_at
+    ) VALUES (
+        p_operator_id, p_payment_id, p_provider_event_id, p_event_idempotency_key,
+        'PAYMENT_SUCCEEDED', p_signature_verified, p_received_amount_minor, p_received_currency,
+        p_payload_hash, 'CLAIMED', clock_timestamp()
+    )
+    ON CONFLICT DO NOTHING
+    RETURNING id INTO v_event_id;
+
+    IF v_event_id IS NULL THEN
+        SELECT * INTO v_conflict
+        FROM metro.payment_events
+        WHERE operator_id = p_operator_id AND provider_event_id = p_provider_event_id
+        FOR UPDATE;
+        IF FOUND THEN
+            IF v_conflict.payment_id <> p_payment_id THEN
+                RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'Payment event belongs to another payment';
+            END IF;
+            UPDATE metro.payment_events SET outcome = 'DUPLICATE'
+            WHERE operator_id = p_operator_id AND id = v_conflict.id;
+            SELECT count(*) INTO v_issued_count
+            FROM metro.tickets t
+            JOIN metro.order_items oi ON oi.operator_id = t.operator_id AND oi.id = t.order_item_id
+            WHERE oi.operator_id = p_operator_id AND oi.order_id = v_order.id;
+            RETURN v_issued_count;
+        END IF;
+
+        SELECT * INTO v_conflict
+        FROM metro.payment_events
+        WHERE operator_id = p_operator_id AND idempotency_key = p_event_idempotency_key
+        FOR UPDATE;
+        IF FOUND THEN
+            IF v_conflict.payment_id <> p_payment_id THEN
+                RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'Payment event idempotency key belongs to another payment';
+            END IF;
+            RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'Payment event idempotency key is already used by another event';
+        END IF;
+
+        RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'Payment event could not be claimed';
     END IF;
 
     IF v_payment.status IN ('SUCCEEDED', 'PARTIALLY_REFUNDED', 'REFUNDED') THEN
-        INSERT INTO metro.payment_events (
-            operator_id, payment_id, provider_event_id, idempotency_key, event_type,
-            signature_verified, received_amount_minor, received_currency, payload_hash,
-            outcome, processed_at
-        ) VALUES (
-            p_operator_id, p_payment_id, p_provider_event_id, p_event_idempotency_key,
-            'PAYMENT_SUCCEEDED', true, p_received_amount_minor, p_received_currency,
-            p_payload_hash, 'ALREADY_PROCESSED', clock_timestamp()
-        )
-        ON CONFLICT DO NOTHING;
+        UPDATE metro.payment_events SET outcome = 'ALREADY_PROCESSED'
+        WHERE operator_id = p_operator_id AND id = v_event_id;
 
         SELECT count(*) INTO v_issued_count
         FROM metro.tickets t
@@ -1499,10 +1598,6 @@ BEGIN
 
     IF v_payment.status <> 'PENDING' OR v_order.status NOT IN ('HELD', 'PENDING_PAYMENT') THEN
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'Payment or order is not in a confirmable state';
-    END IF;
-    IF p_received_amount_minor <> v_payment.amount_minor OR p_received_amount_minor <> v_order.total_minor
-       OR p_received_currency <> v_payment.currency OR p_received_currency <> v_order.currency THEN
-        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'Payment amount or currency does not match the order snapshot';
     END IF;
 
     FOR v_item IN
@@ -1528,16 +1623,8 @@ BEGIN
         END IF;
     END LOOP;
 
-    INSERT INTO metro.payment_events (
-        operator_id, payment_id, provider_event_id, idempotency_key, event_type,
-        signature_verified, received_amount_minor, received_currency, payload_hash,
-        outcome, processed_at
-    ) VALUES (
-        p_operator_id, p_payment_id, p_provider_event_id, p_event_idempotency_key,
-        'PAYMENT_SUCCEEDED', true, p_received_amount_minor, p_received_currency,
-        p_payload_hash, 'ACCEPTED', clock_timestamp()
-    )
-    ON CONFLICT DO NOTHING;
+    UPDATE metro.payment_events SET outcome = 'ACCEPTED'
+    WHERE operator_id = p_operator_id AND id = v_event_id;
 
     UPDATE metro.payments
     SET status = 'SUCCEEDED', verified_at = clock_timestamp(), succeeded_at = clock_timestamp(),
@@ -1553,7 +1640,8 @@ BEGIN
         sequence_no, status, latest_activation_at, fare_policy_version_id
     )
     SELECT oi.operator_id,
-           v_order.order_code || '-' || lpad(gs::text, 4, '0') || '-' || substr(replace(oi.id::text, '-', ''), 1, 8),
+           -- Full order-item UUID plus sequence is unique per ticket and stays under 80 chars.
+           'TKT-' || replace(oi.id::text, '-', '') || '-' || gs::text,
            oi.id, oi.ticket_product_id, v_order.beneficiary_user_id,
            gs, 'ISSUED',
            CASE WHEN tp.latest_activation_interval IS NULL THEN NULL
@@ -1583,8 +1671,8 @@ CREATE OR REPLACE FUNCTION metro.cancel_unpaid_order(
     p_reason text
 ) RETURNS boolean
 LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = metro, public, pg_catalog
+SECURITY DEFINER
+SET search_path = pg_catalog, metro, public
 AS $function$
 DECLARE
     v_order metro.orders%ROWTYPE;
@@ -1593,6 +1681,14 @@ BEGIN
     IF p_reason IS NULL OR btrim(p_reason) = '' THEN
         RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Cancellation reason is required';
     END IF;
+
+    -- Same lock hierarchy as confirmation: pending payments -> order -> holds.
+    -- Locking the payments first avoids the confirmation/cancellation deadlock.
+    PERFORM 1
+    FROM metro.payments
+    WHERE operator_id = p_operator_id AND order_id = p_order_id AND status = 'PENDING'
+    ORDER BY id
+    FOR UPDATE;
 
     SELECT * INTO v_order
     FROM metro.orders
@@ -1641,8 +1737,8 @@ CREATE OR REPLACE FUNCTION metro.revoke_unused_ticket(
     p_reason text
 ) RETURNS boolean
 LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = metro, public, pg_catalog
+SECURITY DEFINER
+SET search_path = pg_catalog, metro, public
 AS $function$
 DECLARE
     v_ticket metro.tickets%ROWTYPE;
@@ -1792,8 +1888,19 @@ IS 'Atomically cancels an unpaid order, pending payments and all active capacity
 COMMENT ON FUNCTION metro.revoke_unused_ticket(uuid, uuid, text)
 IS 'Revokes an unused ticket and its active credentials without deleting reconciliation history.';
 
+-- The workflow functions are SECURITY DEFINER with a pinned search_path. Remove the
+-- implicit PUBLIC EXECUTE grant so a runtime role must be granted explicit EXECUTE
+-- instead of receiving broad table UPDATE rights that bypass these workflows.
+REVOKE EXECUTE ON FUNCTION metro.hold_trip_capacity(uuid, uuid, varchar, timestamptz) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION metro.confirm_capacity_hold(uuid, uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION metro.release_capacity_hold(uuid, uuid, text, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION metro.expire_capacity_holds(integer) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION metro.confirm_payment_and_issue_tickets(uuid, uuid, text, varchar, char, bigint, char, boolean) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION metro.cancel_unpaid_order(uuid, uuid, text, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION metro.revoke_unused_ticket(uuid, uuid, text) FROM PUBLIC;
+
   INSERT INTO metro.schema_migrations (version, name, checksum)
-  VALUES (5, '005_transactional_capacity_retention.sql', '7d2de3544bbf7d2bccb3d7428d8b47fb3037ff855244595978f341c748c8ac70');
+  VALUES (5, '005_transactional_capacity_retention.sql', '099237dd7725a028e76b71175a017ec705a687ffbff2d6e95137c2d318e92bef');
 END $migration_005$;
 
 COMMIT;

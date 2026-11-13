@@ -28,7 +28,10 @@ psql -v ON_ERROR_STOP=1 -d metro_ticket_test -f infra/database/tests/00_test_fix
 psql -v ON_ERROR_STOP=1 -d metro_ticket_test -f infra/database/tests/business_rules_test.sql
 psql -v ON_ERROR_STOP=1 -d metro_ticket_test -f infra/database/tests/constraints_test.sql
 psql -v ON_ERROR_STOP=1 -d metro_ticket_test -f infra/database/tests/integrity_test.sql
+psql -v ON_ERROR_STOP=1 -d metro_ticket_test -f infra/database/tests/review_regressions_test.sql
 ```
+
+`review_regressions_test.sql` covers the review-driven contract: NULL-safe fare uniqueness, mandatory product duration, multiple unassigned payment/refund provider references, mandatory verified signature and non-NULL callback amount/currency, payment-event ownership, ticket-code uniqueness, and operator-scoped credential replacement. It runs in a transaction and rolls back.
 
 For the concurrency test, start `concurrency_session_a.sql` and `concurrency_session_b.sql` at the same time, expect session A to succeed and session B to fail with capacity exceeded, then run `concurrency_assert.sql`.
 
@@ -54,6 +57,19 @@ Never change an applied migration. Roll forward with the next migration. If a re
 ## Required application privilege posture
 
 Use separate roles for migration, runtime and read-only reporting. The runtime role should not own protected tables and should receive EXECUTE on approved workflow functions instead of broad direct UPDATE rights to capacity/payment/ticket state. Auditors receive read-only access. Only the controlled migration role may alter/drop retention triggers.
+
+The seven workflow functions (`hold_trip_capacity`, `confirm_capacity_hold`, `release_capacity_hold`, `expire_capacity_holds`, `confirm_payment_and_issue_tickets`, `cancel_unpaid_order`, `revoke_unused_ticket`) are `SECURITY DEFINER` with a pinned `search_path = pg_catalog, metro, public`, and their implicit `PUBLIC` EXECUTE grant is revoked. Grant them explicitly, for example:
+
+```sql
+GRANT EXECUTE ON FUNCTION metro.hold_trip_capacity(uuid, uuid, varchar, timestamptz) TO metro_runtime;
+GRANT EXECUTE ON FUNCTION metro.confirm_payment_and_issue_tickets(uuid, uuid, text, varchar, char, bigint, char, boolean) TO metro_runtime;
+```
+
+Because the functions run with the migration owner's privileges, keep `search_path` pinned and never create objects in `public` that shadow `metro` objects.
+
+## Identity email uniqueness
+
+`001_identity_and_access.sql` enforces FR-01.01 with a unique index on `public."AspNetUsers" ("NormalizedEmail") WHERE "NormalizedEmail" IS NOT NULL`, after a preflight that aborts the deployment with an actionable message if existing rows already contain duplicate normalized emails. Configure ASP.NET Core Identity with `UserOptions.RequireUniqueEmail = true` so duplicate registrations return a validation error instead of a database error.
 
 ## Production approvals still required
 

@@ -10,7 +10,8 @@ CREATE TABLE metro.ticket_products (
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(), updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     UNIQUE (operator_id, id), UNIQUE (operator_id, code),
     CHECK ((product_type = 'SINGLE_TRIP' AND duration_value IS NULL AND duration_unit IS NULL AND expiry_rule = 'SINGLE_JOURNEY')
-        OR (product_type <> 'SINGLE_TRIP' AND duration_value > 0 AND duration_unit IS NOT NULL)),
+        OR (product_type <> 'SINGLE_TRIP' AND duration_value IS NOT NULL AND duration_value > 0
+            AND duration_unit IS NOT NULL AND expiry_rule <> 'SINGLE_JOURNEY')),
     CHECK (capacity_controlled = false OR product_type = 'SINGLE_TRIP')
 );
 
@@ -40,7 +41,7 @@ CREATE TABLE metro.fare_matrix_entries (
     FOREIGN KEY (operator_id, line_id) REFERENCES metro.lines (operator_id, id),
     FOREIGN KEY (operator_id, origin_station_id) REFERENCES metro.stations (operator_id, id),
     FOREIGN KEY (operator_id, destination_station_id) REFERENCES metro.stations (operator_id, id),
-    UNIQUE (operator_id, fare_policy_version_id, ticket_product_id, line_id, origin_station_id, destination_station_id, payment_channel, eligibility_group),
+    UNIQUE NULLS NOT DISTINCT (operator_id, fare_policy_version_id, ticket_product_id, line_id, origin_station_id, destination_station_id, payment_channel, eligibility_group),
     CHECK (origin_station_id IS NULL OR destination_station_id IS NULL OR origin_station_id <> destination_station_id)
 );
 
@@ -182,7 +183,9 @@ CREATE TABLE metro.payments (
     correlation_id uuid NOT NULL DEFAULT gen_random_uuid(), created_at timestamptz NOT NULL DEFAULT clock_timestamp(), updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     FOREIGN KEY (operator_id, order_id) REFERENCES metro.orders (operator_id, id),
     UNIQUE (operator_id, id), UNIQUE (operator_id, payment_code), UNIQUE (operator_id, provider, idempotency_key),
-    UNIQUE NULLS NOT DISTINCT (operator_id, provider, provider_payment_reference), UNIQUE (operator_id, correlation_id)
+    -- Provider references are assigned asynchronously: many payments (for example CASH) may have no
+    -- reference at once, so only non-NULL references are unique per operator/provider.
+    UNIQUE (operator_id, provider, provider_payment_reference), UNIQUE (operator_id, correlation_id)
 );
 
 CREATE TABLE metro.payment_events (
@@ -218,7 +221,10 @@ CREATE TABLE metro.ticket_credentials (
     status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUSPENDED','REVOKED','REPLACED','EXPIRED')),
     issued_at timestamptz NOT NULL DEFAULT clock_timestamp(), revoked_at timestamptz, replaced_by_id uuid,
     FOREIGN KEY (operator_id, ticket_id) REFERENCES metro.tickets (operator_id, id),
-    UNIQUE (operator_id, id), UNIQUE (operator_id, token_hash), FOREIGN KEY (replaced_by_id) REFERENCES metro.ticket_credentials (id)
+    UNIQUE (operator_id, id), UNIQUE (operator_id, token_hash),
+    -- Replacement chains stay inside one operator and cannot point at themselves.
+    FOREIGN KEY (operator_id, replaced_by_id) REFERENCES metro.ticket_credentials (operator_id, id),
+    CHECK (replaced_by_id IS NULL OR replaced_by_id <> id)
 );
 
 CREATE TABLE metro.journeys (
@@ -286,7 +292,8 @@ CREATE TABLE metro.refund_transactions (
     FOREIGN KEY (operator_id, refund_request_id) REFERENCES metro.refund_requests (operator_id, id),
     FOREIGN KEY (operator_id, payment_id) REFERENCES metro.payments (operator_id, id),
     UNIQUE (operator_id, id), UNIQUE (operator_id, refund_code), UNIQUE (operator_id, provider, idempotency_key),
-    UNIQUE NULLS NOT DISTINCT (operator_id, provider, provider_refund_reference), UNIQUE (operator_id, correlation_id)
+    -- Refund references arrive later from the provider, so multiple NULLs must be allowed.
+    UNIQUE (operator_id, provider, provider_refund_reference), UNIQUE (operator_id, correlation_id)
 );
 CREATE UNIQUE INDEX uq_unresolved_refund_per_request ON metro.refund_transactions (operator_id, refund_request_id)
     WHERE status IN ('PENDING','PROCESSING','UNKNOWN');
@@ -297,7 +304,9 @@ CREATE TABLE metro.refund_attempts (
     response_hash char(64), status text NOT NULL CHECK (status IN ('SENT','SUCCEEDED','FAILED','TIMEOUT','UNKNOWN')),
     error_code text, attempted_at timestamptz NOT NULL DEFAULT clock_timestamp(), completed_at timestamptz,
     FOREIGN KEY (operator_id, refund_transaction_id) REFERENCES metro.refund_transactions (operator_id, id),
-    UNIQUE (operator_id, refund_transaction_id, attempt_no), UNIQUE NULLS NOT DISTINCT (operator_id, provider_event_id)
+    UNIQUE (operator_id, refund_transaction_id, attempt_no),
+    -- SENT/TIMEOUT attempts may have no provider event yet; only assigned IDs are unique.
+    UNIQUE (operator_id, provider_event_id)
 );
 
 CREATE TABLE metro.refund_payout_revisions (
