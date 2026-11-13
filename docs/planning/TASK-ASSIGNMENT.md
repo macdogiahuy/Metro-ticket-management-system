@@ -7,17 +7,18 @@
 | Phiên bản | 4.0 |
 | Ngày lập | 13/11/2026 |
 | Người lập | Lead (M1) |
-| Trạng thái | Draft — chờ nhóm xác nhận tên thành viên và mốc BE freeze |
+| Trạng thái | Draft — chờ nhóm xác nhận tên thành viên; mốc BE freeze và mốc chia FE đã chốt |
 | Căn cứ | `docs/requirements/Metro_SRS_v1.2.docx` (47 UC), `Metro_Dac_ta_ UC_v1.6.docx`, gói `infra/database`, scaffold `backend/`, `docs/git-workflow/BRANCH-POLICY.md` |
 | Mốc BE core | **06/12/2026** — toàn bộ endpoint Must-have trừ soát vé/báo cáo |
 | Mốc BE hoàn tất | **13/12/2026** — soát vé, hỗ trợ cổng, báo cáo, hardening |
+| Mốc FE | **Chia task FE ngày 07/12/2026**, chạy 07–20/12 (2 tuần), cả 6 người |
 | Mốc bàn giao dự án | Release `v1.0-demo` **20/12/2026**, buffer UAT đến **24/12/2026** |
 
 ## 1. Mục đích và phạm vi giai đoạn này
 
 Tài liệu chia **toàn bộ công việc Backend** của 27 UC Must-have thành task có mã, người phụ trách, sprint, ước lượng, phụ thuộc và tiêu chí hoàn thành, để cả 6 thành viên cùng làm BE bằng ASP.NET Core trong 4 sprint đầu.
 
-**Frontend chưa chia task trong tài liệu này.** Sau khi BE hoàn tất (13/12), nhóm họp chia task FE dựa trên đúng những endpoint đã chốt — xem mục 15 cho điều kiện đầu vào và ràng buộc thời gian.
+**Frontend chưa chia task trong tài liệu này.** Task FE sẽ được chia vào **07/12/2026**, ngay sau khi BE core freeze (06/12), và chạy đến 20/12. Trong tuần 07–13/12, các task BE còn lại (soát vé, báo cáo, hardening) hoàn tất song song với việc FE bắt đầu dựng màn hình trên các endpoint đã freeze.
 
 Nguyên tắc giai đoạn này:
 
@@ -114,15 +115,15 @@ Tổng: **57 pd**, mỗi người 5–12 pd trong 20 ngày — đủ chỗ cho r
 
 Không ai tự merge PR của chính mình.
 
-## 5. Lịch Backend và milestone
+## 5. Lịch tổng thể (BE trước, FE từ 07/12)
 
 | Sprint | Thời gian | Mục tiêu | Mốc |
 | --- | --- | --- | --- |
 | **S0** | 16/11 – 22/11/2026 | Dựng nền API, EF mapping, catalog đọc, Identity, seed/test harness | **B0 — Nền chạy được** |
 | **S1** | 23/11 – 29/11 | Auth, fare engine, booking/giữ chỗ, admin tài khoản | |
 | **S2** | 30/11 – 06/12 | Payment + phát hành vé + hồ sơ + lịch/chuyến | **B1 — BE core freeze (06/12)** |
-| **S3** | 07/12 – 13/12 | Soát vé, hỗ trợ cổng, báo cáo, hủy/hoàn, hardening, seed demo | **B2 — BE hoàn tất (13/12)** |
-| **S4** | 14/12 – 20/12 | (dành cho FE — chia task sau) | **Release `v1.0-demo` 20/12** |
+| **S3** | 07/12 – 13/12 | BE: soát vé, hỗ trợ cổng, báo cáo, hủy/hoàn, hardening, seed demo. **FE: chia task 07/12 và bắt đầu dựng màn hình** | **B2 — BE hoàn tất (13/12)** |
+| **S4** | 14/12 – 20/12 | FE hoàn thiện, tích hợp, E2E, UAT nội bộ | **Release `v1.0-demo` 20/12** |
 | Buffer | 21/12 – 24/12 | UAT/demo, sửa P0–P1 | **Bàn giao** |
 
 Quy ước:
@@ -320,7 +321,7 @@ Tiêu chí đạt: mục 6.2 thỏa mãn; Postman chạy lần lượt 6 kịch 
 | Payment sandbox thay đổi | Chặn BE-08 | Adapter + mock provider; chốt sandbox ở S0 | M1 |
 | Sai logic giữ chỗ | Bán quá tải | Gọi hàm SQL đã test; test 2 phiên; review bắt buộc | M2 |
 | Dư người nhưng thiếu việc ở S1–S2 | Lãng phí, tranh task | Nhận thêm test/review; hỗ trợ module đang tắc; không thêm scope ngoài SRS | M1 |
-| BE trễ làm FE không kịp | Trượt deadline | BE core freeze 06/12; cắt theo mục 6.4; FE chia ngay 07/12 nếu chấp nhận | M1 |
+| BE trễ làm FE không kịp | Trượt deadline | BE core freeze 06/12; cắt theo mục 6.4; FE chia 07/12 và chỉ bám endpoint đã freeze | M1 |
 | PR lớn, conflict | Chậm tích hợp | PR ≤400 dòng; rebase hằng ngày; chốt owner theo `Features/<Module>` | Cả nhóm |
 | Lộ PII/secret | Rủi ro bảo mật | Masking, review, không commit `.env` | M1 |
 
@@ -343,31 +344,38 @@ Tiêu chí đạt: mục 6.2 thỏa mãn; Postman chạy lần lượt 6 kịch 
 - **M5**: dựng seed/fixture; rà UC admin; đặc tả API admin tài khoản.
 - **M6**: dựng test harness + CI; thiết kế query báo cáo; chuẩn bị khung Postman.
 
-## 15. Frontend — khung chờ chia task (sau khi BE hoàn tất)
+## 15. Frontend — kế hoạch chia task (07/12/2026)
 
-Giai đoạn này **không chia task FE**. Khi BE hoàn tất, nhóm chia FE theo các điều kiện sau.
+Giai đoạn này **chưa chia task FE**. Mốc chia đã chốt: **07/12/2026**, ngay sau BE core freeze, FE chạy 07–20/12 (2 tuần) với cả 6 người.
 
-### 15.1. Đầu vào bắt buộc trước khi chia
+### 15.1. Điều kiện đầu vào
 
-- Swagger của toàn bộ endpoint Must-have đã freeze (06/12 cho luồng mua vé; 13/12 cho phần còn lại).
-- Postman collection + seed demo chạy được.
-- Chốt design system/token và quy ước code FE (nếu chưa có, S4 phải làm trước khi dựng màn hình).
-- Chốt danh sách UC Must-have dành cho FE: UC01–UC19, UC22–UC25, UC29, UC31, UC33.
+- Endpoint cho luồng mua vé đã freeze và có test trước 06/12: auth, hồ sơ, catalog, fare, booking, payment, vé.
+- Postman collection + seed demo chạy được trên môi trường chung.
+- Design token, app shell và quy ước code FE được chốt trong 07–09/12 trước khi dựng màn hình.
+- Danh sách UC Must-have dành cho FE: UC01–UC19, UC22–UC25, UC29, UC31, UC33.
 
-### 15.2. Ràng buộc thời gian — cần nhóm quyết
+### 15.2. Phân bổ dự kiến
 
-| Phương án | Thời gian FE | Khối lượng FE khả dụng | Hệ quả |
-| --- | --- | --- | --- |
-| **A. Chia FE ngay 07/12** (khuyến nghị) | 07–20/12, 2 tuần | ~48 pd | Đủ 27 UC nếu chia cho cả 6 người; BE-10/11/15/17 hoàn tất song song trong S3 |
-| **B. Chỉ chia FE sau 13/12** | 14–20/12, 1 tuần | ~24 pd | Chỉ đủ 6 luồng demo; phải cắt màn hình admin, lịch sử, báo cáo nâng cao |
+| Thời gian | Nội dung |
+| --- | --- |
+| 07–09/12 | App shell, design system, auth/hồ sơ, catalog; nối API thật cho module đã freeze |
+| 10–13/12 | Booking → thanh toán → vé của tôi; bắt đầu soát vé và báo cáo khi BE-10/BE-15 xong |
+| 14–17/12 | Portal nhân viên, quản trị, báo cáo, trạng thái loading/empty/error, responsive |
+| 18–20/12 | Tích hợp, E2E, UAT nội bộ, sửa lỗi P0–P1, release |
 
-Nếu chọn B, chấp nhận bản demo không có đầy đủ màn hình quản trị và phải ghi rõ trong báo cáo. Nếu chọn A, FE vẫn "sau BE" ở nghĩa: chỉ bắt đầu khi BE core đã freeze và endpoint đã có test.
+### 15.3. Cách chia (chốt danh sách task tại buổi 07/12)
 
-### 15.3. Việc cần chuẩn bị trong lúc làm BE (không phải task FE)
+- Khối lượng khả dụng ~48 pd (6 người × 8 ngày, đã trừ hao phí) cho 27 UC Must-have phía FE.
+- Giữ nguyên người sở hữu miền đã làm BE để tận dụng hiểu biết domain; M1 hỗ trợ tích hợp và review.
+- Danh sách task FE (mã `FE-xx`, pd, phụ thuộc, DoD) sẽ được bổ sung vào tài liệu này ngay sau buổi chia task.
+- Nếu BE core trễ sau 06/12, cắt theo mục 6.4 và dồn ngày FE tương ứng; không dời mốc release 20/12.
 
-- Mỗi người tự ghi lại ví dụ request/response của module mình vào Postman — đây là tài liệu FE sẽ dùng.
-- M1 giữ Swagger chạy trên môi trường chung để FE sau này có thể xem contract.
-- Chưa dựng màn hình, chưa cài thêm thư viện UI.
+### 15.4. Việc chuẩn bị trong lúc làm BE
+
+- Mỗi người ghi lại request/response của module mình vào Postman — đây là tài liệu FE sẽ dùng.
+- M1 giữ Swagger chạy trên môi trường chung để FE xem contract.
+- Chưa dựng màn hình, chưa cài thêm thư viện UI trước ngày chia task.
 
 ## 16. Backlog sau deadline
 
@@ -380,4 +388,4 @@ Nếu chọn B, chấp nhận bản demo không có đầy đủ màn hình qu�
 
 ---
 
-**Ghi chú phiên bản**: 4.0 — Backend-first bằng ASP.NET Core; cả 6 người làm BE trong S0–S3 (16/11–13/12/2026); BE core freeze 06/12; 27 UC Must-have; Frontend để khung chờ chia sau khi BE hoàn tất; dựa trên SRS 1.2, UC v1.6 và hiện trạng repo ngày 13/11/2026.
+**Ghi chú phiên bản**: 4.0 — Backend-first bằng ASP.NET Core; cả 6 người làm BE trong S0–S3 (16/11–13/12/2026); BE core freeze 06/12; 27 UC Must-have; chia task FE ngày 07/12/2026 và chạy 07–20/12; dựa trên SRS 1.2, UC v1.6 và hiện trạng repo ngày 13/11/2026.
