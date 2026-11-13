@@ -47,6 +47,20 @@ Application services should call these functions inside their normal request tra
 
 Do not update capacity counters or perform payment/ticket state transitions with ad-hoc SQL.
 
+All workflow functions are `SECURITY DEFINER` with a pinned `search_path` and no `PUBLIC` EXECUTE grant, so a runtime role needs explicit `GRANT EXECUTE` and no direct table write access. See [DEPLOYMENT_GUIDE.md](documentation/DEPLOYMENT_GUIDE.md#required-application-privilege-posture).
+
+## Validation tests
+
+Run against a disposable database after `deploy.sql`, in this order:
+
+```powershell
+foreach ($f in "00_test_fixture.sql","business_rules_test.sql","constraints_test.sql","integrity_test.sql","review_regressions_test.sql") {
+    psql -v ON_ERROR_STOP=1 -d metro_ticket_test -f "infra/database/tests/$f"
+}
+```
+
+`review_regressions_test.sql` locks in the review-driven behaviour: NULL-safe fare keys, mandatory product duration, multiple unassigned provider references, verified-signature and non-NULL payment snapshots, payment-event ownership, unique ticket codes, and operator-scoped credential replacement.
+
 ## Migration and upgrades
 
 - Add a new numbered migration; never rewrite an applied migration.

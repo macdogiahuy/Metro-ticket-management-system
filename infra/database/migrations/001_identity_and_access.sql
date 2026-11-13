@@ -42,6 +42,27 @@ CREATE TABLE IF NOT EXISTS public."AspNetUserTokens" (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "UserNameIndex" ON public."AspNetUsers" ("NormalizedUserName");
 CREATE INDEX IF NOT EXISTS "EmailIndex" ON public."AspNetUsers" ("NormalizedEmail");
+-- FR-01.01 requires one account per email, which is stricter than the ASP.NET Core Identity
+-- default. The application must set UserOptions.RequireUniqueEmail = true so duplicate
+-- registrations produce a validation error instead of a database error. Fail fast with an
+-- actionable message when an existing Identity table already contains duplicates.
+DO $email_uniqueness$
+DECLARE
+    v_duplicate_emails integer;
+BEGIN
+    SELECT count(*) INTO v_duplicate_emails
+    FROM (
+        SELECT "NormalizedEmail"
+        FROM public."AspNetUsers"
+        WHERE "NormalizedEmail" IS NOT NULL
+        GROUP BY "NormalizedEmail"
+        HAVING count(*) > 1
+    ) duplicates;
+    IF v_duplicate_emails > 0 THEN
+        RAISE EXCEPTION 'FR-01.01 requires unique emails but % normalized email value(s) are duplicated in public."AspNetUsers"; resolve them before deploying', v_duplicate_emails;
+    END IF;
+END
+$email_uniqueness$;
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_AspNetUsers_NormalizedEmail"
     ON public."AspNetUsers" ("NormalizedEmail") WHERE "NormalizedEmail" IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS "RoleNameIndex" ON public."AspNetRoles" ("NormalizedName");

@@ -15,7 +15,7 @@ BEGIN
     BEGIN
         UPDATE metro.payments SET status = 'PENDING'
         WHERE id = '82000000-0000-0000-0000-000000000001';
-        RAISE EXCEPTION 'Expected invalid payment transition to fail';
+        RAISE EXCEPTION 'Expected invalid payment transition to fail' USING ERRCODE = 'M0002';
     EXCEPTION WHEN SQLSTATE 'P0001' THEN
         NULL;
     END;

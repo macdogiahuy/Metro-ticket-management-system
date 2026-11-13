@@ -24,7 +24,7 @@ BEGIN
             '10000000-0000-0000-0000-000000000001',
             '81000000-0000-0000-0000-000000000002',
             'hold-b', clock_timestamp() + interval '15 minutes');
-        RAISE EXCEPTION 'Expected over-capacity hold to fail';
+        RAISE EXCEPTION 'Expected over-capacity hold to fail' USING ERRCODE = 'M0001';
     EXCEPTION WHEN SQLSTATE 'P0001' THEN
         NULL;
     END;
