@@ -1,6 +1,6 @@
 # Metro PostgreSQL deployment package
 
-Production-oriented PostgreSQL 17 schema for the Metro ticket management system. The package is generated from immutable, checksummed migrations and covers identity, network operations, fares, ticketing, capacity, payments, refunds, AFC, support, analytics and automation.
+Production-oriented PostgreSQL 17 schema for the Metro ticket management system. The package is generated from immutable, checksummed migrations and implements SRS v1.2: identity, network operations, fares, order versions, trip suggestions, ticketing, manual kg load, payments, refunds, AFC, guardianship, support, lost property, analytics and automation. The v1.1 capacity-hold tables are retained as legacy compatibility only.
 
 ## Prerequisites
 
@@ -18,6 +18,7 @@ Do not use the application login as the migration owner. Application roles shoul
 3. `migrations/003_ticketing_finance_capacity.sql`
 4. `migrations/004_support_analytics_automation.sql`
 5. `migrations/005_transactional_capacity_retention.sql`
+6. `migrations/006_srs_v1_2_alignment.sql`
 
 `build_deploy.py` combines those sources into `deploy.sql`, wraps them in one transaction, verifies migration checksums, and serializes deployments with a PostgreSQL advisory lock. Edit only migration sources; never hand-edit `deploy.sql`.
 
@@ -38,14 +39,17 @@ No production operator, user, credential, role assignment, fare, timetable, capa
 
 Application services should call these functions inside their normal request transaction:
 
-- `metro.hold_trip_capacity` — locks every affected segment in route order and creates an idempotent hold.
-- `metro.confirm_capacity_hold` / `metro.release_capacity_hold` — transfer or release counters atomically.
-- `metro.expire_capacity_holds` — bounded `SKIP LOCKED` expiry worker.
-- `metro.confirm_payment_and_issue_tickets` — verifies the callback snapshot, confirms capacity, records the event, succeeds the payment and issues tickets in one transaction.
-- `metro.cancel_unpaid_order` — cancels an unpaid order and releases its holds.
+- `metro.confirm_payment_and_issue_tickets` — verifies the callback snapshot, records the event, succeeds the payment and issues the ticket in one transaction.
+- `metro.issue_free_order` — issues a fully discounted free child ticket without a payment row or fake `paid_at`.
+- `metro.cancel_unpaid_order` — cancels an unpaid order across both the current and legacy models.
 - `metro.revoke_unused_ticket` — revokes an unused ticket and active credentials without deleting history.
+- `metro.apply_ticket_change` — applies one approved disruption change, revokes the old QR and keeps the change history.
+- `metro.confirm_accessibility_request` / `metro.release_accessibility_capacity` — consume or release a station support slot atomically.
+- `metro.mark_overdue_lost_items` — moves unclaimed found items and open lost reports to `OVERDUE`.
+- `metro.validate_load_profile` — checks car load limits against the trip limit.
+- Legacy only: `metro.hold_trip_capacity`, `metro.confirm_capacity_hold`, `metro.release_capacity_hold`, `metro.expire_capacity_holds` (SRS v1.1 quota model; new flows never hold capacity).
 
-Do not update capacity counters or perform payment/ticket state transitions with ad-hoc SQL.
+Do not update capacity counters, ticket validity or payment/ticket state transitions with ad-hoc SQL.
 
 All workflow functions are `SECURITY DEFINER` with a pinned `search_path` and no `PUBLIC` EXECUTE grant, so a runtime role needs explicit `GRANT EXECUTE` and no direct table write access. See [DEPLOYMENT_GUIDE.md](documentation/DEPLOYMENT_GUIDE.md#required-application-privilege-posture).
 
@@ -54,12 +58,12 @@ All workflow functions are `SECURITY DEFINER` with a pinned `search_path` and no
 Run against a disposable database after `deploy.sql`, in this order:
 
 ```powershell
-foreach ($f in "00_test_fixture.sql","business_rules_test.sql","constraints_test.sql","integrity_test.sql","review_regressions_test.sql") {
+foreach ($f in "00_test_fixture.sql","business_rules_test.sql","constraints_test.sql","integrity_test.sql","review_regressions_test.sql","srs_v1_2_test.sql") {
     psql -v ON_ERROR_STOP=1 -d metro_ticket_test -f "infra/database/tests/$f"
 }
 ```
 
-`review_regressions_test.sql` locks in the review-driven behaviour: NULL-safe fare keys, mandatory product duration, multiple unassigned provider references, verified-signature and non-NULL payment snapshots, payment-event ownership, unique ticket codes, and operator-scoped credential replacement.
+`review_regressions_test.sql` locks in the review-driven behaviour: NULL-safe fare keys, mandatory product duration, multiple unassigned provider references, verified-signature and non-NULL payment snapshots, payment-event ownership, unique ticket codes, and operator-scoped credential replacement. `srs_v1_2_test.sql` covers guardian links, purchase consent, current trip suggestions, manual kg load, ETA, free issuance, overlapping-ticket validity, ticket changes, accessibility slots, data-quality days, lost property and history retention.
 
 ## Migration and upgrades
 
@@ -82,6 +86,6 @@ Production must additionally meet SRS `NFR-AVL-003`: RPO no more than 15 minutes
 
 ## Retention and deletion
 
-Tickets, orders, payments, payment events, refunds, journeys, AFC events, capacity allocations and audit history reject `DELETE` and `TRUNCATE`. Lifecycle status and approved anonymization are the supported mechanisms. Legal retention durations remain an operator-approved production input (`OI-001`, `NFR-PRI-005`).
+Tickets, orders/versions, consents, payments, payment events, refunds, journeys, AFC events, ticket changes, suggestions, support/accessibility history, lost property and audit history reject `DELETE` and `TRUNCATE`. Lifecycle status and approved anonymization are the supported mechanisms. Legal retention durations remain an operator-approved production input (`OI-001`, `NFR-PRI-005`).
 
 See [DATABASE_DESIGN.md](documentation/DATABASE_DESIGN.md), [BUSINESS_RULE_MAPPING.md](documentation/BUSINESS_RULE_MAPPING.md), and [DEPLOYMENT_GUIDE.md](documentation/DEPLOYMENT_GUIDE.md).
