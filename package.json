@@ -1,0 +1,11 @@
+{
+  "name": "metro-ticket-management-system",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix frontend run build",
+    "dev": "npm --prefix frontend run dev"
+  },
+  "dependencies": {
+    "@neon/config": "^1.14.0"
+  }
+}
