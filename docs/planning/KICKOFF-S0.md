@@ -7,7 +7,7 @@
 | Tham dự | Cả 6 người: Huy, Tuyên, Hoàng, Thành, My, Tiên |
 | Đầu ra | Chốt 6 điểm kỹ thuật + mỗi người nhận task S0 + repo/issue chạy được |
 | Bảng task | `docs/task-management/Agile_Scrum_Task_Template_Team_6.xlsx` |
-| Kế hoạch | `docs/planning/TASK-ASSIGNMENT.md` (v5.5, bám SRS v1.2) |
+| Kế hoạch | `docs/planning/TASK-ASSIGNMENT.md` (v5.6, bám SRS v1.2) |
 | Issue | 33 issue GitHub #12–#44 |
 
 ## 1. Agenda

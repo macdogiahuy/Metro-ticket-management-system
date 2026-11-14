@@ -4,7 +4,7 @@
 | --- | --- |
 | Dự án | Hệ thống quản lý vé và hỗ trợ hành khách Metro |
 | Tài liệu | Kế hoạch Backend-first → API freeze → Frontend |
-| Phiên bản | 5.5 (thay thế 5.4) — bám SRS v1.2 / UC v1.6 |
+| Phiên bản | 5.6 (thay thế 5.5) — bám SRS v1.2 / UC v1.6; chốt cơ chế review 2 ruleset |
 | Ngày lập | 13/11/2026 |
 | Người lập | M01 — Mạc Đỗ Gia Huy (Tech Lead) |
 | Khởi động | **16/11/2026** (thứ Hai) |
@@ -232,9 +232,16 @@ Docker Desktop có thể không chạy — integration test dùng PostgreSQL loc
 
 Cột *Assignee/Reviewer* trong sheet SPRINT_BOARD là nguồn chính thức; nếu đổi người review thì cập nhật cả hai nơi.
 
-**Cơ chế chặn trên GitHub**: `main` và `dev` dùng ruleset `protect-main` / `protect-dev` bật `require_code_owner_review`; `.github/CODEOWNERS` gán `* @macdogiahuy` nên **chỉ approval của M01 mới mở khóa merge**. M01 nằm trong danh sách bypass của ruleset nên PR của M01 tự merge được sau khi CI xanh. Approval của thành viên khác vẫn có giá trị tham khảo nhưng không thay thế được approval của M01.
+**Cơ chế chặn trên GitHub** — mỗi nhánh được bảo vệ bởi **hai ruleset tách rời**, để không ai bypass được CI:
 
-**Task của M01 (BE-01, BE-03, BE-08, BE-17, DOC-01) không cần review** — M01 tự merge sau khi CI xanh và tự kiểm bằng Postman/E2E. Bù lại M01 duyệt 28 task còn lại; 28 task kia vẫn review chéo 5–6 task/người để bắt lỗi sớm, nhưng không ai tự merge PR của mình. Review SLA 4 giờ làm việc; quá 24 giờ nhắc trong kênh nhóm, M01 duyệt trong tối đa 1 ngày làm việc.
+| Ruleset | Nội dung | Bypass |
+| --- | --- | --- |
+| `protect-main` / `protect-dev` | `required_status_checks` (`backend-build`, `frontend-build`, bắt buộc up-to-date), `non_fast_forward`, `deletion` | **Không có** — CI là tuyệt đối, kể cả M01 cũng không đẩy thẳng/force push |
+| `review-gate-main` / `review-gate-dev` | `pull_request`: 1 approval, `require_code_owner_review`, dismiss stale review, bắt buộc resolve conversation | M01 (`@macdogiahuy`), `bypass_mode = pull_request` — chỉ dùng được **khi bấm merge một PR**, không cho push trực tiếp |
+
+`.github/CODEOWNERS` gán `* @macdogiahuy` (và từng thư mục `/backend/`, `/frontend/`, `/infra/`, `/docs/`, `/.github/`) nên **chỉ approval của M01 mới mở khóa merge** PR của thành viên khác. PR của M01 không thể tự approve (GitHub chặn self-approve), nên M01 dùng quyền bypass ở chế độ `pull_request`: PR vẫn phải qua đủ CI của `protect-*`, chỉ miễn bước approval. Approval của thành viên khác vẫn có giá trị tham khảo nhưng không thay thế được approval của M01.
+
+**Task của M01 (BE-01, BE-03, BE-08, BE-17, DOC-01) không cần review** — M01 tự merge sau khi CI xanh và tự kiểm bằng Postman/E2E. Bù lại M01 duyệt 28 task còn lại; 28 task kia vẫn review chéo 5–6 task/người để bắt lỗi sớm, nhưng **thành viên không tự merge PR của mình**, luôn cần approval của M01. Review SLA 4 giờ làm việc; quá 24 giờ nhắc trong kênh nhóm, M01 duyệt trong tối đa 1 ngày làm việc.
 
 ### 9.3. Git
 
@@ -307,4 +314,4 @@ Thứ tự cắt (dừng ở mức đủ demo):
 
 ---
 
-**Ghi chú phiên bản**: 5.5 — bám **SRS v1.2 / UC v1.6** (SRS thắng khi lệch): bỏ giữ chỗ theo đoạn (BE-07 dùng gợi ý chuyến), tải kg nhập tay (BE-13/BE-14), vé trẻ miễn phí không tạo payment (BE-09), chặn trùng hiệu lực, đổi vé do gián đoạn (BE-16), EF bỏ bảng capacity legacy (BE-02B). Lịch, người, số pd **giữ nguyên v5.4**: mốc 16/11 → 20/12/2026 (nộp 23/12); BE-first, API freeze 04/12, code freeze 17/12; tổng 95 pd (BE 57, FE 30, QA 3 + DOC 2), mỗi người 14–17 pd.
+**Ghi chú phiên bản**: 5.6 — chỉ đổi **cơ chế review trên GitHub** (§9.1/§9.2): tách `protect-*` (CI, không bypass) khỏi `review-gate-*` (pull_request + CODEOWNERS, M01 bypass `pull_request`), cho M01 tự merge PR của mình mà không ai bypass được CI. 5.5 — bám **SRS v1.2 / UC v1.6** (SRS thắng khi lệch): bỏ giữ chỗ theo đoạn (BE-07 dùng gợi ý chuyến), tải kg nhập tay (BE-13/BE-14), vé trẻ miễn phí không tạo payment (BE-09), chặn trùng hiệu lực, đổi vé do gián đoạn (BE-16), EF bỏ bảng capacity legacy (BE-02B). Lịch, người, số pd **giữ nguyên v5.4**: mốc 16/11 → 20/12/2026 (nộp 23/12); BE-first, API freeze 04/12, code freeze 17/12; tổng 95 pd (BE 57, FE 30, QA 3 + DOC 2), mỗi người 14–17 pd.
