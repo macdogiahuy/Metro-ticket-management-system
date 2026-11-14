@@ -75,7 +75,7 @@ lines += [
     "| Tham dự | Cả 6 người: Huy, Tuyên, Hoàng, Thành, My, Tiên |",
     "| Đầu ra | Chốt 6 điểm kỹ thuật + mỗi người nhận task S0 + repo/issue chạy được |",
     "| Bảng task | `docs/task-management/Agile_Scrum_Task_Template_Team_6.xlsx` |",
-    "| Kế hoạch | `docs/planning/TASK-ASSIGNMENT.md` (v5.5, bám SRS v1.2) |",
+    "| Kế hoạch | `docs/planning/TASK-ASSIGNMENT.md` (v5.6, bám SRS v1.2) |",
     "| Issue | 33 issue GitHub #12–#44 |",
     "",
     "## 1. Agenda",
@@ -183,10 +183,10 @@ open(OUT_KICKOFF, "w", encoding="utf-8").write("\n".join(lines))
 base = "https://github.com/%s" % REPO
 lines = []
 lines += [
-    "# Bảng điều khiển dự án (snapshot 14/11/2026 — kế hoạch v5.5)",
+    "# Bảng điều khiển dự án (snapshot 14/11/2026 — kế hoạch v5.6)",
     "",
     "Nguồn sự thật: `docs/task-management/Agile_Scrum_Task_Template_Team_6.xlsx` (sheet `SPRINT_BOARD`).",
-    "Kế hoạch chi tiết: `docs/planning/TASK-ASSIGNMENT.md` **v5.5** (bám SRS v1.2 / UC v1.6).",
+    "Kế hoạch chi tiết: `docs/planning/TASK-ASSIGNMENT.md` **v5.6** (bám SRS v1.2 / UC v1.6).",
     "Task trên GitHub: 33 issue **#12–#44**, gán sẵn assignee + milestone.",
     "",
     "## Liên kết nhanh",

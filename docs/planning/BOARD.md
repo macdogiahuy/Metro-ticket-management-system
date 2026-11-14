@@ -1,7 +1,7 @@
-# Bảng điều khiển dự án (snapshot 14/11/2026 — kế hoạch v5.5)
+# Bảng điều khiển dự án (snapshot 14/11/2026 — kế hoạch v5.6)
 
 Nguồn sự thật: `docs/task-management/Agile_Scrum_Task_Template_Team_6.xlsx` (sheet `SPRINT_BOARD`).
-Kế hoạch chi tiết: `docs/planning/TASK-ASSIGNMENT.md` **v5.5** (bám SRS v1.2 / UC v1.6).
+Kế hoạch chi tiết: `docs/planning/TASK-ASSIGNMENT.md` **v5.6** (bám SRS v1.2 / UC v1.6).
 Task trên GitHub: 33 issue **#12–#44**, gán sẵn assignee + milestone.
 
 ## Liên kết nhanh
