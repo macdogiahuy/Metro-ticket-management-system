@@ -236,10 +236,10 @@ Cột *Assignee/Reviewer* trong sheet SPRINT_BOARD là nguồn chính thức; n�
 
 | Ruleset | Nội dung | Bypass |
 | --- | --- | --- |
-| `protect-main` / `protect-dev` | `required_status_checks` (`backend-build`, `frontend-build`, bắt buộc up-to-date), `non_fast_forward`, `deletion` | **Không có** — CI là tuyệt đối, kể cả M01 cũng không đẩy thẳng/force push |
+| `protect-main` / `protect-dev` | `required_status_checks` (`backend-build`, `frontend-build`, bắt buộc up-to-date), `non_fast_forward`, `deletion` | **Không có** — CI là tuyệt đối: không ai, kể cả M01, merge/push được khi build đỏ hoặc chưa có kết quả |
 | `review-gate-main` / `review-gate-dev` | `pull_request`: 1 approval, `require_code_owner_review`, dismiss stale review, bắt buộc resolve conversation | M01 (`@macdogiahuy`), `bypass_mode = always` — PR của M01 bấm Merge là xong, không cần approval |
 
-`.github/CODEOWNERS` gán `* @macdogiahuy` (và từng thư mục `/backend/`, `/frontend/`, `/infra/`, `/docs/`, `/.github/`) nên **chỉ approval của M01 mới mở khóa merge** PR của thành viên khác. PR của M01 không thể tự approve (GitHub chặn self-approve), nên M01 dùng quyền bypass: PR vẫn phải qua đủ CI của `protect-*`, chỉ miễn bước approval. Vì bypass nằm ở ruleset review chứ không nằm ở ruleset CI, **không ai — kể cả M01 — bỏ qua được build**. Approval của thành viên khác vẫn có giá trị tham khảo nhưng không thay thế được approval của M01.
+`.github/CODEOWNERS` gán `* @macdogiahuy` (và từng thư mục `/backend/`, `/frontend/`, `/infra/`, `/docs/`, `/.github/`) nên **chỉ approval của M01 mới mở khóa merge** PR của thành viên khác. PR của M01 không thể tự approve (GitHub chặn self-approve), nên M01 dùng quyền bypass: PR vẫn phải qua đủ CI của `protect-*`, chỉ miễn bước approval. Vì bypass nằm ở ruleset review chứ không nằm ở ruleset CI, **không ai — kể cả M01 — bỏ qua được build**. Quy ước nhóm: mọi thay đổi vẫn đi qua PR; quyền bypass chỉ dùng cho PR của M01 và cho việc đồng bộ `main → dev` sau mốc. Approval của thành viên khác vẫn có giá trị tham khảo nhưng không thay thế được approval của M01.
 
 **Task của M01 (BE-01, BE-03, BE-08, BE-17, DOC-01) không cần review** — M01 tự merge sau khi CI xanh và tự kiểm bằng Postman/E2E. Bù lại M01 duyệt 28 task còn lại; 28 task kia vẫn review chéo 5–6 task/người để bắt lỗi sớm, nhưng **thành viên không tự merge PR của mình**, luôn cần approval của M01. Review SLA 4 giờ làm việc; quá 24 giờ nhắc trong kênh nhóm, M01 duyệt trong tối đa 1 ngày làm việc.
 
