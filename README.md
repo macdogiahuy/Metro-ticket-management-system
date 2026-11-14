@@ -33,6 +33,41 @@ deployable applications.
 > connect it to real metro gates or process real payments without proper
 > security, operational, legal, and reliability reviews.
 
+### 1.1 Delivery scope (course project)
+
+The requirements baseline is **SRS v1.2** (`docs/requirements/Metro_SRS_v1.2.docx`)
+with **UC v1.6** as supporting input; where they disagree, SRS v1.2 wins
+(§1.4). The team implements the **27 Must-have use cases** for the demo:
+
+``` text
+UC01–UC19, UC22–UC25, UC29, UC31, UC33, UC36
+```
+
+- **UC01–UC04** account (register, login, logout, password reset)
+- **UC05–UC06** profile and concession verification
+- **UC07–UC10** lines, stations, journeys, fares, service status
+- **UC11–UC12** purchase and payment retry (MoMo TEST)
+- **UC13–UC15** my tickets, booking and payment history
+- **UC16–UC19** gate validation, denial handling, staff lookup and QR reissue
+- **UC22–UC25** accounts/roles, passenger data, network and product admin
+- **UC29, UC31** schedules/trips and service notices
+- **UC33** ticket and revenue reports
+- **UC36** automatic trip suggestion for single-trip tickets (a suggestion,
+  not a seat hold)
+
+**Out of scope — not built for the demo** (the database schema and SQL
+functions already support most of them): UC28 full audit workspace, UC37
+advanced capacity, UC39–UC41 buying for others / identity / reallocation,
+UC44 accessibility requests, UC45 on-board incidents, UC46 lost property,
+UC47 demand forecasting. UC20–UC21, UC26–UC27, UC30, UC32, UC34–UC35,
+UC38 and UC42–UC43 are **Stretch** and only start if the Must-have scope
+and the schedule allow it. See `docs/planning/TASK-ASSIGNMENT.md` §10.
+
+Also out of scope per SRS §1.3: real money, physical gates, seat
+reservation, 3-day tickets, tax invoices, biometrics/OCR, voluntary
+refunds or disruption compensation, SMS/push, offline validation, and
+home delivery of lost items.
+
 ## 2. Repository Structure
 
 ``` text
@@ -113,7 +148,9 @@ bookings, payments, and ticket status.
   -------------------------------------------------------------------------------
   Category                Technology                      Purpose
   ----------------------- ------------------------------- -----------------------
-  Runtime                 .NET 10 LTS                     Application runtime
+  Runtime                 .NET 9 (SDK 9.0.320,        Application runtime
+                          pinned in
+                          `backend/global.json`)
 
   Framework               ASP.NET Core Web API            REST API
 
@@ -149,8 +186,9 @@ bookings, payments, and ticket status.
   Mocking                 NSubstitute or Moq              Test doubles
   -------------------------------------------------------------------------------
 
-Use the latest supported patch of .NET 10 and pin the SDK in
-`global.json`.
+Use the pinned SDK from `backend/global.json` (.NET 9, 9.0.320). Do not
+upgrade the target framework mid-project; revisit only after the course
+delivery.
 
 ### Infrastructure and DevOps
 
@@ -410,64 +448,113 @@ buttons are not security controls.
 
 ## 8. Database Design
 
-PostgreSQL is the recommended primary database. Use EF Core migrations
-to version schema changes.
+PostgreSQL 17 is the primary database. The physical schema is versioned with
+plain SQL migrations under `infra/database/migrations` (not EF Core
+migrations); EF Core only maps the schema. See:
+`infra/database/documentation/DATABASE_DESIGN.md`, `ERD.md`,
+`BUSINESS_RULE_MAPPING.md`, and `DEPLOYMENT_GUIDE.md`.
 
-Initial entities:
+Actual schema (SRS v1.2, migration `006_srs_v1_2_alignment.sql`):
+
+- **Schema `metro`** — 93 business tables plus 3 views, 329 indexes and
+  297 foreign keys, all operator-scoped through composite keys.
+- **Schema `public`** — 7 ASP.NET Core Identity tables.
+- **13 `SECURITY DEFINER` workflow functions** — payment confirmation and
+  issuance, free issuance for children under 6, unpaid cancellation,
+  ticket revocation, disruption ticket change, accessibility slot
+  confirmation/release, and overdue lost-property marking, among others.
+- **25 retention triggers** that reject `DELETE`/`TRUNCATE` on history,
+  finance and audit tables at statement level.
+
+Main table groups:
 
   -----------------------------------------------------------------------
   Group                               Tables
   ----------------------------------- -----------------------------------
-  Identity                            `Users`, `Roles`, `UserRoles`,
-                                      `RefreshTokens`
+  Identity (`public`)                 `AspNetUsers`, `AspNetRoles`,
+                                      `AspNetUserRoles`, `AspNetUserClaims`,
+                                      `AspNetRoleClaims`, `AspNetUserLogins`,
+                                      `AspNetUserTokens`
 
-  Metro network                       `Stations`, `Lines`, `Routes`,
-                                      `RouteStations`
+  Network                             `operators`, `lines`, `stations`,
+                                      `line_stations`, `journeys`,
+                                      `journey_legs`
 
-  Operations                          `TrainSchedules`
+  Operations                          `trainsets`, `cars`, `planned_trips`,
+                                      `planned_stop_times`,
+                                      `trip_allocations`,
+                                      `capacity_profiles`,
+                                      `load_observations`,
+                                      `trip_eta_updates`
 
-  Fare                                `TicketTypes`, `FareRules`
+  Fare and catalog                    `ticket_products`, `fare_policies`,
+                                      `fare_policy_versions`, `fare_rules`,
+                                      `concession_policies`
 
-  Ticketing                           `Bookings`, `BookingItems`,
-                                      `Tickets`
+  Order and ticketing                 `orders`, `order_versions`,
+                                      `order_items`, `trip_suggestions`,
+                                      `purchase_consents`, `tickets`,
+                                      `ticket_credentials`,
+                                      `guardian_links`,
+                                      `ticket_change_requests`
 
-  Payment                             `Payments`, `PaymentTransactions`
+  Payment and refund                  `payments`, `payment_events`,
+                                      `refund_requests`,
+                                      `refund_transactions`,
+                                      `refund_attempts`
 
-  Refund                              `RefundRequests`, `RefundItems`,
-                                      `RefundTransactions`,
-                                      `RefundPolicies`
+  Passenger support                   `accessibility_requests`,
+                                      `station_support_capacities`,
+                                      `lost_reports`, `found_items`,
+                                      `lost_item_claims`,
+                                      `lost_item_handovers`
 
-  System                              `Notifications`, `AuditLogs`
+  Reporting and audit                 `data_quality_days`,
+                                      `demand_forecasts`,
+                                      `audit_logs`, `notifications`,
+                                      `notification_deliveries`
   -----------------------------------------------------------------------
 
-Important distinctions: - Station is a physical station. - Line is a
-metro service line. - Route is a journey/path option. - RouteStation
-records ordered station membership. - Schedule represents planned
-service times. - Booking is a passenger order. - Ticket is an individual
-travel entitlement. - Payment records payment lifecycle and provider
-references. - RefundRequest records a cancellation/refund request. -
-RefundTransaction records an actual operation with the payment provider.
+The database `README.md` explains the deploy/test commands; the design
+documents above have the full 93-table list. EF Core entity names use
+PascalCase and map to these snake_case tables.
 
-One booking may contain multiple tickets. Individual tickets may have
-different usage and refund states.
+Important distinctions: - Station is a physical station. - Line is a
+metro service line. - Journey is a path option between two stations. -
+PlannedTrip is a scheduled departure with a load profile. - Order is a
+passenger purchase containing one passenger and one ticket product per
+SRS v1.2, with versioned snapshots in `order_versions`. - Ticket is an
+individual travel entitlement with a validity window; overlapping active
+validity for the same holder is rejected by the GiST exclusion
+constraint `ex_tickets_no_overlapping_validity`. - TripSuggestion is a
+hint for a single-trip order and is not a seat hold. - Payment records
+the payment lifecycle and provider references. - RefundRequest records
+an erroneous-charge or disruption refund. - TicketChangeRequest records
+the single allowed disruption change per ticket.
+
+> The SRS v1.1 capacity-hold chain (`capacity_profiles`,
+> `trip_capacity_segments`, `capacity_holds`,
+> `capacity_hold_segments` and the `hold_trip_capacity` family of
+> functions) still exists physically but is **legacy**: no current flow
+> creates holds or quotas.
 
 ``` mermaid
 erDiagram
-    USERS ||--o{ BOOKINGS : creates
-    LINES ||--o{ ROUTES : contains
-    ROUTES ||--o{ ROUTE_STATIONS : has
-    STATIONS ||--o{ ROUTE_STATIONS : appears_in
-    BOOKINGS ||--o{ BOOKING_ITEMS : contains
-    BOOKING_ITEMS ||--o{ TICKETS : issues
-    BOOKINGS ||--o{ PAYMENTS : has
-    PAYMENTS ||--o{ PAYMENT_TRANSACTIONS : records
-    BOOKINGS ||--o{ REFUND_REQUESTS : receives
-    REFUND_REQUESTS ||--o{ REFUND_ITEMS : contains
-    REFUND_REQUESTS ||--o{ REFUND_TRANSACTIONS : processes
+    ORDERS ||--|{ ORDER_VERSIONS : versions
+    ORDERS ||--|{ ORDER_ITEMS : contains
+    ORDER_VERSIONS ||--o| TRIP_SUGGESTIONS : suggests
+    ORDERS ||--o{ PURCHASE_CONSENTS : requires
+    ORDER_ITEMS ||--o{ TICKETS : issues
+    TICKETS ||--o{ TICKET_CREDENTIALS : represented_by
+    TICKETS ||--o{ TICKET_CHANGE_REQUESTS : changes
+    TICKETS ||--o{ JOURNEYS : used_for
+    ORDERS ||--o{ PAYMENTS : paid_by
+    PAYMENTS ||--o{ PAYMENT_EVENTS : receives
+    TICKETS ||--o{ REFUND_REQUESTS : refunds
 ```
 
-This is an initial model sketch. Confirm cardinalities, constraints,
-indexes, and deletion rules in the final ERD.
+The full ERD, including operator/network/operations tables and the
+legacy chain, is in `infra/database/documentation/ERD.md`.
 
 ## 9. Core Business Workflows
 
@@ -505,29 +592,28 @@ idempotently. 6. Define pending-booking expiry and cancellation rules.
 7. Use database transactions for payment confirmation and ticket
 issuance.
 
-### Cancellation and refund
+### Cancellation, erroneous charge and disruption change
 
-Keep these concepts separate: - Booking cancellation: cancellation of an
-order. - Ticket cancellation: revocation of an individual travel
-entitlement. - Refund: returning money through the original payment
-method where supported.
+Per SRS v1.2, keep these concepts separate:
 
-Suggested configurable policy: - Unpaid booking: cancel/expire without
-refund transaction. - Paid, unused ticket: eligible only if the
-applicable policy allows it. - Used ticket: normally not eligible for
-standard refund. - Expired ticket: normally not eligible for standard
-refund. - Operator disruption: may qualify for full refund or
-replacement ticket. - Day/month passes: use separate policy rules from
-single-trip tickets.
+-   **Unpaid order cancellation** — the order expires or is cancelled and
+    the suggested trip is released; no refund transaction exists.
+-   **Erroneous-charge refund** — a payment was collected wrongly and is
+    returned through the original payment method. This is not a
+    voluntary refund.
+-   **Disruption ticket change** — a ticket affected by an operator
+    disruption is reissued for another date/trip **at most once per
+    ticket**; the old QR is revoked.
+-   Voluntary refunds, refunds with a fee, price-difference payouts and
+    disruption compensation are **out of scope**.
 
-Refund workflow: 1. Passenger requests cancellation/refund. 2. Backend
-checks ownership, ticket state, time limits, and policy. 3. Backend
-calculates refundable amount and fee. 4. Ticket is blocked from use
-while refund is being processed. 5. Backend submits an idempotent refund
-request to the payment provider. 6. Backend confirms the result through
-webhook or provider status query. 7. Ticket and refund states are
-updated consistently. 8. Passenger receives the result and refund
-history.
+Workflow: 1. Backend checks ownership, ticket/order state and policy. 2.
+Backend calculates the amount to return (no fee). 3. Ticket is blocked
+from use while the refund is processed. 4. Backend submits an idempotent
+refund request to the provider. 5. The result is confirmed through a
+webhook or provider status query. 6. Ticket, order and refund states are
+updated consistently in one transaction. 7. The passenger sees the
+result and the refund history.
 
 Never credit a user balance directly unless the system implements an
 actual internal wallet. Do not retry an ambiguous refund blindly after a
@@ -557,45 +643,46 @@ single-use tickets.
 
 ## 10. API Conventions
 
-Example endpoints:
+All endpoints are under `/api/v1`. The frozen contract (API freeze 04/12)
+is documented in `docs/planning/TASK-ASSIGNMENT.md` §6.
 
-  Method   Endpoint                             Purpose
-  -------- ------------------------------------ -------------------------
-  `POST`   `/api/auth/register`                 Register
-  `POST`   `/api/auth/login`                    Login
-  `POST`   `/api/auth/refresh`                  Refresh token
-  `GET`    `/api/stations`                      List stations
-  `GET`    `/api/routes/search`                 Search journeys
-  `GET`    `/api/schedules`                     Query schedules
-  `GET`    `/api/fares/quote`                   Calculate fare quote
-  `POST`   `/api/bookings`                      Create booking
-  `GET`    `/api/bookings/me`                   Current user's bookings
-  `POST`   `/api/payments`                      Start payment
-  `POST`   `/api/payments/webhook/{provider}`   Payment callback
-  `POST`   `/api/refunds/quote`                 Preview refund
-  `POST`   `/api/refunds/requests`              Create refund request
-  `GET`    `/api/refunds/me`                    Refund history
-  `GET`    `/api/tickets/{id}`                  Ticket detail
-  `POST`   `/api/tickets/validate`              Validate ticket
+  Group      Endpoints
+  ---------- ---------------------------------------------------------------------------------
+  Auth       `POST /auth/register`, `/auth/login`, `/auth/logout`, `/auth/refresh`, `/auth/forgot-password`
+  Profile    `GET /me`, `PUT /me`, `/me/eligibility`
+  Catalog    `GET /lines`, `/stations`, `/journeys`, `/fares/quote`, `/service-status`, `/trips/{id}/load`
+  Booking    `POST /orders`, `GET /orders/{id}`, `GET /orders/{id}/suggestion`, `POST /orders/{id}/consent`, `DELETE /orders/{id}`
+  Payment    `POST /payments`, `POST /payments/{id}/retry`, `POST /webhooks/momo`
+  Tickets    `GET /tickets`, `/tickets/{id}`, `/tickets/{id}/qr`, `GET /orders`, `GET /payments`, `POST /orders/{id}/issue-free`
+  Gate       `POST /tickets/validate`, `GET /tickets/lookup`
+  Admin      `GET/POST /admin/accounts`, `/admin/roles`, `/admin/lines`, `/admin/stations`, `/admin/products`, `/admin/fares`, `/admin/schedules`, `/admin/trips`, `/admin/trip-load`, `/admin/notices`
+  Reports    `GET /reports/revenue`, `/reports/tickets`, `/reports/revenue/export`
+  Cancel /   `POST /orders/{id}/cancel`, `POST /refunds`, `POST /refunds/{id}/approve`
+  refund     
+  Change     `POST /tickets/{id}/change-requests`, `POST /ticket-change-requests/{id}/approve`
 
 Suggested HTTP status codes: `200` success, `201` created, `204` no
 content, `400` invalid request, `401` unauthenticated, `403` forbidden,
 `404` not found, `409` state/concurrency conflict, `422` optional
 business validation convention, `500` unexpected server error.
 
-Example response:
+Error responses use RFC 7807 ProblemDetails with a stable machine-readable
+`code`, for example:
 
 ``` json
 {
-  "success": true,
-  "message": "Booking created successfully",
-  "data": {
-    "bookingId": "example-booking-id",
-    "status": "Pending"
-  },
-  "errors": []
+  "type": "https://metro.example/errors/booking-capacity-exceeded",
+  "title": "Trip load is full",
+  "status": 409,
+  "code": "TRIP_LOAD_EXCEEDED",
+  "detail": "The selected trip has reached its manual load limit.",
+  "traceId": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 }
 ```
+
+Successful responses return the resource or a small envelope
+(`items`, `page`, `pageSize`, `total`); the backend never trusts a
+client-supplied price, role, payment state or ticket status.
 
 Use OpenAPI as the API contract and keep frontend types aligned.
 Consider generating TypeScript types from OpenAPI when the contract
@@ -620,7 +707,7 @@ correct when Redis is unavailable or its cache is empty.
 
 -   Git.
 -   Node.js LTS and npm (or one package manager selected by the team).
--   .NET 10 SDK.
+-   .NET 9 SDK (pinned in `backend/global.json`).
 -   Docker Desktop / Docker Engine with Compose.
 -   VS Code, Visual Studio, or Rider.
 
@@ -815,6 +902,23 @@ Frontend `.env.example`:
 ``` env
 VITE_API_BASE_URL=http://localhost:8080
 ```
+
+### Neon (Postgres + Object Storage)
+
+`neon deploy` provisions `neon.ts` and writes the cloud credentials to
+`.env.local` (git-ignored). The backend reads them at startup:
+
+``` env
+DATABASE_URL=postgresql://...        # pooled, used by EF Core/Npgsql
+DATABASE_URL_UNPOOLED=postgresql://...  # direct, used for migrations/psql
+AWS_ENDPOINT_URL_S3=https://...
+AWS_REGION=ap-southeast-1
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+```
+
+See [docs/NEON-SETUP.md](docs/NEON-SETUP.md) for provisioning, schema
+deployment, and health/diagnostics endpoints.
 
 Vite exposes variables prefixed with `VITE_` to browser code. Never put
 database passwords, JWT signing keys, private API keys, or payment
