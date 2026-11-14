@@ -1,391 +1,308 @@
-# Kế hoạch Backend-first — Nhóm 6 thành viên
+# Kế hoạch triển khai & phân công — Nhóm 6 (M01–M06)
 
 | Thông tin | Giá trị |
 | --- | --- |
 | Dự án | Hệ thống quản lý vé và hỗ trợ hành khách Metro |
-| Tài liệu | Kế hoạch phân công công việc — giai đoạn Backend (TASK-ASSIGNMENT) |
-| Phiên bản | 4.0 |
+| Tài liệu | Kế hoạch Backend-first → API freeze → Frontend |
+| Phiên bản | 5.5 (thay thế 5.4) — bám SRS v1.2 / UC v1.6 |
 | Ngày lập | 13/11/2026 |
-| Người lập | Lead (M1) |
-| Trạng thái | Draft — chờ nhóm xác nhận tên thành viên; mốc BE freeze và mốc chia FE đã chốt |
-| Căn cứ | `docs/requirements/Metro_SRS_v1.2.docx` (47 UC), `Metro_Dac_ta_ UC_v1.6.docx`, gói `infra/database`, scaffold `backend/`, `docs/git-workflow/BRANCH-POLICY.md` |
-| Mốc BE core | **06/12/2026** — toàn bộ endpoint Must-have trừ soát vé/báo cáo |
-| Mốc BE hoàn tất | **13/12/2026** — soát vé, hỗ trợ cổng, báo cáo, hardening |
-| Mốc FE | **Chia task FE ngày 07/12/2026**, chạy 07–20/12 (2 tuần), cả 6 người |
-| Mốc bàn giao dự án | Release `v1.0-demo` **20/12/2026**, buffer UAT đến **24/12/2026** |
+| Người lập | M01 — Mạc Đỗ Gia Huy (Tech Lead) |
+| Khởi động | **16/11/2026** (thứ Hai) |
+| API freeze | **04/12/2026** (thứ Sáu) — chốt contract các luồng Must-have |
+| Frontend | **07/12 – 17/12/2026** |
+| Bàn giao | **20/12/2026** (Chủ nhật) — nội bộ xong hết |
+| Nộp bài | **23/12/2026** — hard deadline; 21–23/12 chỉ là đệm sửa P0 |
+| Bảng theo dõi | `docs/task-management/Agile_Scrum_Task_Template_Team_6.xlsx` (mã task trùng với tài liệu này) |
+| Bảng điều khiển | `docs/planning/BOARD.md` — link lọc theo sprint/người + toàn bộ 33 task |
+| Kịch bản kickoff | `docs/planning/KICKOFF-S0.md` — agenda, 6 điểm cần chốt, task S0, tin nhắn gửi nhóm |
 
-## 1. Mục đích và phạm vi giai đoạn này
+> Đây là đồ án môn học: **cả 6 người đều làm BE rồi làm FE**. M01 là tech lead, chủ yếu kiến trúc – review – tích hợp, chỉ code khi có việc chặn đường găng.
 
-Tài liệu chia **toàn bộ công việc Backend** của 27 UC Must-have thành task có mã, người phụ trách, sprint, ước lượng, phụ thuộc và tiêu chí hoàn thành, để cả 6 thành viên cùng làm BE bằng ASP.NET Core trong 4 sprint đầu.
+## 1. Mục tiêu và phạm vi
 
-**Frontend chưa chia task trong tài liệu này.** Task FE sẽ được chia vào **07/12/2026**, ngay sau khi BE core freeze (06/12), và chạy đến 20/12. Trong tuần 07–13/12, các task BE còn lại (soát vé, báo cáo, hardening) hoàn tất song song với việc FE bắt đầu dựng màn hình trên các endpoint đã freeze.
+- Làm **27 UC Must-have** trong SRS 1.2 (47 UC); Stretch/Out xem mục 10.
+- **Schema đã bám SRS v1.2**: `infra/database` có 6 migration (001–006); 006 bổ sung order version, gợi ý chuyến, tải kg nhập tay, giám hộ, mua hộ, đổi vé do gián đoạn, tiếp cận, thất lạc. Không còn quota/giữ chỗ trong luồng mới — bảng cũ chỉ là **legacy**.
+- **BE trước**: 16/11 → 04/12 dựng toàn bộ API Must-have, có Swagger + test.
+- **Chốt API 04/12**: sau mốc này chỉ thêm field/endpoint, không đổi tên, kiểu, tham số, mã lỗi.
+- **FE sau**: 07/12 → 17/12 bám contract đã freeze; 18–20/12 UAT, demo và bàn giao; 21–23/12 đệm P0.
 
-Nguyên tắc giai đoạn này:
+## 2. Nguyên tắc
 
-1. **BE-first**: không dựng màn hình khi endpoint chưa có Swagger + test.
-2. **Cả 6 người làm BE**: kể cả thành viên sẽ mạnh về FE, để ai cũng hiểu domain, contract và dữ liệu trước khi làm UI.
-3. **API là hợp đồng**: mỗi endpoint có request/response mẫu, mã lỗi và test; FE sau này bám vào đó.
-4. **Không sửa migration đã áp dụng**; mọi thay đổi schema đi qua migration mới + test.
+1. **Hợp đồng trước, giao diện sau**: FE không dựng màn hình khi endpoint chưa có trong Swagger + Postman.
+2. **Một task một owner**, reviewer ghi riêng; không ai tự merge PR của mình — trừ 5 task của M01 (tech lead) được tự merge sau khi CI xanh.
+3. **Cả nhóm làm BE**: kể cả bạn mạnh FE, để hiểu domain và dữ liệu trước khi làm UI.
+4. **Không sửa migration đã áp dụng**; thay đổi schema = migration mới + test.
+5. **Giao task theo cổng** (mục 4.2), không giao hết một lần — tránh task chết vì chờ dependency.
+6. **Definition of Done đo được** (mục 9), không đánh giá bằng cảm tính.
 
-## 2. Căn cứ và giả định
+## 3. Đội hình
 
-### 2.1. Căn cứ kỹ thuật
+| Mã | Tên | Vai trò Scrum | Chuyên môn chính | Capacity/sprint | Ghi chú |
+| --- | --- | --- | --- | --- | --- |
+| **M01** | Mạc Đỗ Gia Huy (Huy) | Team Lead / Scrum Master | Kiến trúc, API contract, review, tích hợp | 10 SP | Tech lead; code các task nền/auth/payment/hardening; không nhận task FE chính |
+| **M02** | Tuyên | Developer | Backend/API (ticketing), sau đó FE booking | 20 SP | Booking/payment/vé; giữ nhịp freeze 04/12 |
+| **M03** | Hoàng | Developer | Frontend/UI; BE catalog/fare giai đoạn đầu | 20 SP | Chủ lực UI, nhận BE trước để hiểu dữ liệu · GitHub `@lehoangdn2005-png` |
+| **M04** | Thành | Developer | Backend/Database (EF mapping, booking), sau đó FE vé/soát vé | 20 SP | Đường găng BE-07 (26–30/11); không dồn thêm việc trong khoảng này · GitHub `@22-LeDaiThanh` |
+| **M05** | My | QA / Tester | Test case, manual/API test; BE admin; FE admin | 20 SP | Vẫn code BE+FE theo yêu cầu môn học · GitHub `@v-hamy165` |
+| **M06** | Tiên | Developer / QA | Full-stack, CI/test harness, FE reports | 20 SP | Giữ CI xanh và Postman/Newman · GitHub `@TienNguyen0o0` |
 
-- **Backend scaffold**: ASP.NET Core `net9.0`, 4 project `Metro.API` / `Metro.Application` / `Metro.Domain` / `Metro.Infrastructure`; `Program.cs` đã có controllers, Swagger, CORS, health check; `ApplicationDbContext` kế thừa `IdentityDbContext`; DI đã cấu hình Npgsql + Identity Core.
-- **Database**: PostgreSQL 17, schema `metro` (77 bảng) + `public."AspNet*"`; các hàm `hold_trip_capacity`, `confirm_payment_and_issue_tickets`, `cancel_unpaid_order`, `expire_capacity_holds` đã test; 7 hàm workflow là `SECURITY DEFINER` và không cấp EXECUTE cho PUBLIC.
-- **SRS 1.2**: 47 UC; giai đoạn này chỉ làm 27 UC Must-have.
-- **Git**: `feature/* → PR → dev → PR → main`; `dev` cần 1 approval, `main` cần 2, CI bắt buộc xanh.
+- Tên đã chốt: M01 Huy · M02 Tuyên (`@hinouser29`) · M03 Hoàng · M04 Thành · M05 My · M06 Tiên. 33 issue GitHub **#12–#44** đã tạo, gán đúng assignee + milestone S0–S3. Deadline nộp **23/12**, nội bộ chốt xong **20/12**.
+- Ai chưa quen ASP.NET/EF: nhận task nhỏ hơn + pairing với M02/M04 trong S0–S1; không tự nhận BE-07/BE-08.
 
-### 2.2. Giả định về năng lực
+## 4. Lịch và cổng giao task
 
-| Hạng mục | Giá trị |
-| --- | --- |
-| Thời gian BE | S0–S3: 16/11 → 13/12/2026 (4 tuần, 20 ngày/người) |
-| Ngày công gộp | 6 người × 20 ngày = 120 pd |
-| Hao phí | ~20% (review, họp, sửa lỗi, học .NET/EF) |
-| Khả dụng | ~96 pd |
-| Khối lượng BE | ~57 pd → còn ~39 pd dự phòng cho review, test, sửa lỗi và hỗ trợ chéo |
-
-Vì dư người so với khối lượng, mỗi người chỉ nhận 4–14 pd BE trong 4 tuần. Phần dư dùng cho: viết test, review chéo, cặp đôi (pairing) với người yếu .NET, và xử lý phát sinh EF mapping.
-
-Nếu một thành viên chỉ có 4 ngày/tuần, giảm task của người đó theo thứ tự ở mục 6.4, không giảm thời gian test.
-
-### 2.3. Ngoài phạm vi
-
-- Không thanh toán thật, không điều khiển cổng/tàu/SCADA/ATS, không nhận diện khuôn mặt.
-- Không làm mobile app, SMS/push, offline validation, hóa đơn thuế/PDF.
-- Không làm Frontend trong giai đoạn này (trừ mock/contract do người sau này tự chuẩn bị khi được chia việc).
-
-## 3. Kiến trúc và quy ước Backend
-
-### 3.1. Cấu trúc
-
-| Project | Trách nhiệm | Không được chứa |
-| --- | --- | --- |
-| `Metro.Domain` | Entity, enum, value object, business rule thuần, exception nghiệp vụ | EF attribute, HTTP, DI |
-| `Metro.Application` | Use case theo `Features/<Module>`, DTO, validator, interface repository/service | DbContext trực tiếp, controller |
-| `Metro.Infrastructure` | `ApplicationDbContext`, EF configuration, repository, payment adapter, email, QR, JWT | Business rule của domain |
-| `Metro.API` | Controller, middleware, filter, ProblemDetails, Swagger, DI composition | Truy vấn LINQ phức tạp, business rule |
-
-Quy ước thư mục: một use case = một thư mục dưới `Features/<Module>/<UseCase>/` gồm `Command|Query`, `Handler`, `Validator`, `Response`. Không tạo `Services` dùng chung quá lớn.
-
-### 3.2. Quy ước API
-
-- Prefix `/api/v1`, JSON camelCase, thời gian ISO-8601 UTC, tiền là `long` minor unit + `currency`.
-- Lỗi trả `ProblemDetails` kèm `code` nội bộ (ví dụ `BOOKING_CAPACITY_EXCEEDED`), `traceId`, `errors` theo field.
-- Phân trang `page`, `pageSize` (mặc định 20, tối đa 100), trả `items`, `page`, `pageSize`, `total`.
-- Idempotency: header `Idempotency-Key` cho POST tạo đơn/thanh toán/scan; lưu và trả lại kết quả cũ khi trùng.
-- Mọi endpoint ghi đều kiểm tra role + ownership + trạng thái; test 401/403 là bắt buộc.
-- Swagger phải có example request/response và mô tả mã lỗi; `dotnet build` không warning mới.
-
-### 3.3. Truy cập dữ liệu
-
-- Đọc/ghi thường dùng EF Core; **không** cấu hình lại index/constraint trong EF (DB là nguồn sự thật).
-- Các thao tác tiền/vé/sức chứa gọi hàm SQL qua `Database.SqlQuery`/`FromSql` trong transaction của request:
-  - `metro.hold_trip_capacity` cho giữ chỗ,
-  - `metro.confirm_payment_and_issue_tickets` cho callback thanh toán,
-  - `metro.cancel_unpaid_order` cho hủy đơn chưa thanh toán,
-  - `metro.expire_capacity_holds` cho job hết hạn.
-- Role runtime DB chỉ có `GRANT EXECUTE` đúng hàm + `SELECT` cần thiết; không cấp quyền sở hữu bảng.
-- Mọi thời điểm dùng UTC; chuyển UTC+7 chỉ ở tầng hiển thị.
-
-## 4. Đội hình và phân công Backend
-
-| Mã | Vai trò BE | Task sở hữu | pd |
-| --- | --- | --- | --- |
-| **M1** | Lead / Backend Architect | BE-01 nền tảng, BE-03 auth, BE-08 payment, BE-17 hardening; review toàn bộ PR | 12 |
-| **M2** | Ticketing Engineer | BE-02 EF mapping (phần lõi), BE-07 booking/giữ chỗ, BE-09 vé/QR | 12 |
-| **M3** | Operations Engineer | BE-05 catalog, BE-06 fare engine, BE-13 lịch/chuyến/thông báo | 11 |
-| **M4** | Passenger & Gate Engineer | BE-02 EF mapping (phần ticketing/finance), BE-04 hồ sơ, BE-10 soát vé, BE-11 hỗ trợ cổng | 9 |
-| **M5** | Admin & Reporting Engineer | BE-12 admin tài khoản, BE-14 thông báo/dự phòng, BE-16 hủy/hoàn, BE-18 seed/fixture | 8 |
-| **M6** | Platform, Reporting & QA Engineer | BE-15 báo cáo, BE-18 test harness/Postman/CI | 5 |
-
-Tổng: **57 pd**, mỗi người 5–12 pd trong 20 ngày — đủ chỗ cho review và sửa lỗi.
-
-### 4.1. Cặp review chéo
-
-| Người | Review chính cho | Ghi chú |
-| --- | --- | --- |
-| M1 | M2 (booking/payment/ticket), toàn bộ PR chạm auth/payment | Bắt buộc |
-| M2 | M3 | Chéo module |
-| M3 | M4 | Chéo module |
-| M4 | M5 | Chéo module |
-| M5 | M6 | Chéo báo cáo |
-| M6 | M1 (hạ tầng, CI), test của M2 | Chéo test/CI |
-
-Không ai tự merge PR của chính mình.
-
-## 5. Lịch tổng thể (BE trước, FE từ 07/12)
+### 4.1. Sprint
 
 | Sprint | Thời gian | Mục tiêu | Mốc |
 | --- | --- | --- | --- |
-| **S0** | 16/11 – 22/11/2026 | Dựng nền API, EF mapping, catalog đọc, Identity, seed/test harness | **B0 — Nền chạy được** |
-| **S1** | 23/11 – 29/11 | Auth, fare engine, booking/giữ chỗ, admin tài khoản | |
-| **S2** | 30/11 – 06/12 | Payment + phát hành vé + hồ sơ + lịch/chuyến | **B1 — BE core freeze (06/12)** |
-| **S3** | 07/12 – 13/12 | BE: soát vé, hỗ trợ cổng, báo cáo, hủy/hoàn, hardening, seed demo. **FE: chia task 07/12 và bắt đầu dựng màn hình** | **B2 — BE hoàn tất (13/12)** |
-| **S4** | 14/12 – 20/12 | FE hoàn thiện, tích hợp, E2E, UAT nội bộ | **Release `v1.0-demo` 20/12** |
-| Buffer | 21/12 – 24/12 | UAT/demo, sửa P0–P1 | **Bàn giao** |
+| **S0** | 16/11 – 22/11 | Nền API, EF mapping, catalog, seed, CI | **Nền chạy được** |
+| **S1** | 23/11 – 04/12 | Auth, hồ sơ, fare, booking, payment, vé, admin, báo cáo | **API freeze 04/12** |
+| **S2** | 07/12 – 17/12 | FE (5 người) + soát vé/hardening (BE) + tích hợp | **Code freeze 17/12** |
+| **S3** | 18/12 – 20/12 | UAT, sửa P0–P1, demo, bàn giao | **Bàn giao 20/12** |
+| *Đệm* | 21/12 – 23/12 | Chỉ sửa P0 phát sinh, đóng gói, nộp bài | **Nộp 23/12** |
 
-Quy ước:
+Hai điểm tràn ranh giới sprint (đã tính sẵn trong lịch, không phải trượt): **BE-06 khởi động 22/11** (Chủ nhật, để BE-07 đóng 30/11) và **BE-16 (hủy/hoàn + đổi vé — Stretch) chốt 06/12**, sau freeze 2 ngày nhưng không đổi contract của FE-04/FE-07.
 
-- **BE core freeze 06/12**: endpoint của luồng mua vé → thanh toán → vé phải chốt tên/kiểu/tham số. Sau đó chỉ thêm field.
-- **BE hoàn tất 13/12**: không còn endpoint Must-have nào thiếu; Swagger + Postman + seed demo đầy đủ.
-- Thứ Sáu hằng tuần: demo BE bằng Swagger/Postman, không demo UI.
-- Code freeze toàn dự án 17/12 (sau khi FE đã vào việc), chỉ nhận fix P0/P1.
+### 4.2. Cổng giao task (giao dần, không giao một lần)
 
-## 6. Danh sách task Backend
-
-Ước lượng theo **person-day (pd)**, đã gồm code, test và review. Mỗi task tạo branch `feature/US-<số>-<slug>` và PR vào `dev`.
-
-| Mã | Nội dung | UC/BR | Người | Sprint | pd | Phụ thuộc | Đầu ra / DoD |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| BE-01 | Nền tảng API: middleware ProblemDetails, validation pipeline, logging, health check, Swagger + example, cấu hình môi trường, CORS, `global.json` | NFR chung | M1 | S0 | 3 | — | API chạy local; `/health` + `/swagger`; CI build/test xanh; lỗi chuẩn hóa |
-| BE-02 | EF Core mapping schema `metro`/`public`: entity + configuration cho identity, network, order, ticket, payment; `EndExclusive`; query filter `operator_id` | DATA-001… | M2 (lõi 3), M4 (ticketing/finance 2) | S0–S1 | 5 | BE-01 | Đọc/ghi được các bảng lõi; `dotnet ef dbcontext info` sạch; integration test nối PostgreSQL thật |
-| BE-03 | Identity + JWT: đăng ký, xác minh email, đăng nhập/xuất, refresh, policy theo role; `RequireUniqueEmail = true` | UC01–UC04 | M1 | S1 | 3 | BE-02 | 6 endpoint `/api/v1/auth/*`; test 401/403, email trùng trả 400 kèm `code` |
-| BE-04 | Hồ sơ + xác minh ưu đãi: xem/sửa hồ sơ, upload minh chứng, trạng thái chờ/duyệt/từ chối, purge nội dung | UC05, UC06 | M4 | S1–S2 | 2 | BE-03 | API `/me`, `/me/eligibility`; kiểm ownership; audit thay đổi |
-| BE-05 | Catalog đọc: tuyến, ga, hành trình, tình trạng dịch vụ | UC07, UC08, UC10 | M3 | S0–S1 | 3 | BE-02 | 4 endpoint public, cache ngắn (IMemoryCache), tìm đường theo ga |
-| BE-06 | Fare engine + quản lý loại vé/giá/chính sách ưu đãi | UC09, UC25, BR-FARE-* | M3 | S1 | 4 | BE-05 | Tính giá theo `fare_policy_version`; CRUD có version + audit; test khóa NULL-safe, sản phẩm thiếu duration bị chặn |
-| BE-07 | Booking: tạo đơn, order item, giữ chỗ theo đoạn, tự gán chuyến | UC11, UC36, BR-CAP-* | M2 | S1–S2 | 5 | BE-06 | Gọi `hold_trip_capacity`; `Idempotency-Key`; lỗi hết chỗ `BOOKING_CAPACITY_EXCEEDED`; test 2 phiên đồng thời |
-| BE-08 | Payment MoMo TEST: tạo giao dịch, callback/IPN, xác minh chữ ký, thử lại | UC11, UC12, IF-003…005 | M1 | S2 | 4 | BE-07 | Gọi `confirm_payment_and_issue_tickets`; chữ ký bắt buộc; retry idempotent; không ghi trùng event |
-| BE-09 | Phát hành vé + QR credential + API vé của tôi/lịch sử | UC13–UC15 | M2 | S2–S3 | 4 | BE-08 | 1 vé/hành khách; QR hash + version; lịch sử đặt/thanh toán; không log token gốc |
-| BE-10 | Soát vé tại cổng: Allow/Deny/Pending, vé không hợp lệ, tra cứu tại ga | UC16–UC18, IF-002/008 | M4 | S2–S3 | 4 | BE-09 | Scan idempotent theo `event_id`; journey vào/ra; lý do Deny có mã |
-| BE-11 | Hỗ trợ hành khách tại cổng: tra vé, cấp lại QR | UC19 | M4 | S3 | 1 | BE-10 | Tra theo mã vé/số điện thoại; cấp lại QR có audit |
-| BE-12 | Quản trị tài khoản/quyền + dữ liệu hành khách | UC22, UC23 | M5 | S1 | 2 | BE-03 | CRUD role, khóa tài khoản, xem PII có audit; test 403 theo role |
-| BE-13 | Tuyến/ga + lịch/chuyến + hồ sơ sức chứa + thông báo dịch vụ | UC24, UC29, UC31 | M3 | S2 | 4 | BE-05 | CRUD tuyến/ga/tàu/chuyến; sinh `trip_capacity_segments`; thông báo có hiệu lực/hết hạn |
-| BE-14 | Gợi ý chuyến dự phòng + API tình trạng/gián đoạn | UC30, UC36 | M5 | S2 | 2 | BE-13 | Fallback khi chuyến đầy; API trạng thái tuyến; test không gợi ý chuyến đã hủy |
-| BE-15 | Báo cáo vé/doanh thu + export CSV | UC33 | M6 | S2–S3 | 3 | BE-09 | Doanh thu theo ngày/tuyến/loại vé; export CSV; số khớp tổng payment |
-| BE-16 | Hủy đơn chưa thanh toán + hoàn tiền cơ bản | UC42 | M5 | S2–S3 | 2 | BE-08 | Gọi `cancel_unpaid_order`; refund request/approve tối thiểu; không xóa khoản thu |
-| BE-17 | Hardening NFR: rate limit, security headers, PII masking, audit bắt buộc | NFR-SEC/PERF/AUD | M1 | S3 | 2 | BE-03…BE-16 | Checklist NFR; test tải nhẹ; log không lộ PII/secret |
-| BE-18 | Test + seed + Postman + kịch bản demo | AC-* | M5 (seed/fixture 2), M6 (harness/Postman 2) | S0–S3 | 4 | BE-01 | Seed 2 tuyến/12 ga; integration test chạy CI; Postman collection; 6 kịch bản demo |
-
-Tổng Backend: **57 pd** — M1 12, M2 12, M3 11, M4 9, M5 8, M6 5.
-
-### 6.1. Phân công theo sprint
-
-| Sprint | M1 | M2 | M3 | M4 | M5 | M6 |
-| --- | --- | --- | --- | --- | --- | --- |
-| S0 | BE-01 | BE-02 (lõi) | BE-05 (bắt đầu) | BE-02 (ticketing/finance) | BE-18 (seed/fixture) | BE-18 (test harness, CI) |
-| S1 | BE-03 | BE-02 (xong), BE-07 (bắt đầu) | BE-05 (xong), BE-06 | BE-04 | BE-12 | BE-15 (thiết kế query) |
-| S2 | BE-08 | BE-07 (xong), BE-09 (bắt đầu) | BE-13 | BE-10 (bắt đầu) | BE-14, BE-16 (bắt đầu) | BE-15 |
-| S3 | BE-17, review | BE-09 (xong), fix | fix + rà catalog/fare | BE-10 (xong), BE-11 | BE-16 (xong), BE-18 (seed demo) | BE-15 (xong), BE-18 (Postman, kịch bản) |
-
-Tải thực tế: 1–5 pd/người/sprint. Người xong sớm nhận test/review hoặc cặp đôi với người đang tắc ở EF mapping.
-
-### 6.2. Điều kiện "BE hoàn thành" (đo được)
-
-- Tất cả endpoint trong mục 7 có Swagger + example + test integration.
-- `dotnet build` và `dotnet test` xanh trên CI; không warning mới.
-- Postman collection chạy được toàn bộ 6 kịch bản demo trên DB seed.
-- Không còn `TODO`/`NotImplementedException` trong luồng Must-have.
-- Không có bảng nào bị sửa ngoài migration; `python infra/database/build_deploy.py --check` khớp.
-
-### 6.3. Ghi chú kỹ thuật bắt buộc
-
-- **Không tự viết transaction giữ chỗ/thanh toán**: gọi hàm SQL; nếu thiếu, tạo migration mới + test, không sửa migration đã áp dụng.
-- **Idempotency**: booking dùng `Idempotency-Key`; payment lưu `provider_event_id` + `payload_hash` và claim event nguyên tử; scan dùng `event_id`.
-- **Bảo mật**: token hash chỉ lưu hash; PII không log; rate limit cho auth/payment/scan; role runtime DB ít quyền.
-- **Email duy nhất**: DB có unique index theo FR-01.01 + preflight; app đặt `RequireUniqueEmail = true` để trả lỗi 400 thay vì 500.
-- **Thời gian**: UTC trong DB, `EndExclusive` không gồm mốc kết thúc; không dùng `DateTime.Now`.
-- **Mã vé**: DB sinh từ UUID order item + số thứ tự; BE không tự đặt mã.
-- **Lỗi DB**: bắt `PostgresException` và map SQLSTATE (`P0001`, `P0002`, `23505`, `22023`, `28000`) sang `code` nội bộ, không trả raw message.
-
-### 6.4. Thứ tự cắt khi trễ
-
-1. BE-14 (gợi ý chuyến dự phòng) → chỉ trả danh sách chuyến còn chỗ.
-2. BE-15 giảm còn báo cáo doanh thu theo ngày, bỏ export CSV.
-3. BE-11 gộp vào BE-10 (chỉ tra cứu, không cấp lại QR).
-4. BE-16 chỉ hủy đơn chưa thanh toán, hoãn refund request.
-5. **Không cắt**: BE-07, BE-08, BE-09, BE-03 và test thanh toán/vé.
-
-## 7. API surface — checklist bàn giao
-
-| Module | Endpoint | Task |
-| --- | --- | --- |
-| Auth | `POST /auth/register`, `POST /auth/verify-email`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me` | BE-03 |
-| Hồ sơ | `GET/PUT /me`, `POST /me/eligibility`, `GET /me/eligibility` | BE-04 |
-| Catalog | `GET /lines`, `GET /stations`, `GET /journeys`, `GET /fares/quote`, `GET /service-status` | BE-05, BE-06 |
-| Booking | `POST /orders`, `GET /orders/{id}`, `POST /orders/{id}/holds`, `DELETE /orders/{id}` | BE-07 |
-| Payment | `POST /payments`, `POST /payments/{id}/retry`, `POST /webhooks/momo` | BE-08 |
-| Vé | `GET /tickets`, `GET /tickets/{id}`, `GET /tickets/{id}/qr`, `GET /orders` (lịch sử), `GET /payments` (lịch sử) | BE-09 |
-| Soát vé | `POST /inspection/scan`, `POST /inspection/lookup`, `POST /tickets/{id}/reissue` | BE-10, BE-11 |
-| Admin | `GET/POST/PUT /admin/accounts`, `GET /admin/roles`, `PUT /admin/accounts/{id}/roles`, `GET/POST/PUT /admin/lines`, `/admin/stations`, `/admin/products`, `/admin/fares`, `/admin/schedules`, `/admin/trips`, `/admin/notices` | BE-12, BE-13 |
-| Báo cáo | `GET /reports/revenue`, `GET /reports/tickets`, `GET /reports/revenue/export` | BE-15 |
-| Hủy/hoàn | `POST /orders/{id}/cancel`, `POST /refunds`, `POST /refunds/{id}/approve` | BE-16 |
-
-## 8. Phụ thuộc và đường găng
-
-```mermaid
-flowchart LR
-    A[BE-01 Nền] --> B[BE-02 EF mapping]
-    B --> C[BE-03 Auth]
-    C --> D[BE-04 Hồ sơ]
-    B --> E[BE-05 Catalog]
-    E --> F[BE-06 Fare]
-    F --> G[BE-07 Booking + hold]
-    G --> H[BE-08 Payment]
-    H --> I[BE-09 Vé + QR]
-    I --> J[BE-10 Soát vé]
-    J --> K[BE-11 Hỗ trợ cổng]
-    E --> L[BE-13 Lịch/chuyến]
-    L --> M[BE-14 Thông báo/dự phòng]
-    I --> N[BE-15 Báo cáo]
-    H --> O[BE-16 Hủy/hoàn]
-    C --> P[BE-12 Admin tài khoản]
-    A --> Q[BE-18 Test/seed]
-```
-
-Đường găng: **BE-01 → BE-02 → BE-05/BE-06 → BE-07 → BE-08 → BE-09 → BE-10**.
-
-Nếu BE-07 trễ, M3 dừng BE-13 để cùng M2 gỡ booking; BE-08 của M1 không được trễ vì chặn toàn bộ giai đoạn FE.
-
-## 9. Truy vết Use Case → Task Backend
-
-| Nhóm UC | Nội dung | Mức | Task BE |
+| Cổng | Ngày | Giao gì | Điều kiện vào cổng |
 | --- | --- | --- | --- |
-| UC01–UC04 | Đăng ký, đăng nhập, đăng xuất, khôi phục mật khẩu | Must | BE-03 |
-| UC05–UC06 | Hồ sơ hành khách, xác minh ưu đãi | Must | BE-04 |
-| UC07–UC10 | Tuyến/ga, hành trình, giá, tình trạng dịch vụ | Must | BE-05, BE-06 |
-| UC11–UC12 | Mua vé, thử lại thanh toán | Must | BE-07, BE-08 |
-| UC13–UC15 | Vé của tôi, lịch sử đặt vé/thanh toán | Must | BE-09 |
-| UC16–UC18 | Soát vé tại cổng, vé không hợp lệ, tra cứu tại ga | Must | BE-10 |
-| UC19 | Hỗ trợ hành khách mua vé | Must | BE-11 |
-| UC20–UC21 | Phản ánh hành khách, sự cố tại ga | Stretch | BE-14 |
-| UC22–UC23 | Tài khoản/quyền, dữ liệu hành khách | Must | BE-12 |
-| UC24–UC25 | Tuyến/ga, loại vé/giá/chính sách ưu đãi | Must | BE-06, BE-13 |
-| UC26–UC27 | Cấu hình thanh toán, cấu hình thông báo | Stretch | BE-08, BE-13 |
-| UC28 | Nhật ký kiểm toán | Out | — |
-| UC29 | Lịch và hoạt động tàu | Must | BE-13 |
-| UC30 | Tình trạng tuyến, gián đoạn | Stretch | BE-14 |
-| UC31 | Công bố thông báo dịch vụ | Must | BE-13 |
-| UC32 | Báo cáo vận hành | Stretch | BE-15 |
-| UC33 | Báo cáo vé, doanh thu, hành khách | Must | BE-15 |
-| UC34–UC35 | Xuất báo cáo, gửi thông báo nghiệp vụ | Stretch | BE-15 |
-| UC36 | Tự gán chuyến, chọn chuyến khi quá tải | Must | BE-07, BE-14 |
-| UC37 | Giới hạn tải đoàn tàu/toa/chuyến | Out | — |
-| UC38 | Tải nhập tay, đối chiếu AFC | Stretch | BE-15 |
-| UC39–UC41 | Mua hộ/bàn giao, xác minh danh tính, thay đoàn tàu | Out | — |
-| UC42 | Hủy đơn chưa thu, đổi vé, ngoại lệ tài chính | Stretch | BE-16 |
-| UC43–UC47 | Tiếp cận, sự cố trên tàu, thất lạc, dự báo | Out | — |
+| **G0 — Kickoff** | 16/11 | BE-01, BE-02A/B, BE-18A/B, BE-05 (bắt đầu) | Chốt tên, .NET version, DB dùng chung, kênh liên lạc |
+| **G1 — S1 Planning** | 23/11 | BE-03, BE-04, BE-06, BE-12, QA-01, BE-18 (hoàn tất) | S0 demo: `/health`, `/swagger`, EF đọc được bảng lõi, seed chạy |
+| **G2 — API Freeze** | 04/12 | FE-01…FE-05, FE-07, QA-02; BE-10/BE-11/BE-15 (nếu chưa xong) | Swagger + Postman đủ luồng mua vé→thanh toán→vé; không còn endpoint Must-have thiếu |
+| **G3 — FE Wave 2** | 10/12 | FE-06 (soát vé), FE-08 (báo cáo) | BE-10 và BE-15 đã merge + Postman xanh |
+| **G4 — Code Freeze** | 17/12 | Chỉ nhận fix P0/P1 | E2E luồng chính xanh trên môi trường chung |
+| **G5 — Bàn giao** | 20/12 | DOC-01, QA-03 | UAT xong, demo chạy được, tài liệu đầy đủ; nộp bài trước 23/12 |
 
-## 10. Definition of Done và quy trình
+Quy tắc: task chỉ được kéo sang *In Progress* khi đã qua cổng tương ứng. Việc chưa tới cổng để trạng thái **To Do**, không nhận trước.
 
-### 10.1. DoD cho mọi task BE
+### 4.3. Bảng giao việc theo từng người
 
-- [ ] `dotnet build` local + CI xanh, không warning mới.
-- [ ] Unit test cho validator/business rule; integration test cho endpoint chạm DB.
-- [ ] Swagger có example request/response và mã lỗi.
-- [ ] Kiểm quyền server-side: test 401 (chưa đăng nhập) và 403 (sai role/không sở hữu).
-- [ ] Idempotency cho endpoint ghi theo quy ước.
-- [ ] Không hard-code secret; cấu hình qua `appsettings.Development.json`/user-secrets/env.
-- [ ] Không trả raw exception DB/stack trace ra client.
-- [ ] PR ≤ 400 dòng logic, có mô tả + link task/UC, được review chéo theo mục 4.1.
+Dùng bảng này để gửi task ngay khi kickoff; thứ tự dòng chính là thứ tự làm.
 
-### 10.2. Test
+| Mã | Người | Task theo thứ tự (ngày · pd) | Tổng pd |
+| --- | --- | --- | --- |
+| M01 | Mạc Đỗ Gia Huy (Huy) | BE-01 (16–18/11 · 3) → BE-03 (23–25/11 · 3) → BE-08 (01–04/12 · 4) → BE-17 (08–09/12 · 2) → DOC-01 (19–20/12 · 2) | 14 |
+| M02 | Tuyên | BE-02A (16–18/11 · 3) → BE-09 (25–28/11 · 4) → BE-16 (05–06/12 · 2) → FE-04 (07–12/12 · 5) → QA-02 (15–16/12 · 2) | 16 |
+| M03 | Hoàng | BE-05 (19–21/11 · 3) → BE-06 (22–25/11 · 4) → BE-13 (26–29/11 · 4) → FE-02 (07–09/12 · 3) → FE-03 (10–12/12 · 3) | 17 |
+| M04 | Thành | BE-02B (19–20/11 · 2) → BE-07 (26–30/11 · 5) → BE-10 (01–04/12 · 4) → FE-05 (07–09/12 · 3) → FE-06 (10–12/12 · 3) | 17 |
+| M05 | My | BE-18A (16–17/11 · 2) → QA-01 (23–25/11 · 1) → BE-04 (26–27/11 · 2) → BE-12 (28–29/11 · 2) → BE-14 (30/11–01/12 · 2) → FE-07 (07–13/12 · 5) → QA-03 (17–19/12 · 3) | 17 |
+| M06 | Tiên | BE-18B (16–18/11 · 2) → BE-15 (30/11–02/12 · 3) → BE-11 (05/12 · 1) → FE-01 (07–09/12 · 3) → FE-08 (10–13/12 · 3) → FE-09 (16–17/12 · 2) | 14 |
+
+- Tổng 95 pd, **mỗi người 14–17 pd**, xếp liên tiếp đúng 1 pd/ngày, không chồng lấn, không ai có việc sau 20/12.
+- Mỗi người chỉ có **một** task đang mở tại một thời điểm; hết task sớm thì nhận task kế tiếp của mình, không nhảy sang task của người khác khi chưa qua cổng.
+- **Task của M01 (BE-01, BE-03, BE-08, BE-17, DOC-01) không review chéo** — M01 tự merge sau khi CI xanh; đổi lại M01 review toàn bộ PR của 5 người còn lại.
+- M06 trống 19–29/11: giữ CI/Postman xanh, viết test harness cho module đang mở, review PR.
+- M01 không nhận task FE chính; thời gian trống dùng để review, gỡ blocker, chốt contract.
+
+## 5. Backend (16/11 – 09/12)
+
+Ước lượng theo **person-day (pd)**, đã gồm code + test + review. Mỗi task một branch `feature/<task>-<slug>` và PR vào `dev`.
+
+| Mã | Nội dung | UC/BR | Owner | Thời gian | pd | Phụ thuộc |
+| --- | --- | --- | --- | --- | --- | --- |
+| BE-01 | Nền API: ProblemDetails, validation pipeline, logging, health, Swagger + example, CORS, `global.json` | NFR | M01 | 16–18/11 | 3 | — |
+| BE-02A | EF Core mapping lõi: identity, network, order, order_versions, ticket (phần chính) | DATA | M02 | 16–18/11 | 3 | BE-01 (contract) |
+| BE-02B | EF mapping ticketing/finance: payment, refund, inspection, gợi ý chuyến, consent mua hộ, giám hộ, đổi vé, thất lạc — **bỏ bảng capacity legacy** | DATA | M04 | 19–20/11 | 2 | BE-02A |
+| BE-05 | Catalog đọc: tuyến, ga, hành trình, tình trạng dịch vụ (cache ngắn) | UC07, UC08, UC10 | M03 | 19–21/11 | 3 | BE-02A |
+| BE-18A | Seed/fixture: 2 tuyến, 12 ga, giá mẫu, tài khoản demo | AC-* | M05 | 16–17/11 | 2 | — |
+| BE-18B | Test harness + CI: xUnit, `WebApplicationFactory`, PostgreSQL thật (không bắt buộc Docker) | NFR | M06 | 16–18/11 | 2 | BE-01 (contract) |
+| BE-03 | Identity + JWT: đăng ký, xác minh email, đăng nhập/xuất, refresh, policy role | UC01–UC04 | M01 | 23–25/11 | 3 | BE-02A |
+| BE-06 | Fare engine + quản lý loại vé/giá/chính sách ưu đãi (version + audit) | UC09, UC25 | M03 | 22–25/11 | 4 | BE-05 |
+| BE-09 | Phát hành vé + QR credential + vé miễn phí trẻ <6 (không tạo payment) + chặn trùng hiệu lực + API vé của tôi/lịch sử | UC13–UC15, BR-007 | M02 | 25–28/11 | 4 | BE-02B |
+| BE-04 | Hồ sơ + xác minh ưu đãi, upload minh chứng, audit thay đổi | UC05, UC06 | M05 | 26–27/11 | 2 | BE-03 |
+| BE-07 | Booking: tạo đơn, order version, **gợi ý chuyến** (không giữ chỗ), consent mua hộ, `Idempotency-Key` | UC11, UC36 | M04 | 26–30/11 | 5 | BE-06 |
+| BE-13 | Tuyến/ga + lịch/chuyến + **hồ sơ tải kg** (`max_load_kg`, thời gian chạy, thời gian chuyển tuyến) + thông báo dịch vụ | UC24, UC29, UC31 | M03 | 26–29/11 | 4 | BE-05 |
+| BE-12 | Quản trị tài khoản/quyền + xem dữ liệu hành khách có audit | UC22, UC23 | M05 | 28–29/11 | 2 | BE-03 |
+| BE-14 | Cập nhật ETA + trạng thái tải/gián đoạn + gợi ý chuyến dự phòng | UC30, UC36 | M05 | 30/11–01/12 | 2 | BE-13 |
+| BE-15 | Báo cáo vé/doanh thu + export CSV | UC33 | M06 | 30/11–02/12 | 3 | BE-09 |
+| BE-08 | Payment MoMo TEST: tạo giao dịch, callback/IPN, chữ ký, retry idempotent | UC11, UC12 | M01 | 01–04/12 | 4 | BE-07 |
+| BE-10 | Soát vé tại cổng: Allow/Deny/Pending, journey vào/ra (ghi chuyến/chiều), chặn khi thiếu/đầy tải, scan idempotent | UC16–UC18 | M04 | 01–04/12 | 4 | BE-09 |
+| BE-16 | Hủy đơn chưa thu + hoàn khoản thu lỗi + **đổi vé do gián đoạn** (tối đa 1 lần/vé, thu hồi QR cũ) | UC42, UC43 | M02 | 05–06/12 | 2 | BE-08 |
+| BE-11 | Hỗ trợ tại cổng: tra vé, cấp lại QR có audit | UC19 | M06 | 05/12 | 1 | BE-10 |
+| BE-17 | Hardening: rate limit, security headers, PII masking, audit bắt buộc | NFR | M01 | 08–09/12 | 2 | BE-03…BE-16 |
+
+Tổng BE: **57 pd** (chưa gồm QA-01 1 pd) — M01 12, M02 9, M03 11, M04 11, M05 8, M06 6. Phần còn lại của capacity mỗi người dành cho review, test và hỗ trợ tích hợp.
+
+> Lịch trên đã tính đúng **1 pd/ngày/người** và chỉ nối tiếp sau khi task phụ thuộc xong. BE-06 khởi động **Chủ nhật 22/11** để BE-07 kịp đóng 30/11 và payment kịp freeze 04/12.
+
+### 5.1. Ghi chú kỹ thuật bắt buộc
+
+- Thanh toán/hủy/miễn phí/đổi vé **gọi hàm SQL** đã test: `confirm_payment_and_issue_tickets`, `issue_free_order`, `cancel_unpaid_order`, `revoke_unused_ticket`, `apply_ticket_change`. **Không** dùng `hold_trip_capacity`/`confirm_capacity_hold` (legacy SRS 1.1).
+- **Không giữ chỗ**: đơn vé lượt có tối đa **một gợi ý hiện hành**/phiên bản đơn (`trip_suggestions`, view `v_current_trip_suggestion`). Gợi ý không phải booking, không bảo đảm chỗ và không chặn vào cổng.
+- **Trùng hiệu lực**: DB chặn bằng exclusion constraint `ex_tickets_no_overlapping_validity`; service vẫn phải kiểm đơn đã trả tiền hoặc miễn phí đã xác nhận đang chờ cấp vé.
+- **Tải kg**: `load_observations` nhập tay (1 số lẻ, đơn vị kg); thiếu số đo hoặc đã đầy thì cổng từ chối vào, không suy diễn từ số vé bán.
+- **Một người/một loại vé mỗi đơn**: trigger `trg_order_items_single_passenger` chặn `passenger_count > 1` với sản phẩm không `capacity_controlled`.
+- `Idempotency-Key` cho POST tạo đơn/thanh toán/scan; payment lưu `provider_event_id` + `payload_hash` và claim event nguyên tử.
+- Thời gian UTC; `EndExclusive`; không dùng `DateTime.Now`.
+- Bắt `PostgresException` và map SQLSTATE (`P0001`, `P0002`, `23505`, `22023`, `28000`) sang mã lỗi nội bộ; không trả raw message/stack trace.
+- `RequireUniqueEmail = true` để email trùng trả 400 kèm `code` thay vì 500.
+- Không log PII/token; token chỉ lưu hash.
+
+## 6. API freeze — 04/12/2026
+
+Điều kiện freeze:
+
+- Swagger có đủ endpoint dưới đây, mỗi endpoint có example request/response và mã lỗi.
+- Postman collection chạy được 6 kịch bản demo trên DB seed.
+- Không còn `TODO`/`NotImplementedException` trong luồng Must-have.
+
+| Module | Endpoint freeze | Task |
+| --- | --- | --- |
+| Auth | `POST /auth/register`, `/verify-email`, `/login`, `/refresh`, `/logout`, `GET /auth/me` | BE-03 |
+| Hồ sơ | `GET/PUT /me`, `GET/POST /me/eligibility` | BE-04 |
+| Catalog | `GET /lines`, `/stations`, `/journeys`, `/fares/quote`, `/service-status`, `/trips/{id}/load` | BE-05, BE-06, BE-14 |
+| Booking | `POST /orders`, `GET /orders/{id}`, `GET /orders/{id}/suggestion`, `POST /orders/{id}/consent`, `DELETE /orders/{id}` | BE-07 |
+| Payment | `POST /payments`, `POST /payments/{id}/retry`, `POST /webhooks/momo` | BE-08 |
+| Vé | `GET /tickets`, `/tickets/{id}`, `/tickets/{id}/qr`, `GET /orders`, `GET /payments`, `POST /orders/{id}/issue-free` | BE-09 |
+| Admin | `/admin/accounts`, `/admin/roles`, `/admin/lines`, `/admin/stations`, `/admin/products`, `/admin/fares`, `/admin/schedules`, `/admin/trips`, `/admin/trip-load`, `/admin/notices` | BE-12, BE-13 |
+| Báo cáo | `GET /reports/revenue`, `/reports/tickets`, `/reports/revenue/export` | BE-15 |
+| Hủy/hoàn | `POST /orders/{id}/cancel`, `POST /refunds`, `POST /refunds/{id}/approve` | BE-16 |
+| Đổi vé | `POST /tickets/{id}/change-requests`, `POST /ticket-change-requests/{id}/approve` | BE-16 |
+
+**Sau 04/12**: chỉ được **thêm** field optional hoặc endpoint mới; mọi thay đổi breaking phải có M01 duyệt + thông báo kênh FE. Soát vé (`BE-10/BE-11`) đóng muộn nhất **05/12** — FE-06 vẫn nằm ở wave 2.
+
+## 7. Frontend (07/12 – 17/12)
+
+Wave 1 bám module đã freeze; wave 2 mở sau khi BE tương ứng merge.
+
+| Wave | Ngày | Nội dung |
+| --- | --- | --- |
+| W1 | 07–10/12 | App shell, design token, auth/hồ sơ, catalog/giá, booking, admin CRUD |
+| W2 | 10–13/12 | Vé của tôi/QR, soát vé, báo cáo; hoàn thiện admin |
+| W3 | 16–17/12 | Polish responsive/a11y, E2E, chuẩn bị code freeze |
+
+| Mã | Nội dung | Owner | Thời gian | pd | Phụ thuộc |
+| --- | --- | --- | --- | --- | --- |
+| FE-01 | App shell, routing, design token, axios/react-query, layout theo role | M06 | 07–09/12 | 3 | API freeze |
+| FE-02 | Auth + hồ sơ + trạng thái ưu đãi | M03 | 07–09/12 | 3 | BE-03, BE-04 |
+| FE-03 | Catalog: tuyến/ga/hành trình/giá + tình trạng dịch vụ | M03 | 10–12/12 | 3 | BE-05, BE-06 |
+| FE-04 | Booking → thanh toán → kết quả (kèm retry) | M02 | 07–12/12 | 5 | BE-07, BE-08 |
+| FE-05 | Vé của tôi, QR, lịch sử đặt/thanh toán | M04 | 07–09/12 | 3 | BE-09 |
+| FE-06 | Portal soát vé: scan, tra cứu, cấp lại QR | M04 | 10–12/12 | 3 | BE-10, BE-11 |
+| FE-07 | Admin: tài khoản, tuyến/ga, loại vé/giá, lịch/chuyến, thông báo | M05 | 07–13/12 | 5 | BE-12, BE-13 |
+| FE-08 | Báo cáo doanh thu/vé + export CSV | M06 | 10–13/12 | 3 | BE-15 |
+| FE-09 | Responsive, accessibility, loading/empty/error toàn cục | M06 | 16–17/12 | 2 | FE-01…FE-08 |
+
+Tổng FE: **30 pd** (M02 5, M03 6, M04 6, M05 5, M06 8). M01 review + hỗ trợ tích hợp, không nhận task FE chính.
+
+Quy ước FE: không gọi API khác contract; mọi màn hình có 4 trạng thái loading/empty/error/success; không hard-code màu – dùng token; không đưa secret xuống browser.
+
+## 8. QA / Test
+
+| Mã | Nội dung | Owner | Thời gian | pd |
+| --- | --- | --- | --- | --- |
+| QA-01 | Test plan + ma trận test case theo UC + mẫu bug report | M05 | 23–25/11 | 1 |
+| QA-02 | API regression Postman/Newman trên DB seed | M02 | 15–16/12 | 2 |
+| QA-03 | E2E + UAT + bug bash, ghi bằng chứng | M05 | 17–19/12 | 3 |
+
+Mức test:
 
 | Loại | Công cụ | Phạm vi | Khi nào |
 | --- | --- | --- | --- |
 | Unit | xUnit + NSubstitute | Validator, handler không chạm DB | Mỗi PR |
-| Integration | xUnit + `WebApplicationFactory` + PostgreSQL thật | Endpoint + EF mapping + hàm SQL | Mỗi PR chạm DB |
+| Integration | xUnit + `WebApplicationFactory` + PostgreSQL thật | Endpoint + EF + hàm SQL | Mỗi PR chạm DB |
 | SQL regression | `infra/database/tests/*.sql` | Capacity, payment, constraint | Khi đổi schema/hàm |
-| Contract smoke | Postman/Newman | 6 kịch bản demo | S2–S3, trước demo |
+| Contract/E2E | Postman/Newman, Playwright | 6 kịch bản demo + luồng chính | Trước mỗi demo, G4 |
 
-Docker Desktop có thể không chạy trên máy nhóm — integration test phải có chế độ dùng PostgreSQL local qua biến môi trường, không bắt buộc Testcontainers.
+Docker Desktop có thể không chạy — integration test dùng PostgreSQL local qua biến môi trường, không bắt buộc Testcontainers.
 
-### 10.3. Git
+## 9. Definition of Done và Git
 
-- Branch: `feature/US-<số>-<slug>`, `bugfix/...`, `docs/...`.
-- PR target `dev`; PR `dev → main` chỉ ở milestone và do M1 merge.
-- Title: `feat(be): ...`, `fix: ...`, `docs: ...`.
-- Không merge khi CI đỏ; không force push; conflict theo `docs/git-workflow/CONFLICT-RESOLUTION.md`.
-- Review SLA 4 giờ làm việc; PR quá 24 giờ không review thì nhắc trong kênh nhóm.
+### 9.1. DoD mọi task
 
-## 11. Nghiệm thu Backend
+- [ ] `dotnet build` / `npm run build` xanh, không warning mới.
+- [ ] Unit test cho rule; integration test cho endpoint chạm DB (BE) hoặc test component (FE).
+- [ ] Swagger + Postman cập nhật (BE); không gọi endpoint ngoài contract (FE).
+- [ ] Kiểm quyền server-side: có test 401/403.
+- [ ] Idempotency cho endpoint ghi; không log PII/secret.
+- [ ] PR ≤ 400 dòng logic, mô tả + link task/UC, review chéo theo bảng dưới.
+- [ ] Cập nhật dòng task trong Excel: Status, % Complete, Last Updated, ghi chú blocker.
 
-Demo BE bằng Swagger/Postman, không cần UI:
+### 9.2. Review
 
-1. Đăng ký → xác minh email → đăng nhập → gọi `/auth/me` (M1).
-2. Tra cứu tuyến/ga/hành trình/giá (M3).
-3. Tạo đơn + giữ chỗ, chạy 2 request đồng thời để thấy một request bị từ chối đúng (M2).
-4. Gửi callback thanh toán có chữ ký, nhận vé + QR; gửi lại callback thấy idempotent (M1).
-5. Quét QR: Allow → quét lại Deny → tra cứu và cấp lại QR (M4).
-6. Admin tạo giá/chuyến/thông báo, xem báo cáo doanh thu, hủy đơn chưa thanh toán (M5, M6).
-
-Tiêu chí đạt: mục 6.2 thỏa mãn; Postman chạy lần lượt 6 kịch bản trên DB seed không lỗi.
-
-## 12. Rủi ro và giảm thiểu
-
-| Rủi ro | Ảnh hưởng | Giảm thiểu | Người theo dõi |
-| --- | --- | --- | --- |
-| EF mapping 77 bảng tốn thời gian | Chặn mọi module | Chỉ map bảng dùng trong Must-have trước; phần còn lại thêm sau; M4 hỗ trợ M2 | M2 |
-| Thành viên chưa quen ASP.NET/EF | Chậm, lỗi kiến trúc | Pairing với M1/M2; task nhỏ; review sớm | M1 |
-| Payment sandbox thay đổi | Chặn BE-08 | Adapter + mock provider; chốt sandbox ở S0 | M1 |
-| Sai logic giữ chỗ | Bán quá tải | Gọi hàm SQL đã test; test 2 phiên; review bắt buộc | M2 |
-| Dư người nhưng thiếu việc ở S1–S2 | Lãng phí, tranh task | Nhận thêm test/review; hỗ trợ module đang tắc; không thêm scope ngoài SRS | M1 |
-| BE trễ làm FE không kịp | Trượt deadline | BE core freeze 06/12; cắt theo mục 6.4; FE chia 07/12 và chỉ bám endpoint đã freeze | M1 |
-| PR lớn, conflict | Chậm tích hợp | PR ≤400 dòng; rebase hằng ngày; chốt owner theo `Features/<Module>` | Cả nhóm |
-| Lộ PII/secret | Rủi ro bảo mật | Masking, review, không commit `.env` | M1 |
-
-## 13. Việc cần chốt ngay (Sprint 0)
-
-1. Điền tên thật và số ngày làm việc/tuần của từng thành viên.
-2. Chốt .NET 9 (scaffold) hay nâng .NET 10; pin `global.json`.
-3. Chốt PostgreSQL: local service (như hiện tại) hay Docker; cấu hình connection string cho cả nhóm.
-4. Chốt tài khoản MoMo TEST và endpoint callback (dùng ngrok/Cloudflare tunnel).
-5. Chốt style API: ProblemDetails, mã lỗi, phân trang (mục 3.2).
-6. Lập GitHub Issues cho BE-01…BE-18, label `be`/`blocked`/`stretch`.
-7. Chốt cặp review chéo (mục 4.1) và lịch demo thứ Sáu.
-
-## 14. Checklist khởi động cho từng người
-
-- **M1**: dựng BE-01; chốt ProblemDetails + mã lỗi; tạo issue; xác nhận `RequireUniqueEmail`, quyền runtime DB; đặt lịch review.
-- **M2**: đọc `DATABASE_DESIGN.md`; dựng BE-02 phần lõi; vẽ state machine Order/Payment/Ticket; chốt contract booking.
-- **M3**: chuẩn bị seed 2 tuyến/12 ga + giá mẫu; dựng catalog đọc; chốt contract fare.
-- **M4**: dựng BE-02 phần ticketing/finance cùng M2; đặc tả luồng hồ sơ; đọc trước API soát vé.
-- **M5**: dựng seed/fixture; rà UC admin; đặc tả API admin tài khoản.
-- **M6**: dựng test harness + CI; thiết kế query báo cáo; chuẩn bị khung Postman.
-
-## 15. Frontend — kế hoạch chia task (07/12/2026)
-
-Giai đoạn này **chưa chia task FE**. Mốc chia đã chốt: **07/12/2026**, ngay sau BE core freeze, FE chạy 07–20/12 (2 tuần) với cả 6 người.
-
-### 15.1. Điều kiện đầu vào
-
-- Endpoint cho luồng mua vé đã freeze và có test trước 06/12: auth, hồ sơ, catalog, fare, booking, payment, vé.
-- Postman collection + seed demo chạy được trên môi trường chung.
-- Design token, app shell và quy ước code FE được chốt trong 07–09/12 trước khi dựng màn hình.
-- Danh sách UC Must-have dành cho FE: UC01–UC19, UC22–UC25, UC29, UC31, UC33.
-
-### 15.2. Phân bổ dự kiến
-
-| Thời gian | Nội dung |
-| --- | --- |
-| 07–09/12 | App shell, design system, auth/hồ sơ, catalog; nối API thật cho module đã freeze |
-| 10–13/12 | Booking → thanh toán → vé của tôi; bắt đầu soát vé và báo cáo khi BE-10/BE-15 xong |
-| 14–17/12 | Portal nhân viên, quản trị, báo cáo, trạng thái loading/empty/error, responsive |
-| 18–20/12 | Tích hợp, E2E, UAT nội bộ, sửa lỗi P0–P1, release |
-
-### 15.3. Cách chia (chốt danh sách task tại buổi 07/12)
-
-- Khối lượng khả dụng ~48 pd (6 người × 8 ngày, đã trừ hao phí) cho 27 UC Must-have phía FE.
-- Giữ nguyên người sở hữu miền đã làm BE để tận dụng hiểu biết domain; M1 hỗ trợ tích hợp và review.
-- Danh sách task FE (mã `FE-xx`, pd, phụ thuộc, DoD) sẽ được bổ sung vào tài liệu này ngay sau buổi chia task.
-- Nếu BE core trễ sau 06/12, cắt theo mục 6.4 và dồn ngày FE tương ứng; không dời mốc release 20/12.
-
-### 15.4. Việc chuẩn bị trong lúc làm BE
-
-- Mỗi người ghi lại request/response của module mình vào Postman — đây là tài liệu FE sẽ dùng.
-- M1 giữ Swagger chạy trên môi trường chung để FE xem contract.
-- Chưa dựng màn hình, chưa cài thêm thư viện UI trước ngày chia task.
-
-## 16. Backlog sau deadline
-
-| Nhóm | Nội dung | Ghi chú |
+| Người | Review chính cho | Tải review |
 | --- | --- | --- |
-| Bảo mật & audit | UC28 nhật ký kiểm toán đầy đủ, che PII nâng cao | Có audit tối thiểu trong BE-12/BE-17 |
-| Vận hành nâng cao | UC30, UC32, UC34, UC35, UC37, UC38 | Báo cáo vận hành, giới hạn tải, đối chiếu AFC |
-| Hành khách nâng cao | UC39, UC40, UC41, UC43–UC47 | Mua hộ/bàn giao, xác minh danh tính, thay đoàn, tiếp cận, thất lạc, dự báo |
-| Kỹ thuật | Nâng .NET 10, tối ưu hiệu năng, mobile app | Sau khi chốt bản demo |
+| M01 | Toàn bộ PR của 5 người còn lại; bắt buộc với auth, payment, vé, thay đổi contract | 28 |
+| M02 | BE-02B, BE-04, BE-06, BE-07, FE-02 | 5 |
+| M03 | BE-18A, BE-12, BE-14, BE-16, QA-03 | 5 |
+| M04 | BE-02A, BE-18B, BE-09, BE-11, FE-04, QA-02 | 6 |
+| M05 | BE-05, BE-13, BE-15, FE-01, FE-08, FE-09 | 6 |
+| M06 | QA-01, BE-10, FE-03, FE-05, FE-06, FE-07 | 6 |
+
+Cột *Assignee/Reviewer* trong sheet SPRINT_BOARD là nguồn chính thức; nếu đổi người review thì cập nhật cả hai nơi.
+
+**Task của M01 (BE-01, BE-03, BE-08, BE-17, DOC-01) không có reviewer** — M01 tự merge sau khi CI xanh và tự kiểm bằng Postman/E2E. Bù lại M01 review 28 task còn lại. 28 task kia vẫn review chéo 5–6 task/người, không ai tự merge PR của mình. Review SLA 4 giờ làm việc; quá 24 giờ nhắc trong kênh nhóm.
+
+### 9.3. Git
+
+`feature/<task>-<slug> → PR → dev`; `dev → main` chỉ ở mốc và do M01 merge. Không merge khi CI đỏ, không force push. Title: `feat(be): ...`, `feat(fe): ...`, `fix: ...`, `docs: ...`.
+
+## 10. Truy vết Use Case → task
+
+| Nhóm UC | Nội dung | Mức | Task |
+| --- | --- | --- | --- |
+| UC01–UC04 | Đăng ký/đăng nhập/đăng xuất/khôi phục mật khẩu | Must | BE-03, FE-02 |
+| UC05–UC06 | Hồ sơ, xác minh ưu đãi | Must | BE-04, FE-02 |
+| UC07–UC10 | Tuyến/ga, hành trình, giá, tình trạng dịch vụ | Must | BE-05, BE-06, FE-03 |
+| UC11–UC12 | Mua vé, thử lại thanh toán | Must | BE-07, BE-08, FE-04 |
+| UC13–UC15 | Vé của tôi, lịch sử đặt/thanh toán | Must | BE-09, FE-05 |
+| UC16–UC18 | Soát vé, vé không hợp lệ, tra cứu tại ga | Must | BE-10, FE-06 |
+| UC19 | Hỗ trợ hành khách tại cổng | Must | BE-11, FE-06 |
+| UC22–UC23 | Tài khoản/quyền, dữ liệu hành khách | Must | BE-12, FE-07 |
+| UC24–UC25 | Tuyến/ga, loại vé/giá/chính sách | Must | BE-06, BE-13, FE-07 |
+| UC29, UC31 | Lịch/chuyến, thông báo dịch vụ | Must | BE-13, FE-07 |
+| UC33 | Báo cáo vé/doanh thu | Must | BE-15, FE-08 |
+| UC42–UC43 | Hủy đơn chưa thu, hoàn khoản thu lỗi, đổi vé do gián đoạn | Stretch (làm nếu kịp) | BE-16, FE-07 |
+| UC20–UC21, UC26–UC27, UC30, UC32, UC34–UC35, UC38 | Phản ánh, cấu hình, dự phòng, báo cáo vận hành, AFC | Stretch | BE-14, BE-15 |
+| UC28, UC37, UC39–UC41, UC44–UC47 | Audit đầy đủ, giới hạn tải nâng cao, giám hộ/mua hộ, tiếp cận, thất lạc, dự báo | Out | — |
+
+> Các UC Out **đã có schema + hàm SQL** trong migration 006 nhưng chưa làm UI/API trong đồ án. Nếu nhóm còn thời gian, thứ tự mở rộng: UC39–UC40 (giám hộ + vé trẻ miễn phí) → UC44 (tiếp cận) → UC46 (thất lạc) → UC47 (dự báo). Phải báo M01 trước khi nhận vì ảnh hưởng deadline.
+
+## 11. Rủi ro
+
+| Rủi ro | Ảnh hưởng | Giảm thiểu | Theo dõi |
+| --- | --- | --- | --- |
+| EF mapping 93 bảng kéo dài | Chặn toàn bộ BE | Chỉ map bảng Must-have trước; M04 hỗ trợ M02 từ 19/11; bảng legacy capacity không map | M02 |
+| Hiểu nhầm mô hình quota cũ (SRS 1.1) | Code giữ chỗ sai, phí công | Chỉ dùng SRS v1.2; 006 đánh dấu legacy; đọc `infra/database/documentation/DATABASE_DESIGN.md` trước khi code booking | M01 |
+| BE-07 trễ (26–30/11) | Chặn BE-08 → chặn freeze | M01 làm adapter payment song song từ 23/11; BE-10 của M04 lùi tối đa 1 ngày | M04 |
+| Nhóm chưa quen ASP.NET/EF | Chậm, sai kiến trúc | Task nhỏ + pairing; review sớm trong S0 | M01 |
+| MoMo sandbox thay đổi | Chặn BE-08 | Adapter + mock provider, chốt sandbox trong S0 | M01 |
+| FE dồn 2 tuần cuối | Trượt mốc 20/12 | Freeze 04/12; cắt theo mục 12; wave 2 chỉ mở khi API xong | M01 |
+| Thành viên nghỉ/giảm giờ | Trượt cổng | Báo trước 1 ngày; cắt task Stretch trước, không cắt test | Cả nhóm |
+| PR lớn, conflict | Chậm tích hợp | PR ≤400 dòng; rebase hằng ngày; owner theo `Features/<Module>` | Cả nhóm |
+
+## 12. Cắt scope khi trễ
+
+Thứ tự cắt (dừng ở mức đủ demo):
+
+1. UC42 hủy/hoàn → chỉ hủy đơn chưa thanh toán.
+2. FE-08 báo cáo → chỉ bảng doanh thu theo ngày, bỏ export CSV.
+3. FE-07 admin → chỉ tuyến/ga/giá/lịch, bỏ quản lý tài khoản nâng cao.
+4. FE-06 → chỉ scan + tra cứu, bỏ cấp lại QR.
+5. **Không cắt**: BE-07, BE-08, BE-09, BE-03, FE-04, FE-05 và test thanh toán/vé.
+
+## 13. Bàn giao 20/12 (nộp bài 23/12)
+
+- [ ] Release `v1.0-demo` build từ `main`, chạy được trên máy sạch theo README.
+- [ ] Swagger + Postman collection + seed demo + 6 kịch bản demo.
+- [ ] Báo cáo tiến độ, danh sách bug còn lại (chỉ P2/P3), hướng dẫn chạy.
+- [ ] Excel cập nhật đủ Status/Done; Daily Scrum và Retro có ghi chép.
+- [ ] Slide/demo 10 phút: đăng nhập → mua vé → thanh toán → vé QR → soát vé → báo cáo.
+- [ ] Phân công người trực demo và phương án dự phòng (video quay sẵn).
+- [ ] Đóng gói bản nộp (zip/PDF + link repo) **trước 23/12**; 21–23/12 chỉ sửa P0.
+
+## 14. Việc cần chốt ngay (trước 16/11)
+
+1. Số ngày làm việc/tuần thực tế của từng người (ảnh hưởng capacity 20 SP/sprint).
+2. Chốt .NET 9 (scaffold) hay nâng .NET 10; pin `global.json`.
+3. Chốt DB dùng chung: Neon (đã có) hay PostgreSQL local; phát connection string qua kênh kín.
+4. Chốt tài khoản MoMo TEST + endpoint callback (ngrok/Cloudflare tunnel).
+5. Chốt style API: ProblemDetails, mã lỗi, phân trang (`/api/v1`, camelCase, tiền minor unit).
+6. Label `blocked` + template bug report trên GitHub (33 issue đã tạo sẵn).
+7. Chốt lịch: Daily 15 phút (21:00), Review thứ Sáu, Retro cuối sprint.
+8. Chốt danh sách **27 UC Must-have demo** và ghi rõ phần Out-of-scope trong `README.md` (schema đã hỗ trợ nhiều UC Out nhưng chưa làm UI).
 
 ---
 
-**Ghi chú phiên bản**: 4.0 — Backend-first bằng ASP.NET Core; cả 6 người làm BE trong S0–S3 (16/11–13/12/2026); BE core freeze 06/12; 27 UC Must-have; chia task FE ngày 07/12/2026 và chạy 07–20/12; dựa trên SRS 1.2, UC v1.6 và hiện trạng repo ngày 13/11/2026.
+**Ghi chú phiên bản**: 5.5 — bám **SRS v1.2 / UC v1.6** (SRS thắng khi lệch): bỏ giữ chỗ theo đoạn (BE-07 dùng gợi ý chuyến), tải kg nhập tay (BE-13/BE-14), vé trẻ miễn phí không tạo payment (BE-09), chặn trùng hiệu lực, đổi vé do gián đoạn (BE-16), EF bỏ bảng capacity legacy (BE-02B). Lịch, người, số pd **giữ nguyên v5.4**: mốc 16/11 → 20/12/2026 (nộp 23/12); BE-first, API freeze 04/12, code freeze 17/12; tổng 95 pd (BE 57, FE 30, QA 3 + DOC 2), mỗi người 14–17 pd.
