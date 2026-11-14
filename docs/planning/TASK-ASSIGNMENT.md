@@ -216,7 +216,7 @@ Docker Desktop có thể không chạy — integration test dùng PostgreSQL loc
 - [ ] Swagger + Postman cập nhật (BE); không gọi endpoint ngoài contract (FE).
 - [ ] Kiểm quyền server-side: có test 401/403.
 - [ ] Idempotency cho endpoint ghi; không log PII/secret.
-- [ ] PR ≤ 400 dòng logic, mô tả + link task/UC, review chéo theo bảng dưới.
+- [ ] PR ≤ 400 dòng logic, mô tả + link task/UC, review chéo theo bảng dưới; **bắt buộc có approval của M01** (CODEOWNERS), review chéo chỉ là tư vấn.
 - [ ] Cập nhật dòng task trong Excel: Status, % Complete, Last Updated, ghi chú blocker.
 
 ### 9.2. Review
@@ -232,7 +232,9 @@ Docker Desktop có thể không chạy — integration test dùng PostgreSQL loc
 
 Cột *Assignee/Reviewer* trong sheet SPRINT_BOARD là nguồn chính thức; nếu đổi người review thì cập nhật cả hai nơi.
 
-**Task của M01 (BE-01, BE-03, BE-08, BE-17, DOC-01) không có reviewer** — M01 tự merge sau khi CI xanh và tự kiểm bằng Postman/E2E. Bù lại M01 review 28 task còn lại. 28 task kia vẫn review chéo 5–6 task/người, không ai tự merge PR của mình. Review SLA 4 giờ làm việc; quá 24 giờ nhắc trong kênh nhóm.
+**Cơ chế chặn trên GitHub**: `main` và `dev` dùng ruleset `protect-main` / `protect-dev` bật `require_code_owner_review`; `.github/CODEOWNERS` gán `* @macdogiahuy` nên **chỉ approval của M01 mới mở khóa merge**. M01 nằm trong danh sách bypass của ruleset nên PR của M01 tự merge được sau khi CI xanh. Approval của thành viên khác vẫn có giá trị tham khảo nhưng không thay thế được approval của M01.
+
+**Task của M01 (BE-01, BE-03, BE-08, BE-17, DOC-01) không cần review** — M01 tự merge sau khi CI xanh và tự kiểm bằng Postman/E2E. Bù lại M01 duyệt 28 task còn lại; 28 task kia vẫn review chéo 5–6 task/người để bắt lỗi sớm, nhưng không ai tự merge PR của mình. Review SLA 4 giờ làm việc; quá 24 giờ nhắc trong kênh nhóm, M01 duyệt trong tối đa 1 ngày làm việc.
 
 ### 9.3. Git
 
