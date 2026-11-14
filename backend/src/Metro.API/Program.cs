@@ -1,7 +1,16 @@
+using Metro.API.Configuration;
+using Metro.API.Endpoints;
 using Metro.Application;
 using Metro.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// neon deploy writes DATABASE_URL and the AWS_* storage variables into .env.local (or .env).
+// Only read that local file in Development; deployed environments get real env vars.
+if (builder.Environment.IsDevelopment())
+{
+    EnvFileConfiguration.LoadNearest(builder.Configuration);
+}
 
 builder.Services.AddControllers();
 builder.Services.AddApplication();
@@ -30,7 +39,11 @@ app.UseCors("Frontend");
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthEndpoints();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+if (app.Environment.IsDevelopment())
+{
+    app.MapDiagnosticsEndpoints();
+}
 
 app.Run();
