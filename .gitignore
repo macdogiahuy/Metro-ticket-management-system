@@ -32,3 +32,5 @@ redis_data/
 # Logs
 *.log
 npm-debug.log*
+.neon
+node_modules/
