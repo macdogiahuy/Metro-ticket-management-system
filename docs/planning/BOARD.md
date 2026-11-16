@@ -1,7 +1,7 @@
-# Bảng điều khiển dự án (snapshot 14/11/2026 — kế hoạch v5.6)
+# Bảng điều khiển dự án (snapshot 14/11/2026 — kế hoạch v5.7)
 
 Nguồn sự thật: `docs/task-management/Agile_Scrum_Task_Template_Team_6.xlsx` (sheet `SPRINT_BOARD`).
-Kế hoạch chi tiết: `docs/planning/TASK-ASSIGNMENT.md` **v5.6** (bám SRS v1.2 / UC v1.6).
+Kế hoạch chi tiết: `docs/planning/TASK-ASSIGNMENT.md` **v5.7** (bám SRS v1.2 / UC v1.6).
 Task trên GitHub: 33 issue **#12–#44**, gán sẵn assignee + milestone.
 
 ## Liên kết nhanh
@@ -38,42 +38,110 @@ Theo người (mở issue đang active):
 | S2 | 07–17/12 | 13 | 41 | Hoàng, Huy, My, Thành, Tiên, Tuyên | code freeze 17/12 |
 | S3 | 17–20/12 | 2 | 5 | Huy, My | bàn giao 20/12 |
 
-## Toàn bộ task
+## Việc của từng người (sắp theo hạn)
 
-| Issue | Mã | Task | Owner | Reviewer | Sprint | Bắt đầu | Hạn | SP | Trạng thái |
+Mỗi người mở đúng khối của mình, làm từ trên xuống: xong task trước (merge) mới mở task kế tiếp.
+
+**M01 — Huy** (5 task · 14 pd)
+
+| Hạn | Mã | Task | Sprint | Trạng thái |
+| --- | --- | --- | --- | --- |
+| 18/11 | `BE-01` | Nền API | S0 | To Do |
+| 25/11 | `BE-03` | Identity + JWT | S1 | To Do |
+| 04/12 | `BE-08` | Payment MoMo TEST | S1 | To Do |
+| 09/12 | `BE-17` | Hardening | S2 | To Do |
+| 20/12 | `DOC-01` | Demo script + README chạy máy sạch + tài liệu bàn giao | S3 | To Do |
+
+**M02 — Tuyên** (5 task · 16 pd)
+
+| Hạn | Mã | Task | Sprint | Trạng thái |
+| --- | --- | --- | --- | --- |
+| 18/11 | `BE-02A` | EF mapping lõi | S0 | To Do |
+| 28/11 | `BE-09` | Phát hành vé + QR credential + vé miễn phí trẻ <6 + chặn… | S1 | To Do |
+| 06/12 | `BE-16` | Hủy đơn chưa thu + hoàn khoản thu lỗi + đổi vé do gián đoạn… | S1 | To Do |
+| 12/12 | `FE-04` | Booking → thanh toán → kết quả (kèm retry) | S2 | To Do |
+| 16/12 | `QA-02` | API regression Postman/Newman trên DB seed | S2 | To Do |
+
+**M03 — Hoàng** (5 task · 17 pd)
+
+| Hạn | Mã | Task | Sprint | Trạng thái |
+| --- | --- | --- | --- | --- |
+| 21/11 | `BE-05` | Catalog đọc | S0–S1 | To Do |
+| 25/11 | `BE-06` | Fare engine + quản lý loại vé/giá/chính sách ưu đãi… | S1 | To Do |
+| 29/11 | `BE-13` | Tuyến/ga + lịch/chuyến + hồ sơ tải kg + thời gian… | S1 | To Do |
+| 09/12 | `FE-02` | Auth + hồ sơ + trạng thái ưu đãi | S2 | To Do |
+| 12/12 | `FE-03` | Catalog | S2 | To Do |
+
+**M04 — Thành** (5 task · 17 pd)
+
+| Hạn | Mã | Task | Sprint | Trạng thái |
+| --- | --- | --- | --- | --- |
+| 20/11 | `BE-02B` | EF mapping ticketing/finance | S0 | To Do |
+| 30/11 | `BE-07` | Booking | S1 | To Do |
+| 04/12 | `BE-10` | Soát vé tại cổng | S2 | To Do |
+| 09/12 | `FE-05` | Vé của tôi, QR, lịch sử đặt/thanh toán | S2 | To Do |
+| 12/12 | `FE-06` | Portal soát vé | S2 | To Do |
+
+**M05 — My** (7 task · 17 pd)
+
+| Hạn | Mã | Task | Sprint | Trạng thái |
+| --- | --- | --- | --- | --- |
+| 17/11 | `BE-18A` | Seed/fixture | S0 | To Do |
+| 25/11 | `QA-01` | Test plan + ma trận test case theo UC + mẫu bug report | S1 | To Do |
+| 27/11 | `BE-04` | Hồ sơ + xác minh ưu đãi, upload minh chứng, audit thay đổi | S1 | To Do |
+| 29/11 | `BE-12` | Quản trị tài khoản/quyền + xem dữ liệu hành khách có audit | S1 | To Do |
+| 01/12 | `BE-14` | Cập nhật ETA + trạng thái tải/gián đoạn + gợi ý chuyến dự… | S1 | To Do |
+| 13/12 | `FE-07` | Admin | S2 | To Do |
+| 19/12 | `QA-03` | E2E + UAT + bug bash, ghi bằng chứng | S3 | To Do |
+
+**M06 — Tiên** (6 task · 14 pd)
+
+| Hạn | Mã | Task | Sprint | Trạng thái |
+| --- | --- | --- | --- | --- |
+| 18/11 | `BE-18B` | Test harness + CI | S0 | To Do |
+| 02/12 | `BE-15` | Báo cáo vé/doanh thu + export CSV | S1 | To Do |
+| 05/12 | `BE-11` | Hỗ trợ tại cổng | S2 | To Do |
+| 09/12 | `FE-01` | App shell, routing, design token, axios/react-query, layout… | S2 | To Do |
+| 13/12 | `FE-08` | Báo cáo doanh thu/vé + export CSV | S2 | To Do |
+| 17/12 | `FE-09` | Responsive, accessibility, loading/empty/error toàn cục | S2 | To Do |
+
+
+## Toàn bộ task (sắp theo hạn deadline)
+
+| Hạn | Issue | Mã | Task | Owner | Reviewer | Sprint | Bắt đầu | SP | Trạng thái |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [#12](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/12) | `BE-01` | Nền API | Huy | — | S0 | 16/11 | 18/11 | 5 | To Do |
-| [#13](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/13) | `BE-02A` | EF mapping lõi | Tuyên | Thành | S0 | 16/11 | 18/11 | 3 | To Do |
-| [#16](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/16) | `BE-18A` | Seed/fixture | My | Hoàng | S0 | 16/11 | 17/11 | 2 | To Do |
-| [#17](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/17) | `BE-18B` | Test harness + CI | Tiên | Thành | S0 | 16/11 | 18/11 | 2 | To Do |
-| [#14](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/14) | `BE-02B` | EF mapping ticketing/finance | Thành | Tuyên | S0 | 19/11 | 20/11 | 2 | To Do |
-| [#15](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/15) | `BE-05` | Catalog đọc | Hoàng | My | S0–S1 | 19/11 | 21/11 | 3 | To Do |
-| [#20](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/20) | `BE-06` | Fare engine + quản lý loại vé/giá/chính sách ưu đãi… | Hoàng | Tuyên | S1 | 22/11 | 25/11 | 5 | To Do |
-| [#18](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/18) | `BE-03` | Identity + JWT | Huy | — | S1 | 23/11 | 25/11 | 5 | To Do |
-| [#22](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/22) | `QA-01` | Test plan + ma trận test case theo UC + mẫu bug report | My | Tiên | S1 | 23/11 | 25/11 | 1 | To Do |
-| [#25](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/25) | `BE-09` | Phát hành vé + QR credential + vé miễn phí trẻ <6 + chặn… | Tuyên | Thành | S1 | 25/11 | 28/11 | 5 | To Do |
-| [#19](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/19) | `BE-04` | Hồ sơ + xác minh ưu đãi, upload minh chứng, audit thay đổi | My | Tuyên | S1 | 26/11 | 27/11 | 2 | To Do |
-| [#23](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/23) | `BE-07` | Booking | Thành | Tuyên | S1 | 26/11 | 30/11 | 8 | To Do |
-| [#24](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/24) | `BE-13` | Tuyến/ga + lịch/chuyến + hồ sơ tải kg + thời gian… | Hoàng | My | S1 | 26/11 | 29/11 | 5 | To Do |
-| [#21](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/21) | `BE-12` | Quản trị tài khoản/quyền + xem dữ liệu hành khách có audit | My | Hoàng | S1 | 28/11 | 29/11 | 2 | To Do |
-| [#27](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/27) | `BE-14` | Cập nhật ETA + trạng thái tải/gián đoạn + gợi ý chuyến dự… | My | Hoàng | S1 | 30/11 | 01/12 | 2 | To Do |
-| [#29](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/29) | `BE-15` | Báo cáo vé/doanh thu + export CSV | Tiên | My | S1 | 30/11 | 02/12 | 3 | To Do |
-| [#26](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/26) | `BE-08` | Payment MoMo TEST | Huy | — | S1 | 01/12 | 04/12 | 5 | To Do |
-| [#30](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/30) | `BE-10` | Soát vé tại cổng | Thành | Tiên | S2 | 01/12 | 04/12 | 5 | To Do |
-| [#28](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/28) | `BE-16` | Hủy đơn chưa thu + hoàn khoản thu lỗi + đổi vé do gián đoạn… | Tuyên | Hoàng | S1 | 05/12 | 06/12 | 2 | To Do |
-| [#31](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/31) | `BE-11` | Hỗ trợ tại cổng | Tiên | Thành | S2 | 05/12 | 05/12 | 1 | To Do |
-| [#33](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/33) | `FE-01` | App shell, routing, design token, axios/react-query, layout… | Tiên | My | S2 | 07/12 | 09/12 | 3 | To Do |
-| [#34](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/34) | `FE-02` | Auth + hồ sơ + trạng thái ưu đãi | Hoàng | Tuyên | S2 | 07/12 | 09/12 | 3 | To Do |
-| [#36](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/36) | `FE-04` | Booking → thanh toán → kết quả (kèm retry) | Tuyên | Thành | S2 | 07/12 | 12/12 | 5 | To Do |
-| [#37](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/37) | `FE-05` | Vé của tôi, QR, lịch sử đặt/thanh toán | Thành | Tiên | S2 | 07/12 | 09/12 | 3 | To Do |
-| [#39](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/39) | `FE-07` | Admin | My | Tiên | S2 | 07/12 | 13/12 | 5 | To Do |
-| [#32](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/32) | `BE-17` | Hardening | Huy | — | S2 | 08/12 | 09/12 | 3 | To Do |
-| [#35](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/35) | `FE-03` | Catalog | Hoàng | Tiên | S2 | 10/12 | 12/12 | 3 | To Do |
-| [#38](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/38) | `FE-06` | Portal soát vé | Thành | Tiên | S2 | 10/12 | 12/12 | 3 | To Do |
-| [#40](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/40) | `FE-08` | Báo cáo doanh thu/vé + export CSV | Tiên | My | S2 | 10/12 | 13/12 | 3 | To Do |
-| [#42](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/42) | `QA-02` | API regression Postman/Newman trên DB seed | Tuyên | Thành | S2 | 15/12 | 16/12 | 2 | To Do |
-| [#41](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/41) | `FE-09` | Responsive, accessibility, loading/empty/error toàn cục | Tiên | My | S2 | 16/12 | 17/12 | 2 | To Do |
-| [#43](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/43) | `QA-03` | E2E + UAT + bug bash, ghi bằng chứng | My | Hoàng | S3 | 17/12 | 19/12 | 3 | To Do |
-| [#44](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/44) | `DOC-01` | Demo script + README chạy máy sạch + tài liệu bàn giao | Huy | — | S3 | 19/12 | 20/12 | 2 | To Do |
+| **17/11** | [#16](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/16) | `BE-18A` | Seed/fixture | My | Hoàng | S0 | 16/11 | 2 | To Do |
+| **18/11** | [#12](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/12) | `BE-01` | Nền API | Huy | — | S0 | 16/11 | 5 | To Do |
+| **18/11** | [#13](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/13) | `BE-02A` | EF mapping lõi | Tuyên | Thành | S0 | 16/11 | 3 | To Do |
+| **18/11** | [#17](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/17) | `BE-18B` | Test harness + CI | Tiên | Thành | S0 | 16/11 | 2 | To Do |
+| **20/11** | [#14](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/14) | `BE-02B` | EF mapping ticketing/finance | Thành | Tuyên | S0 | 19/11 | 2 | To Do |
+| **21/11** | [#15](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/15) | `BE-05` | Catalog đọc | Hoàng | My | S0–S1 | 19/11 | 3 | To Do |
+| **25/11** | [#20](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/20) | `BE-06` | Fare engine + quản lý loại vé/giá/chính sách ưu đãi… | Hoàng | Tuyên | S1 | 22/11 | 5 | To Do |
+| **25/11** | [#18](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/18) | `BE-03` | Identity + JWT | Huy | — | S1 | 23/11 | 5 | To Do |
+| **25/11** | [#22](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/22) | `QA-01` | Test plan + ma trận test case theo UC + mẫu bug report | My | Tiên | S1 | 23/11 | 1 | To Do |
+| **27/11** | [#19](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/19) | `BE-04` | Hồ sơ + xác minh ưu đãi, upload minh chứng, audit thay đổi | My | Tuyên | S1 | 26/11 | 2 | To Do |
+| **28/11** | [#25](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/25) | `BE-09` | Phát hành vé + QR credential + vé miễn phí trẻ <6 + chặn… | Tuyên | Thành | S1 | 25/11 | 5 | To Do |
+| **29/11** | [#24](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/24) | `BE-13` | Tuyến/ga + lịch/chuyến + hồ sơ tải kg + thời gian… | Hoàng | My | S1 | 26/11 | 5 | To Do |
+| **29/11** | [#21](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/21) | `BE-12` | Quản trị tài khoản/quyền + xem dữ liệu hành khách có audit | My | Hoàng | S1 | 28/11 | 2 | To Do |
+| **30/11** | [#23](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/23) | `BE-07` | Booking | Thành | Tuyên | S1 | 26/11 | 8 | To Do |
+| **01/12** | [#27](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/27) | `BE-14` | Cập nhật ETA + trạng thái tải/gián đoạn + gợi ý chuyến dự… | My | Hoàng | S1 | 30/11 | 2 | To Do |
+| **02/12** | [#29](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/29) | `BE-15` | Báo cáo vé/doanh thu + export CSV | Tiên | My | S1 | 30/11 | 3 | To Do |
+| **04/12** | [#26](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/26) | `BE-08` | Payment MoMo TEST | Huy | — | S1 | 01/12 | 5 | To Do |
+| **04/12** | [#30](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/30) | `BE-10` | Soát vé tại cổng | Thành | Tiên | S2 | 01/12 | 5 | To Do |
+| **05/12** | [#31](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/31) | `BE-11` | Hỗ trợ tại cổng | Tiên | Thành | S2 | 05/12 | 1 | To Do |
+| **06/12** | [#28](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/28) | `BE-16` | Hủy đơn chưa thu + hoàn khoản thu lỗi + đổi vé do gián đoạn… | Tuyên | Hoàng | S1 | 05/12 | 2 | To Do |
+| **09/12** | [#33](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/33) | `FE-01` | App shell, routing, design token, axios/react-query, layout… | Tiên | My | S2 | 07/12 | 3 | To Do |
+| **09/12** | [#34](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/34) | `FE-02` | Auth + hồ sơ + trạng thái ưu đãi | Hoàng | Tuyên | S2 | 07/12 | 3 | To Do |
+| **09/12** | [#37](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/37) | `FE-05` | Vé của tôi, QR, lịch sử đặt/thanh toán | Thành | Tiên | S2 | 07/12 | 3 | To Do |
+| **09/12** | [#32](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/32) | `BE-17` | Hardening | Huy | — | S2 | 08/12 | 3 | To Do |
+| **12/12** | [#36](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/36) | `FE-04` | Booking → thanh toán → kết quả (kèm retry) | Tuyên | Thành | S2 | 07/12 | 5 | To Do |
+| **12/12** | [#35](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/35) | `FE-03` | Catalog | Hoàng | Tiên | S2 | 10/12 | 3 | To Do |
+| **12/12** | [#38](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/38) | `FE-06` | Portal soát vé | Thành | Tiên | S2 | 10/12 | 3 | To Do |
+| **13/12** | [#39](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/39) | `FE-07` | Admin | My | Tiên | S2 | 07/12 | 5 | To Do |
+| **13/12** | [#40](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/40) | `FE-08` | Báo cáo doanh thu/vé + export CSV | Tiên | My | S2 | 10/12 | 3 | To Do |
+| **16/12** | [#42](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/42) | `QA-02` | API regression Postman/Newman trên DB seed | Tuyên | Thành | S2 | 15/12 | 2 | To Do |
+| **17/12** | [#41](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/41) | `FE-09` | Responsive, accessibility, loading/empty/error toàn cục | Tiên | My | S2 | 16/12 | 2 | To Do |
+| **19/12** | [#43](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/43) | `QA-03` | E2E + UAT + bug bash, ghi bằng chứng | My | Hoàng | S3 | 17/12 | 3 | To Do |
+| **20/12** | [#44](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/44) | `DOC-01` | Demo script + README chạy máy sạch + tài liệu bàn giao | Huy | — | S3 | 19/12 | 2 | To Do |
 
-> Cập nhật cột *Trạng thái* trong Excel (To Do → In Progress → Code Review / QA → Done), sau đó chạy lại `python tools/kickoff.py` để làm mới bảng này.
+> Thứ tự trên khớp với sheet `SPRINT_BOARD` (đã sắp theo *Due Date*) và mục 4.4 của `TASK-ASSIGNMENT.md`. Cập nhật cột *Trạng thái* trong Excel (To Do → In Progress → Code Review / QA → Done), sau đó chạy lại `python tools/kickoff.py` để làm mới bảng này.

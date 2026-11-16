@@ -39,6 +39,7 @@ for r in range(2, 202):
         "priority": ws.cell(r, 9).value,
         "status": ws.cell(r, 10).value,
         "sp": ws.cell(r, 11).value,
+        "pd": int((ws.cell(r, 12).value or 0) // 8),
         "start": ws.cell(r, 13).value.date(),
         "due": ws.cell(r, 14).value.date(),
         "dep": ws.cell(r, 16).value,
@@ -75,7 +76,7 @@ lines += [
     "| Tham dự | Cả 6 người: Huy, Tuyên, Hoàng, Thành, My, Tiên |",
     "| Đầu ra | Chốt 6 điểm kỹ thuật + mỗi người nhận task S0 + repo/issue chạy được |",
     "| Bảng task | `docs/task-management/Agile_Scrum_Task_Template_Team_6.xlsx` |",
-    "| Kế hoạch | `docs/planning/TASK-ASSIGNMENT.md` (v5.6, bám SRS v1.2) |",
+    "| Kế hoạch | `docs/planning/TASK-ASSIGNMENT.md` (v5.7, bám SRS v1.2) |",
     "| Issue | 33 issue GitHub #12–#44 |",
     "",
     "## 1. Agenda",
@@ -183,10 +184,10 @@ open(OUT_KICKOFF, "w", encoding="utf-8").write("\n".join(lines))
 base = "https://github.com/%s" % REPO
 lines = []
 lines += [
-    "# Bảng điều khiển dự án (snapshot 14/11/2026 — kế hoạch v5.6)",
+    "# Bảng điều khiển dự án (snapshot 14/11/2026 — kế hoạch v5.7)",
     "",
     "Nguồn sự thật: `docs/task-management/Agile_Scrum_Task_Template_Team_6.xlsx` (sheet `SPRINT_BOARD`).",
-    "Kế hoạch chi tiết: `docs/planning/TASK-ASSIGNMENT.md` **v5.6** (bám SRS v1.2 / UC v1.6).",
+    "Kế hoạch chi tiết: `docs/planning/TASK-ASSIGNMENT.md` **v5.7** (bám SRS v1.2 / UC v1.6).",
     "Task trên GitHub: 33 issue **#12–#44**, gán sẵn assignee + milestone.",
     "",
     "## Liên kết nhanh",
@@ -230,24 +231,47 @@ for sp in ["S0", "S0–S1", "S1", "S2", "S3"]:
     lines.append("| %s | %s | %d | %d | %s | %s |" % (
         sp, span[sp], len(grp), sum(t["sp"] for t in grp), ", ".join(owners), goal[sp]))
 
-lines += [
-    "",
-    "## Toàn bộ task",
-    "",
-    "| Issue | Mã | Task | Owner | Reviewer | Sprint | Bắt đầu | Hạn | SP | Trạng thái |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-]
-for t in sorted(tasks, key=lambda x: x["start"]):
-    desc = t["title"].split("·", 1)[1].strip()
-    lines.append("| [#%s](%s/issues/%s) | `%s` | %s | %s | %s | %s | %s | %s | %d | %s |" % (
-        issues.get(t["id"], "?"), base, issues.get(t["id"], ""), t["id"], short(desc, 60),
-        SHORT[t["owner"]], SHORT.get(t["reviewer"], "—"), t["sprint"],
-        d(t["start"]), d(t["due"]), t["sp"], t["status"]))
+by_due = sorted(tasks, key=lambda x: (x["due"], x["start"], x["id"]))
 
 lines += [
     "",
-    "> Cập nhật cột *Trạng thái* trong Excel (To Do → In Progress → Code Review / QA → Done), "
-    "sau đó chạy lại `python tools/kickoff.py` để làm mới bảng này.",
+    "## Việc của từng người (sắp theo hạn)",
+    "",
+    "Mỗi người mở đúng khối của mình, làm từ trên xuống: xong task trước (merge) mới mở task kế tiếp.",
+    "",
+]
+for m in ["M01", "M02", "M03", "M04", "M05", "M06"]:
+    mine = [t for t in by_due if t["owner"] == m]
+    total = sum(t["pd"] for t in mine)
+    lines.append("**%s — %s** (%d task · %d pd)" % (m, SHORT[m], len(mine), total))
+    lines.append("")
+    lines.append("| Hạn | Mã | Task | Sprint | Trạng thái |")
+    lines.append("| --- | --- | --- | --- | --- |")
+    for t in mine:
+        desc = t["title"].split("·", 1)[1].strip()
+        lines.append("| %s | `%s` | %s | %s | %s |" % (
+            d(t["due"]), t["id"], short(desc, 60), t["sprint"], t["status"]))
+    lines.append("")
+
+lines += [
+    "",
+    "## Toàn bộ task (sắp theo hạn deadline)",
+    "",
+    "| Hạn | Issue | Mã | Task | Owner | Reviewer | Sprint | Bắt đầu | SP | Trạng thái |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+]
+for t in by_due:
+    desc = t["title"].split("·", 1)[1].strip()
+    lines.append("| **%s** | [#%s](%s/issues/%s) | `%s` | %s | %s | %s | %s | %s | %d | %s |" % (
+        d(t["due"]), issues.get(t["id"], "?"), base, issues.get(t["id"], ""), t["id"], short(desc, 60),
+        SHORT[t["owner"]], SHORT.get(t["reviewer"], "—"), t["sprint"],
+        d(t["start"]), t["sp"], t["status"]))
+
+lines += [
+    "",
+    "> Thứ tự trên khớp với sheet `SPRINT_BOARD` (đã sắp theo *Due Date*) và mục 4.4 của "
+    "`TASK-ASSIGNMENT.md`. Cập nhật cột *Trạng thái* trong Excel (To Do → In Progress → "
+    "Code Review / QA → Done), sau đó chạy lại `python tools/kickoff.py` để làm mới bảng này.",
     "",
 ]
 open(OUT_BOARD, "w", encoding="utf-8").write("\n".join(lines))
