@@ -723,7 +723,10 @@ cd metro-ticket-system
 Create local files from: - Root `.env.example` -
 `backend/.env.example` - `frontend/.env.example`
 
-Never commit actual `.env` files or secrets.
+For a **Neon** database, put `DATABASE_URL` (plus the `AWS_*` object
+storage variables that Neon writes) into a git-ignored
+`backend/.env.local`; in Development the API reads that file
+automatically. Never commit actual `.env` files or secrets.
 
 ### Start PostgreSQL and Redis
 
@@ -782,16 +785,40 @@ instead of `localhost`.
 
 ### Run backend
 
+The database schema is managed with **plain SQL migrations** (no EF
+Migrations) — see `infra/database/README.md` and
+`docs/handover/HANDOVER.md` §5.
+
+**Option A — local PostgreSQL (Docker):** start the compose stack
+above, point `ConnectionStrings__DefaultConnection` in
+`backend/.env.local` at the local database, then create the schema
+once:
+
 ``` bash
-cd backend
-dotnet restore
-dotnet build
-dotnet ef database update --project src/Metro.Infrastructure --startup-project src/Metro.API
-dotnet run --project src/Metro.API
+psql -v ON_ERROR_STOP=1 -d metro_ticket -f infra/database/deploy.sql
+psql -v ON_ERROR_STOP=1 -d metro_ticket -f infra/database/scripts/09_verify.sql
 ```
 
-The EF command may need adjustment to match the actual DbContext and
-migration assembly.
+**Option B — Neon (team-shared):** copy `DATABASE_URL` and the `AWS_*`
+storage variables from the Neon console into `backend/.env.local`
+(git-ignored). No schema step needed — the `production` branch already
+has all migrations applied.
+
+Then run the API:
+
+``` bash
+dotnet run --project backend/src/Metro.API
+```
+
+In Development the API also opens **Swagger** at `/swagger` and exposes
+diagnostics (`/api/v1/diagnostics/db`) for troubleshooting.
+
+Verify the stack: `GET /health` must return
+`{"status":"healthy", ...}` — it probes both PostgreSQL and the object
+storage bucket; `/health/live` is a liveness-only probe.
+
+> Do **not** run `dotnet ef database update` — the EF Migrations folder
+> is intentionally empty.
 
 ### Run frontend
 
