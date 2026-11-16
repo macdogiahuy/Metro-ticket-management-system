@@ -195,6 +195,7 @@ lines += [
     "| Lọc | Link |",
     "| --- | --- |",
     "| Tất cả task | [issues](%s/issues?q=is%%3Aissue) |" % base,
+    "| Bảng Project (public) | [Metro Ticket — Kế hoạch & tiến độ](https://github.com/users/macdogiahuy/projects/1) |",
     "| S0 · Nền tảng | [milestone S0](%s/issues?q=is%%3Aissue+milestone%%3A%%22S0%%22) |" % base,
     "| S1 · API + freeze | [milestone S1](%s/issues?q=is%%3Aissue+milestone%%3A%%22S1%%22) |" % base,
     "| S2 · FE + soát vé | [milestone S2](%s/issues?q=is%%3Aissue+milestone%%3A%%22S2%%22) |" % base,
