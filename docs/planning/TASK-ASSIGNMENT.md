@@ -4,7 +4,7 @@
 | --- | --- |
 | Dự án | Hệ thống quản lý vé và hỗ trợ hành khách Metro |
 | Tài liệu | Kế hoạch Backend-first → API freeze → Frontend |
-| Phiên bản | 5.6 (thay thế 5.5) — bám SRS v1.2 / UC v1.6; chốt cơ chế review 2 ruleset |
+| Phiên bản | 5.7 (thay thế 5.6) — bám SRS v1.2 / UC v1.6; thêm lịch deadline §4.4 |
 | Ngày lập | 13/11/2026 |
 | Người lập | M01 — Mạc Đỗ Gia Huy (Tech Lead) |
 | Khởi động | **16/11/2026** (thứ Hai) |
@@ -94,6 +94,57 @@ Dùng bảng này để gửi task ngay khi kickoff; thứ tự dòng chính là
 - **Task của M01 (BE-01, BE-03, BE-08, BE-17, DOC-01) không review chéo** — M01 tự merge sau khi CI xanh; đổi lại M01 review toàn bộ PR của 5 người còn lại.
 - M06 trống 19–29/11: giữ CI/Postman xanh, viết test harness cho module đang mở, review PR.
 - M01 không nhận task FE chính; thời gian trống dùng để review, gỡ blocker, chốt contract.
+
+### 4.4. Lịch deadline toàn bộ task
+
+Thứ tự dưới đây là **thứ tự thực hiện** (sắp theo hạn, cùng hạn thì task bắt đầu sớm hơn đứng trước). Sheet `SPRINT_BOARD` và `docs/planning/BOARD.md` dùng đúng thứ tự này; mỗi người chỉ mở task kế tiếp của mình khi task trước đã merge.
+
+| Mốc | Việc phải xong |
+| --- | --- |
+| **17–21/11** | 6 task nền S0 (BE-01, BE-02A/B, BE-05, BE-18A/B) — demo `/health` + EF + seed |
+| **25–29/11** | BE-03/04/06/09/12/13 + QA-01 — luồng tài khoản, giá, đặt vé, admin |
+| **30/11–06/12** | BE-07/08/10/11/14/15/16 — đóng payment + soát vé, **API freeze 04/12** |
+| **07–13/12** | 8 task FE wave 1–2 bám contract đã freeze |
+| **15–17/12** | QA-02, FE-09 — **code freeze 17/12** |
+| **19–20/12** | QA-03, DOC-01 — bàn giao nội bộ (nộp bài 23/12) |
+
+| Hạn | Mã | Task | Owner | Thời gian | pd | Sprint |
+| --- | --- | --- | --- | --- | --- | --- |
+| **17/11** | `BE-18A` | Seed/fixture: 2 tuyến, 12 ga, giá mẫu, tài khoản demo | M05 | 16–17/11 | 2 | S0 |
+| **18/11** | `BE-01` | Nền API: ProblemDetails, validation pipeline, logging,… | M01 | 16–18/11 | 3 | S0 |
+| **18/11** | `BE-02A` | EF Core mapping lõi: identity, network, order,… | M02 | 16–18/11 | 3 | S0 |
+| **18/11** | `BE-18B` | Test harness + CI: xUnit, `WebApplicationFactory`, PostgreSQL… | M06 | 16–18/11 | 2 | S0 |
+| **20/11** | `BE-02B` | EF mapping ticketing/finance: payment, refund, inspection,… | M04 | 19–20/11 | 2 | S0 |
+| **21/11** | `BE-05` | Catalog đọc: tuyến, ga, hành trình, tình trạng dịch vụ (cache… | M03 | 19–21/11 | 3 | S0–S1 |
+| **25/11** | `BE-06` | Fare engine + quản lý loại vé/giá/chính sách ưu đãi (version… | M03 | 22–25/11 | 4 | S1 |
+| **25/11** | `BE-03` | Identity + JWT: đăng ký, xác minh email, đăng nhập/xuất,… | M01 | 23–25/11 | 3 | S1 |
+| **25/11** | `QA-01` | Test plan + ma trận test case theo UC + mẫu bug report | M05 | 23–25/11 | 1 | S1 |
+| **27/11** | `BE-04` | Hồ sơ + xác minh ưu đãi, upload minh chứng, audit thay đổi | M05 | 26–27/11 | 2 | S1 |
+| **28/11** | `BE-09` | Phát hành vé + QR credential + vé miễn phí trẻ <6 (không tạo… | M02 | 25–28/11 | 4 | S1 |
+| **29/11** | `BE-13` | Tuyến/ga + lịch/chuyến + hồ sơ tải kg (`max_load_kg`, thời… | M03 | 26–29/11 | 4 | S1 |
+| **29/11** | `BE-12` | Quản trị tài khoản/quyền + xem dữ liệu hành khách có audit | M05 | 28–29/11 | 2 | S1 |
+| **30/11** | `BE-07` | Booking: tạo đơn, order version, gợi ý chuyến (không giữ… | M04 | 26–30/11 | 5 | S1 |
+| **01/12** | `BE-14` | Cập nhật ETA + trạng thái tải/gián đoạn + gợi ý chuyến dự… | M05 | 30/11–01/12 | 2 | S1 |
+| **02/12** | `BE-15` | Báo cáo vé/doanh thu + export CSV | M06 | 30/11–02/12 | 3 | S1 |
+| **04/12** | `BE-08` | Payment MoMo TEST: tạo giao dịch, callback/IPN, chữ ký, retry… | M01 | 01–04/12 | 4 | S1 |
+| **04/12** | `BE-10` | Soát vé tại cổng: Allow/Deny/Pending, journey vào/ra (ghi… | M04 | 01–04/12 | 4 | S2 |
+| **05/12** | `BE-11` | Hỗ trợ tại cổng: tra vé, cấp lại QR có audit | M06 | 05/12 | 1 | S2 |
+| **06/12** | `BE-16` | Hủy đơn chưa thu + hoàn khoản thu lỗi + đổi vé do gián đoạn… | M02 | 05–06/12 | 2 | S1 |
+| **09/12** | `FE-01` | App shell, routing, design token, axios/react-query, layout… | M06 | 07–09/12 | 3 | S2 |
+| **09/12** | `FE-02` | Auth + hồ sơ + trạng thái ưu đãi | M03 | 07–09/12 | 3 | S2 |
+| **09/12** | `FE-05` | Vé của tôi, QR, lịch sử đặt/thanh toán | M04 | 07–09/12 | 3 | S2 |
+| **09/12** | `BE-17` | Hardening: rate limit, security headers, PII masking, audit… | M01 | 08–09/12 | 2 | S2 |
+| **12/12** | `FE-04` | Booking → thanh toán → kết quả (kèm retry) | M02 | 07–12/12 | 5 | S2 |
+| **12/12** | `FE-03` | Catalog: tuyến/ga/hành trình/giá + tình trạng dịch vụ | M03 | 10–12/12 | 3 | S2 |
+| **12/12** | `FE-06` | Portal soát vé: scan, tra cứu, cấp lại QR | M04 | 10–12/12 | 3 | S2 |
+| **13/12** | `FE-07` | Admin: tài khoản, tuyến/ga, loại vé/giá, lịch/chuyến, thông… | M05 | 07–13/12 | 5 | S2 |
+| **13/12** | `FE-08` | Báo cáo doanh thu/vé + export CSV | M06 | 10–13/12 | 3 | S2 |
+| **16/12** | `QA-02` | API regression Postman/Newman trên DB seed | M02 | 15–16/12 | 2 | S2 |
+| **17/12** | `FE-09` | Responsive, accessibility, loading/empty/error toàn cục | M06 | 16–17/12 | 2 | S2 |
+| **19/12** | `QA-03` | E2E + UAT + bug bash, ghi bằng chứng | M05 | 17–19/12 | 3 | S3 |
+| **20/12** | `DOC-01` | Demo script + README chạy máy sạch + tài liệu bàn giao | M01 | 19–20/12 | 2 | S3 |
+
+> Tổng: 33 task · 95 pd · mỗi người 14–17 pd, không ai có việc sau 20/12.
 
 ## 5. Backend (16/11 – 09/12)
 
@@ -314,4 +365,4 @@ Thứ tự cắt (dừng ở mức đủ demo):
 
 ---
 
-**Ghi chú phiên bản**: 5.6 — chỉ đổi **cơ chế review trên GitHub** (§9.1/§9.2): tách `protect-*` (CI, không bypass) khỏi `review-gate-*` (pull_request + CODEOWNERS, M01 bypass), cho M01 tự merge PR của mình mà không ai bỏ qua được CI. 5.5 — bám **SRS v1.2 / UC v1.6** (SRS thắng khi lệch): bỏ giữ chỗ theo đoạn (BE-07 dùng gợi ý chuyến), tải kg nhập tay (BE-13/BE-14), vé trẻ miễn phí không tạo payment (BE-09), chặn trùng hiệu lực, đổi vé do gián đoạn (BE-16), EF bỏ bảng capacity legacy (BE-02B). Lịch, người, số pd **giữ nguyên v5.4**: mốc 16/11 → 20/12/2026 (nộp 23/12); BE-first, API freeze 04/12, code freeze 17/12; tổng 95 pd (BE 57, FE 30, QA 3 + DOC 2), mỗi người 14–17 pd.
+**Ghi chú phiên bản**: 5.7 — thêm **§4.4 Lịch deadline toàn bộ task**; sheet `SPRINT_BOARD` và `BOARD.md` sắp theo *Due Date* để làm từ trên xuống, thêm khối việc theo người. 5.6 — chỉ đổi **cơ chế review trên GitHub** (§9.1/§9.2): tách `protect-*` (CI, không bypass) khỏi `review-gate-*` (pull_request + CODEOWNERS, M01 bypass), cho M01 tự merge PR của mình mà không ai bỏ qua được CI. 5.5 — bám **SRS v1.2 / UC v1.6** (SRS thắng khi lệch): bỏ giữ chỗ theo đoạn (BE-07 dùng gợi ý chuyến), tải kg nhập tay (BE-13/BE-14), vé trẻ miễn phí không tạo payment (BE-09), chặn trùng hiệu lực, đổi vé do gián đoạn (BE-16), EF bỏ bảng capacity legacy (BE-02B). Lịch, người, số pd **giữ nguyên v5.4**: mốc 16/11 → 20/12/2026 (nộp 23/12); BE-first, API freeze 04/12, code freeze 17/12; tổng 95 pd (BE 57, FE 30, QA 3 + DOC 2), mỗi người 14–17 pd.
