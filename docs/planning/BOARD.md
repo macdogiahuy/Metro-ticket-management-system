@@ -47,11 +47,11 @@ Mỗi người mở đúng khối của mình, làm từ trên xuống: xong tas
 
 | Hạn | Mã | Task | Sprint | Trạng thái |
 | --- | --- | --- | --- | --- |
-| 18/11 | `BE-01` | Nền API | S0 | To Do |
+| 18/11 | `BE-01` | Nền API | S0 | Done |
 | 25/11 | `BE-03` | Identity + JWT | S1 | To Do |
 | 04/12 | `BE-08` | Payment MoMo TEST | S1 | To Do |
 | 09/12 | `BE-17` | Hardening | S2 | To Do |
-| 20/12 | `DOC-01` | Demo script + README chạy máy sạch + tài liệu bàn giao | S3 | To Do |
+| 20/12 | `DOC-01` | Demo script + README chạy máy sạch + tài liệu bàn giao | S3 | In Progress |
 
 **M02 — Tuyên** (5 task · 16 pd)
 
@@ -112,7 +112,7 @@ Mỗi người mở đúng khối của mình, làm từ trên xuống: xong tas
 | Hạn | Issue | Mã | Task | Owner | Reviewer | Sprint | Bắt đầu | SP | Trạng thái |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **17/11** | [#16](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/16) | `BE-18A` | Seed/fixture | My | Hoàng | S0 | 16/11 | 2 | To Do |
-| **18/11** | [#12](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/12) | `BE-01` | Nền API | Huy | — | S0 | 16/11 | 5 | To Do |
+| **18/11** | [#12](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/12) | `BE-01` | Nền API | Huy | — | S0 | 16/11 | 5 | Done |
 | **18/11** | [#13](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/13) | `BE-02A` | EF mapping lõi | Tuyên | Thành | S0 | 16/11 | 3 | To Do |
 | **18/11** | [#17](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/17) | `BE-18B` | Test harness + CI | Tiên | Thành | S0 | 16/11 | 2 | To Do |
 | **20/11** | [#14](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/14) | `BE-02B` | EF mapping ticketing/finance | Thành | Tuyên | S0 | 19/11 | 2 | To Do |
@@ -143,6 +143,6 @@ Mỗi người mở đúng khối của mình, làm từ trên xuống: xong tas
 | **16/12** | [#42](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/42) | `QA-02` | API regression Postman/Newman trên DB seed | Tuyên | Thành | S2 | 15/12 | 2 | To Do |
 | **17/12** | [#41](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/41) | `FE-09` | Responsive, accessibility, loading/empty/error toàn cục | Tiên | My | S2 | 16/12 | 2 | To Do |
 | **19/12** | [#43](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/43) | `QA-03` | E2E + UAT + bug bash, ghi bằng chứng | My | Hoàng | S3 | 17/12 | 3 | To Do |
-| **20/12** | [#44](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/44) | `DOC-01` | Demo script + README chạy máy sạch + tài liệu bàn giao | Huy | — | S3 | 19/12 | 2 | To Do |
+| **20/12** | [#44](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/44) | `DOC-01` | Demo script + README chạy máy sạch + tài liệu bàn giao | Huy | — | S3 | 19/12 | 2 | In Progress |
 
 > Thứ tự trên khớp với sheet `SPRINT_BOARD` (đã sắp theo *Due Date*) và mục 4.4 của `TASK-ASSIGNMENT.md`. Cập nhật cột *Trạng thái* trong Excel (To Do → In Progress → Code Review / QA → Done), sau đó chạy lại `python tools/kickoff.py` để làm mới bảng này.
