@@ -9,6 +9,7 @@ Task trên GitHub: 33 issue **#12–#44**, gán sẵn assignee + milestone.
 | Lọc | Link |
 | --- | --- |
 | Tất cả task | [issues](https://github.com/macdogiahuy/Metro-ticket-management-system/issues?q=is%3Aissue) |
+| Bảng Project (public) | [Metro Ticket — Kế hoạch & tiến độ](https://github.com/users/macdogiahuy/projects/1) |
 | S0 · Nền tảng | [milestone S0](https://github.com/macdogiahuy/Metro-ticket-management-system/issues?q=is%3Aissue+milestone%3A%22S0%22) |
 | S1 · API + freeze | [milestone S1](https://github.com/macdogiahuy/Metro-ticket-management-system/issues?q=is%3Aissue+milestone%3A%22S1%22) |
 | S2 · FE + soát vé | [milestone S2](https://github.com/macdogiahuy/Metro-ticket-management-system/issues?q=is%3Aissue+milestone%3A%22S2%22) |
