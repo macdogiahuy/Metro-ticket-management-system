@@ -37,7 +37,8 @@ hoặc sửa migration đã áp dụng.
   mapping. Các use case tiếp theo triển khai trong Application qua abstraction
   cần thiết; Infrastructure thực hiện truy cập dữ liệu.
 
-BE-02B hiện lấy nền từ `feature/be-02a-ef-core-mapping` tại commit `c5e7259` (bao gồm bản sửa trigger-generated ticket `3a458a9`).
+BE-02B đã đồng bộ `dev` tại commit `c8161cd`, bao gồm PR #54 (BE-02A).
+Nền BE-02A ban đầu là `c5e7259`, đã có bản sửa trigger-generated ticket `3a458a9`.
 Các FK tới identity, network, orders, order_versions và tickets dùng trực tiếp
 entity/configuration BE-02A. `Persistence/Mapping/ExternalReferences.cs` chỉ còn
 hai shared type chứa khóa cho `incidents` và `cars`, thuộc phạm vi khác.
@@ -98,16 +99,22 @@ chạy toàn bộ test backend ở Release rồi xóa container. Database tạm 
 connection string của ứng dụng. Mỗi test dữ liệu tự rollback transaction, phù
 hợp quy tắc không DELETE lịch sử.
 
-Nếu đã có database test riêng đã triển khai SQL, chạy từ `backend`:
+Nếu đã có database test riêng đã triển khai SQL, tên database phải bắt đầu bằng
+`metro_be02a_test_`. Thiết lập riêng tư `METRO_TEST_POSTGRES_CONNECTION_STRING`
+và `METRO_TEST_POSTGRES_DATABASE` theo
+[`BE-02A-TESTING.md`](../tests/Metro.IntegrationTests/BE-02A-TESTING.md), rồi chạy
+từ `backend`. Không ghi credential vào source, command history hoặc test output.
 
 ```powershell
-$env:METRO_TEST_CONNECTION = 'Host=localhost;Port=5432;Database=metro_test;Username=metro_test;Password=...'
-dotnet test Metro.sln
+$env:METRO_TEST_CONNECTION = $env:METRO_TEST_POSTGRES_CONNECTION_STRING
+$env:METRO_TEST_POSTGRES_REQUIRED = '1'
+dotnet test Metro.sln --configuration Release
 ```
 
-Không có `METRO_TEST_CONNECTION` thì 8 test PostgreSQL được đánh dấu skip rõ lý
-do; 12 test model vẫn chạy. CI triển khai SQL lên PostgreSQL service và thiết
-lập biến này để chạy cả hai nhóm.
+Không có `METRO_TEST_CONNECTION` thì 8 test PostgreSQL BE-02B được đánh dấu skip
+rõ lý do; 13 test model BE-02B vẫn chạy. Hai test PostgreSQL BE-02A dùng thêm
+các biến `METRO_TEST_POSTGRES_*`. CI dùng runner Docker ở trên để triển khai SQL
+và thiết lập đầy đủ cấu hình cho cả hai nhóm; acceptance không chấp nhận skip.
 
 Các test kiểm tra toàn bộ cột và FK của 17 bảng với catalog PostgreSQL, kiểm
 tra model/enum/index, ghi–đọc cả 17 entity, default sinh từ DB, JSON/ciphertext,
@@ -117,7 +124,7 @@ và bàn giao đồ một lần.
 
 ## Kiểm tra trước khi gửi review
 
-- Chạy `Run-PostgresMappingTests.ps1`: toàn bộ 45 test phải pass, gồm 10 test
+- Chạy `Run-PostgresMappingTests.ps1`: toàn bộ 46 test phải pass, gồm 10 test
   PostgreSQL (2 BE-02A và 8 BE-02B), không có test skip. Script đọc TRX và
   từ chối kết quả có test fail/skip hoặc không thực thi test PostgreSQL.
 - CI dùng chính script này với `-NoBuild`, không duy trì bộ cấu hình database

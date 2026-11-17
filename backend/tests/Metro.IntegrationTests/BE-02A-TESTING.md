@@ -3,8 +3,8 @@
 Run with the repository .NET 9 runtime and unchanged package versions:
 
 ```powershell
-dotnet build backend/Metro.sln --no-restore -m:1 -p:UseSharedCompilation=false
-dotnet test backend/Metro.sln --no-build --no-restore
+dotnet build backend/Metro.sln --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false
+dotnet test backend/Metro.sln --configuration Release --no-build --no-restore
 ```
 
 ## Dedicated PostgreSQL acceptance run
@@ -24,7 +24,7 @@ into command history or test output):
 - `METRO_TEST_POSTGRES_REQUIRED=1`: mandatory acceptance mode; missing configuration fails.
 
 ```powershell
-dotnet test backend/tests/Metro.IntegrationTests/Metro.IntegrationTests.csproj --no-build --no-restore --filter Category=PostgreSQL
+dotnet test backend/tests/Metro.IntegrationTests/Metro.IntegrationTests.csproj --configuration Release --no-build --no-restore --filter Category=PostgreSQL
 ```
 
 Without test configuration, optional PostgreSQL facts have an explicit Skip
@@ -33,11 +33,18 @@ fails; no application connection environment variable is used as fallback.
 A skipped run is not PostgreSQL acceptance evidence. Backend CI checks deploy.sql
 against migration sources and invokes the same disposable-database runner used
 locally: backend/tests/Run-PostgresMappingTests.ps1. It creates a PostgreSQL 17
-database with a metro_be02a_test_ prefix, generates a new password for each run,
-waits for TCP readiness, deploys SQL 001-006, runs 09_verify.sql, and sets all
-METRO_TEST_POSTGRES_* variables including REQUIRED=1. It rejects failed/skipped
-tests and publishes TRX results. CI also runs for feature-to-feature stacked PRs.
-No hardcoded service password or external application database is required.
+database with a metro_be02a_test_ prefix, generates and masks a new password for
+each run, waits for TCP readiness, deploys SQL 001-006, runs 09_verify.sql, and
+sets METRO_TEST_CONNECTION and all METRO_TEST_POSTGRES_* variables including
+REQUIRED=1. It rejects failed/skipped tests or missing PostgreSQL execution and
+publishes TRX results. The BE-02A baseline contains 25 tests, including two
+PostgreSQL tests. This integrated BE-02B branch must report 46 tests passed
+(17 unit and 29 integration, including 10 PostgreSQL tests), with zero skipped.
+CI also runs for feature-to-feature stacked PRs. The container binds only to a
+temporary 127.0.0.1 port, uses no persistent volume, and is removed in finally
+with the process environment restored. Test-CiCredentialPolicy.ps1 rejects
+hardcoded database passwords in the workflow and runner. No application
+database or fixed password is used.
 
 The live suite covers all 27 mapped core tables plus Identity users, reads
 fresh rows after clearing tracking, checks changed fields/JSON/arrays, PK,
