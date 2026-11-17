@@ -30,16 +30,18 @@ dotnet test backend/tests/Metro.IntegrationTests/Metro.IntegrationTests.csproj -
 Without test configuration, optional PostgreSQL facts have an explicit Skip
 reason. A configured connection, wrong target, schema or constraint error
 fails; no application connection environment variable is used as fallback.
-A skipped run is not PostgreSQL acceptance evidence. Backend CI uses a dedicated
-PostgreSQL 17 container database named `metro_be02a_test_ci`, checks deploy.sql
-against migration sources, deploys SQL 001-006, runs 09_verify.sql, and sets all
-three METRO_TEST_POSTGRES_* variables including REQUIRED=1 before running the
-Release suite. Schema, connection and acceptance errors therefore fail CI.
-CI generates a cryptographically random password for each run and registers it
-with GitHub log masking before use. psql and Npgsql read it from a temporary
-PGPASSFILE with mode 0600; connection strings contain no password. The container
-binds only to 127.0.0.1. An always-run cleanup step removes the password file and
-container. No fixed CI password or application credential is committed.
+A skipped run is not PostgreSQL acceptance evidence. Backend CI checks deploy.sql
+against migration sources and invokes the same disposable-database runner used
+locally: backend/tests/Run-PostgresMappingTests.ps1. It creates a PostgreSQL 17
+database with a metro_be02a_test_ prefix, generates and masks a new password for
+each run, waits for TCP readiness, deploys SQL 001-006, runs 09_verify.sql, and
+sets all METRO_TEST_POSTGRES_* variables including REQUIRED=1. It rejects
+failed/skipped tests or missing PostgreSQL execution and publishes TRX results.
+The BE-02A suite must report 25 tests passed, including both PostgreSQL tests,
+with zero skipped. The container binds only to a temporary 127.0.0.1 port, uses
+no persistent volume, and is removed in finally with the process environment
+restored. Test-CiCredentialPolicy.ps1 rejects hardcoded database passwords in
+the workflow and runner. No application database or fixed password is used.
 
 The live suite covers all 27 mapped core tables plus Identity users, reads
 fresh rows after clearing tracking, checks changed fields/JSON/arrays, PK,
