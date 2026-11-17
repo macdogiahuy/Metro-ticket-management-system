@@ -18,8 +18,9 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(e => e.HolderUserId).HasColumnName("holder_user_id");
         builder.Property(e => e.SequenceNo).HasColumnName("sequence_no").IsRequired();
         builder.Property(e => e.Status).HasColumnName("status").HasDefaultValue("ISSUED").IsRequired();
-        builder.Property(e => e.EffectiveFrom).HasColumnName("effective_from");
-        builder.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+        // Migration 006 fills missing bounds/context BEFORE INSERT; read them back via RETURNING.
+        builder.Property(e => e.EffectiveFrom).HasColumnName("effective_from").ValueGeneratedOnAdd();
+        builder.Property(e => e.ExpiresAt).HasColumnName("expires_at").ValueGeneratedOnAdd();
         builder.Property(e => e.LatestActivationAt).HasColumnName("latest_activation_at");
         builder.Property(e => e.FirstUsedAt).HasColumnName("first_used_at");
         builder.Property(e => e.RevokedAt).HasColumnName("revoked_at");
@@ -30,11 +31,11 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("clock_timestamp()").IsRequired();
 
         // SRS v1.2 / Migration 006 fields
-        builder.Property(e => e.OrderId).HasColumnName("order_id");
-        builder.Property(e => e.OrderVersion).HasColumnName("order_version");
-        builder.Property(e => e.ServiceDate).HasColumnName("service_date");
-        builder.Property(e => e.OriginStationId).HasColumnName("origin_station_id");
-        builder.Property(e => e.DestinationStationId).HasColumnName("destination_station_id");
+        builder.Property(e => e.OrderId).HasColumnName("order_id").ValueGeneratedOnAdd();
+        builder.Property(e => e.OrderVersion).HasColumnName("order_version").ValueGeneratedOnAdd();
+        builder.Property(e => e.ServiceDate).HasColumnName("service_date").ValueGeneratedOnAdd();
+        builder.Property(e => e.OriginStationId).HasColumnName("origin_station_id").ValueGeneratedOnAdd();
+        builder.Property(e => e.DestinationStationId).HasColumnName("destination_station_id").ValueGeneratedOnAdd();
         builder.Property(e => e.RelatedTicketId).HasColumnName("related_ticket_id");
         builder.Property(e => e.RelationType).HasColumnName("relation_type");
         builder.Property(e => e.GuardianLinkId).HasColumnName("guardian_link_id");

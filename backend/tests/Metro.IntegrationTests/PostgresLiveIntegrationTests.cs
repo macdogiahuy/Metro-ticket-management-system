@@ -99,6 +99,41 @@ public class PostgresLiveIntegrationTests
         var ticket = new Ticket { OperatorId = a, TicketCode = suffix, OrderItemId = item.Id, TicketProductId = product.Id, FarePolicyVersionId = fare.Id, SequenceNo = 1, HolderUserId = user.Id, Status = "ACTIVE", EffectiveFrom = now, ExpiresAt = now.AddHours(1), OrderId = order.Id, OrderVersion = 2 };
         ca.AddRange(actual, ticket, new PlannedStopTime { OperatorId = a, PlannedTripId = trip.Id, StationId = station.Id, SequenceNo = 1, PlannedArrivalAt = now, PlannedDepartureAt = now.AddMinutes(1) });
         await ca.SaveChangesAsync();
+        // Missing values must be available on the same tracked instance immediately after INSERT.
+        var destination = new Station { OperatorId = a, Code = suffix + "-dst", Name = "Synthetic destination" };
+        var singleProduct = new TicketProduct { OperatorId = a, Code = suffix + "-single", Name = "Synthetic single trip" };
+        var singleOrder = new Order { OperatorId = a, OrderCode = suffix + "-single", Channel = "ADMIN", FarePolicyVersionId = fare.Id, ServiceDate = day, OrderVersion = 3, SubtotalMinor = 100, TotalMinor = 100 };
+        ca.AddRange(destination, singleProduct, singleOrder);
+        await ca.SaveChangesAsync();
+        var singleItem = new OrderItem { OperatorId = a, OrderId = singleOrder.Id, TicketProductId = singleProduct.Id, PlannedTripId = trip.Id, OriginStationId = station.Id, DestinationStationId = destination.Id, UnitPriceMinor = 100, LineTotalMinor = 100 };
+        ca.Add(singleItem);
+        await ca.SaveChangesAsync();
+        var generatedTicket = new Ticket { OperatorId = a, TicketCode = suffix + "-generated", OrderItemId = singleItem.Id, TicketProductId = singleProduct.Id, FarePolicyVersionId = fare.Id, SequenceNo = 1 };
+        Assert.Null(generatedTicket.EffectiveFrom);
+        Assert.Null(generatedTicket.ExpiresAt);
+        ca.Add(generatedTicket);
+        await ca.SaveChangesAsync();
+        // Midnight in Asia/Ho_Chi_Minh is 17:00 UTC on the preceding date.
+        var expectedStart = new DateTime(2026, 11, 15, 17, 0, 0, DateTimeKind.Utc);
+        var expectedEnd = expectedStart.AddDays(1);
+        Assert.Equal(expectedStart, generatedTicket.EffectiveFrom);
+        Assert.Equal(expectedEnd, generatedTicket.ExpiresAt);
+        Assert.Equal(singleOrder.Id, generatedTicket.OrderId);
+        Assert.Equal(3, generatedTicket.OrderVersion);
+        Assert.Equal(day, generatedTicket.ServiceDate);
+        Assert.Equal(station.Id, generatedTicket.OriginStationId);
+        Assert.Equal(destination.Id, generatedTicket.DestinationStationId);
+        Assert.Equal(expectedEnd, ca.Entry(generatedTicket).Property(t => t.ExpiresAt).OriginalValue);
+        Assert.True(generatedTicket.IsValidAt(expectedStart));
+        Assert.False(generatedTicket.IsValidAt(expectedStart.AddTicks(-10)));
+        Assert.False(generatedTicket.IsValidAt(expectedEnd));
+        Assert.False(generatedTicket.IsValidAt(expectedEnd.AddDays(4)));
+        var trackedTicket = await ca.Tickets.SingleAsync(t => t.Id == generatedTicket.Id);
+        Assert.Same(generatedTicket, trackedTicket);
+        Assert.False(trackedTicket.IsValidAt(expectedEnd.AddDays(4)));
+        // Existing explicit bounds on the DAY ticket must still be preserved.
+        Assert.Equal(now, ticket.EffectiveFrom);
+        Assert.Equal(now.AddHours(1), ticket.ExpiresAt);
         var stop = new ActualStopTime { OperatorId = a, ActualTripId = actual.Id, StationId = station.Id, SequenceNo = 1, Source = "OCC_IMPORT", ActualArrivalAt = now, ActualDepartureAt = now.AddMinutes(2) };
         ca.AddRange(stop, new TicketCredential { OperatorId = a, TicketId = ticket.Id, CredentialType = "QR", TokenHash = suffix + suffix });
         await ca.SaveChangesAsync();
@@ -156,12 +191,12 @@ public class PostgresLiveIntegrationTests
         // Both integer columns permit zero; EF must not substitute their non-zero DB defaults.
         var zeroStation = await ca.Stations.SingleAsync(x => x.Id == station.Id);
         zeroStation.MinTransferSeconds = 0;
-        var zeroTravel = await ca.LineStations.SingleAsync(x => x.LineId == line.Id);
+        var zeroTravel = await ca.LineStations.SingleAsync(x => x.LineId == line.Id && x.StationId == station.Id);
         zeroTravel.TravelTimeSeconds = 0;
         await ca.SaveChangesAsync();
         ca.ChangeTracker.Clear();
         Assert.Equal(0, (await ca.Stations.SingleAsync(x => x.Id == station.Id)).MinTransferSeconds);
-        Assert.Equal(0, (await ca.LineStations.SingleAsync(x => x.LineId == line.Id)).TravelTimeSeconds);
+        Assert.Equal(0, (await ca.LineStations.SingleAsync(x => x.LineId == line.Id && x.StationId == station.Id)).TravelTimeSeconds);
         // Forging the local operator must not update/delete another operator's row by PK.
         var foreignLine = await cb.Lines.SingleAsync(x => x.Code == suffix);
         ca.ChangeTracker.Clear();

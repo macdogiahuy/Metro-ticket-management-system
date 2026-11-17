@@ -101,6 +101,10 @@ public class ModelMappingTests
                      typeof(Metro.Domain.Common.IOperatorScoped).IsAssignableFrom(e.ClrType) ||
                      typeof(Metro.Domain.Common.IOptionalOperatorScoped).IsAssignableFrom(e.ClrType)))
             Assert.True(entity.FindProperty("OperatorId")!.IsConcurrencyToken);
+        var ticket = context.Model.FindEntityType(typeof(Ticket))!;
+        foreach (var name in new[] { nameof(Ticket.EffectiveFrom), nameof(Ticket.ExpiresAt), nameof(Ticket.OrderId),
+                     nameof(Ticket.OrderVersion), nameof(Ticket.ServiceDate), nameof(Ticket.OriginStationId), nameof(Ticket.DestinationStationId) })
+            Assert.Equal(Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAdd, ticket.FindProperty(name)!.ValueGenerated);
         var stop = context.Model.FindEntityType(typeof(ActualStopTime))!;
         Assert.Null(stop.FindProperty("DwellSeconds"));
         Assert.Null(stop.FindProperty("Irregularity"));
