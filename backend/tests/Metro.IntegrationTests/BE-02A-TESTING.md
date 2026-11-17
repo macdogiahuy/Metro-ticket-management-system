@@ -31,11 +31,15 @@ Without test configuration, optional PostgreSQL facts have an explicit Skip
 reason. A configured connection, wrong target, schema or constraint error
 fails; no application connection environment variable is used as fallback.
 A skipped run is not PostgreSQL acceptance evidence. Backend CI uses a dedicated
-PostgreSQL 17 service database named `metro_be02a_test_ci`, checks deploy.sql
+PostgreSQL 17 container database named `metro_be02a_test_ci`, checks deploy.sql
 against migration sources, deploys SQL 001-006, runs 09_verify.sql, and sets all
 three METRO_TEST_POSTGRES_* variables including REQUIRED=1 before running the
 Release suite. Schema, connection and acceptance errors therefore fail CI.
-The service credentials are disposable CI fixture values, not application secrets.
+CI generates a cryptographically random password for each run and registers it
+with GitHub log masking before use. psql and Npgsql read it from a temporary
+PGPASSFILE with mode 0600; connection strings contain no password. The container
+binds only to 127.0.0.1. An always-run cleanup step removes the password file and
+container. No fixed CI password or application credential is committed.
 
 The live suite covers all 27 mapped core tables plus Identity users, reads
 fresh rows after clearing tracking, checks changed fields/JSON/arrays, PK,

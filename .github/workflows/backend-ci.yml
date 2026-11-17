@@ -9,20 +9,6 @@ on:
 jobs:
   backend-build:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: metro_be02a_test_ci
-          POSTGRES_USER: metro_user
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U metro_user -d metro_be02a_test_ci"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -40,20 +26,52 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y postgresql-client
           fi
+      - name: Start isolated PostgreSQL with a per-run password
+        shell: bash
+        run: |
+          ci_password="$(openssl rand -hex 32)"
+          echo "::add-mask::$ci_password"
+          umask 077
+          printf '127.0.0.1:5432:metro_be02a_test_ci:metro_user:%s\n' "$ci_password" > "$RUNNER_TEMP/metro-be02a.pgpass"
+          echo "PGPASSFILE=$RUNNER_TEMP/metro-be02a.pgpass" >> "$GITHUB_ENV"
+          POSTGRES_PASSWORD="$ci_password" docker run --detach --name metro-be02a-postgres \
+            --env POSTGRES_PASSWORD \
+            --env POSTGRES_USER=metro_user \
+            --env POSTGRES_DB=metro_be02a_test_ci \
+            --publish 127.0.0.1:5432:5432 \
+            --health-cmd "pg_isready -h 127.0.0.1 -U metro_user -d metro_be02a_test_ci" \
+            --health-interval 5s --health-timeout 5s --health-retries 12 \
+            postgres:17-alpine
+          unset ci_password
+          for attempt in {1..30}; do
+            status="$(docker inspect --format '{{.State.Health.Status}}' metro-be02a-postgres)"
+            if [ "$status" = healthy ]; then
+              exit 0
+            fi
+            if [ "$status" = unhealthy ]; then
+              echo "Disposable PostgreSQL health check failed."
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "Disposable PostgreSQL startup timed out."
+          exit 1
       - name: Check SQL deployment package
         run: python3 infra/database/build_deploy.py --check
       - name: Deploy and verify test schema
-        env:
-          # Credential belongs only to the disposable CI service above.
-          PGPASSWORD: postgres
         run: |
-          psql -X -h localhost -p 5432 -U metro_user -d metro_be02a_test_ci -v ON_ERROR_STOP=1 -f infra/database/deploy.sql
-          psql -X -h localhost -p 5432 -U metro_user -d metro_be02a_test_ci -v ON_ERROR_STOP=1 -f infra/database/scripts/09_verify.sql
+          psql -X -h 127.0.0.1 -p 5432 -U metro_user -d metro_be02a_test_ci -v ON_ERROR_STOP=1 -f infra/database/deploy.sql
+          psql -X -h 127.0.0.1 -p 5432 -U metro_user -d metro_be02a_test_ci -v ON_ERROR_STOP=1 -f infra/database/scripts/09_verify.sql
       - name: Test
         working-directory: backend
         run: dotnet test Metro.sln --configuration Release --no-build --no-restore
         env:
-          ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=metro_be02a_test_ci;Username=metro_user;Password=postgres
-          METRO_TEST_POSTGRES_CONNECTION_STRING: Host=localhost;Port=5432;Database=metro_be02a_test_ci;Username=metro_user;Password=postgres
+          ConnectionStrings__DefaultConnection: Host=127.0.0.1;Port=5432;Database=metro_be02a_test_ci;Username=metro_user
+          METRO_TEST_POSTGRES_CONNECTION_STRING: Host=127.0.0.1;Port=5432;Database=metro_be02a_test_ci;Username=metro_user
           METRO_TEST_POSTGRES_DATABASE: metro_be02a_test_ci
           METRO_TEST_POSTGRES_REQUIRED: '1'
+      - name: Clean up disposable PostgreSQL credentials and container
+        if: always()
+        run: |
+          docker rm --force metro-be02a-postgres >/dev/null 2>&1 || true
+          rm -f "$RUNNER_TEMP/metro-be02a.pgpass"
