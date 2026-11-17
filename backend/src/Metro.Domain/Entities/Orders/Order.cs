@@ -31,6 +31,11 @@ public class Order : IOperatorScoped
     public DateTime? CancelledAt { get; set; }
     public string? CancelledByUserId { get; set; }
     public string? CancellationReason { get; set; }
+    public DateOnly? ServiceDate { get; set; }
+    public DateTime? FreeConfirmedAt { get; set; }
+    public int OrderVersion { get; set; } = 1;
+    public string? EligibilityGroup { get; set; }
+    public DateOnly? AgeReferenceDate { get; set; }
     public Guid? ConsentId { get; set; }
     public Guid CorrelationId { get; set; } = Guid.NewGuid();
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -45,8 +50,9 @@ public class Order : IOperatorScoped
     public bool IsHoldExpired(DateTime timestampUtc)
     {
         if (!HoldExpiresAt.HasValue) return false;
-        var utc = timestampUtc.Kind == DateTimeKind.Utc ? timestampUtc : timestampUtc.ToUniversalTime();
+        var utc = TimeWindow.NormalizeToUtc(timestampUtc);
         // EndExclusive: when timestampUtc >= HoldExpiresAt, hold has expired.
         return utc >= HoldExpiresAt.Value;
     }
 }
+

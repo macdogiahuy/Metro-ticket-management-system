@@ -103,6 +103,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(e => e.CancelledAt).HasColumnName("cancelled_at");
         builder.Property(e => e.CancelledByUserId).HasColumnName("cancelled_by_user_id");
         builder.Property(e => e.CancellationReason).HasColumnName("cancellation_reason");
+        builder.Property(e => e.ServiceDate).HasColumnName("service_date");
+        builder.Property(e => e.FreeConfirmedAt).HasColumnName("free_confirmed_at");
+        builder.Property(e => e.OrderVersion).HasColumnName("order_version").HasDefaultValue(1).IsRequired();
+        builder.Property(e => e.EligibilityGroup).HasColumnName("eligibility_group").HasMaxLength(50);
+        builder.Property(e => e.AgeReferenceDate).HasColumnName("age_reference_date");
         builder.Property(e => e.ConsentId).HasColumnName("consent_id");
         builder.Property(e => e.CorrelationId).HasColumnName("correlation_id").HasDefaultValueSql("gen_random_uuid()").IsRequired();
         builder.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("clock_timestamp()").IsRequired();
@@ -249,3 +254,4 @@ public class OrderVersionConfiguration : IEntityTypeConfiguration<OrderVersion>
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
+

@@ -232,4 +232,50 @@ public class EndExclusiveTests
         assignment.RevokedAt = midPoint.AddDays(-1);
         Assert.False(assignment.IsActiveAt(midPoint));
     }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Ticket_Null_Bounds_Are_Independent(bool hasStart, bool hasEnd)
+    {
+        var start = new DateTime(2026, 11, 16, 8, 0, 0, DateTimeKind.Utc);
+        var end = start.AddHours(2);
+        var ticket = new Ticket { Status = "ACTIVE", EffectiveFrom = hasStart ? start : null, ExpiresAt = hasEnd ? end : null };
+        Assert.True(ticket.IsValidAt(start));
+        Assert.Equal(!hasStart, ticket.IsValidAt(start.AddTicks(-1)));
+        Assert.Equal(!hasEnd, ticket.IsValidAt(end));
+        var after = new Ticket { EffectiveFrom = end, ExpiresAt = end.AddHours(1) };
+        Assert.Equal(!hasEnd, ticket.OverlapsValidity(after));
+        Assert.Equal(!hasEnd, after.OverlapsValidity(ticket));
+    }
+
+    [Fact]
+    public void Calendar_Empty_And_Abutting_Date_Ranges_Do_Not_Overlap()
+    {
+        var day = new DateOnly(2026, 11, 16);
+        var empty = new DateWindow(day, day);
+        var surrounding = new DateWindow(day.AddDays(-1), day.AddDays(1));
+        Assert.False(empty.Contains(day));
+        Assert.False(empty.Overlaps(surrounding));
+        Assert.False(surrounding.Overlaps(empty));
+        Assert.False(new DateWindow(day.AddDays(-1), day).Overlaps(new DateWindow(day)));
+        Assert.Throws<ArgumentException>(() => new DateWindow(day, day.AddDays(-1)));
+        Assert.False(new ServiceCalendar { Status = "PUBLISHED", EffectiveFrom = day, EffectiveTo = day }.IsEffectiveOn(day));
+    }
+
+    [Fact]
+    public void Utc_Helper_Rejects_Unspecified_At_Every_Input()
+    {
+        var utc = new DateTime(2026, 11, 16, 8, 0, 0, DateTimeKind.Utc);
+        var unspecified = DateTime.SpecifyKind(utc, DateTimeKind.Unspecified);
+        Assert.Throws<ArgumentException>(() => new TimeWindow(unspecified));
+        Assert.Throws<ArgumentException>(() => new TimeWindow(utc, unspecified));
+        Assert.Throws<ArgumentException>(() => new TimeWindow(null, null).Contains(unspecified));
+        Assert.Equal(utc, new TimeWindow(utc.ToLocalTime()).StartUtc);
+        Assert.True(new TimeWindow(utc, utc.AddHours(1)).Contains(utc.ToLocalTime()));
+        Assert.Throws<ArgumentException>(() => new Order { HoldExpiresAt = utc }.IsHoldExpired(unspecified));
+    }
 }
+

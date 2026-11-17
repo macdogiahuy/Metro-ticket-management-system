@@ -12,7 +12,7 @@ public class ModelMappingTests
     private static ApplicationDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .UseNpgsql("Host=localhost;Database=metro_model_test")
             .Options;
 
         return new ApplicationDbContext(options);
@@ -88,4 +88,37 @@ public class ModelMappingTests
         Assert.DoesNotContain("capacity_holds", tableNames);
         Assert.DoesNotContain("capacity_hold_segments", tableNames);
     }
+
+    [Fact]
+    public void Npgsql_Model_Has_No_Shadow_Foreign_Keys_And_Maps_Changed_Columns()
+    {
+        using var context = CreateContext();
+        Assert.DoesNotContain(context.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys())
+            .SelectMany(f => f.Properties), p => p.IsShadowProperty());
+        Assert.Equal(typeof(string), context.Model.FindEntityType(typeof(Microsoft.AspNetCore.Identity.IdentityUser))!
+            .FindPrimaryKey()!.Properties.Single().ClrType);
+        foreach (var entity in context.Model.GetEntityTypes().Where(e =>
+                     typeof(Metro.Domain.Common.IOperatorScoped).IsAssignableFrom(e.ClrType) ||
+                     typeof(Metro.Domain.Common.IOptionalOperatorScoped).IsAssignableFrom(e.ClrType)))
+            Assert.True(entity.FindProperty("OperatorId")!.IsConcurrencyToken);
+        var stop = context.Model.FindEntityType(typeof(ActualStopTime))!;
+        Assert.Null(stop.FindProperty("DwellSeconds"));
+        Assert.Null(stop.FindProperty("Irregularity"));
+        Assert.False(stop.FindProperty(nameof(ActualStopTime.Source))!.IsNullable);
+        Assert.Contains("source", context.ActualStopTimes.ToQueryString());
+        Assert.DoesNotContain("dwell_seconds", context.ActualStopTimes.ToQueryString());
+        Assert.Contains("order_version", context.Orders.ToQueryString());
+        Assert.Contains("boarding_status", context.PlannedTrips.ToQueryString());
+        var trip = context.Model.FindEntityType(typeof(PlannedTrip))!;
+        Assert.True(trip.FindProperty(nameof(PlannedTrip.LoadProfileId))!.IsNullable);
+        Assert.DoesNotContain(trip.GetNavigations(), n => n.TargetEntityType.GetTableName() == "capacity_profiles");
+        Assert.Equal("OPEN", trip.FindProperty(nameof(PlannedTrip.BoardingStatus))!.GetDefaultValue());
+        Assert.Equal(1, context.Model.FindEntityType(typeof(Order))!
+            .FindProperty(nameof(Order.OrderVersion))!.GetDefaultValue());
+        Assert.Equal(300, context.Model.FindEntityType(typeof(Station))!
+            .FindProperty(nameof(Station.MinTransferSeconds))!.GetDefaultValue());
+        Assert.Equal(180, context.Model.FindEntityType(typeof(LineStation))!
+            .FindProperty(nameof(LineStation.TravelTimeSeconds))!.GetDefaultValue());
+    }
 }
+

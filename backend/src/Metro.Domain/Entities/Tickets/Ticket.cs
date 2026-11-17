@@ -47,14 +47,10 @@ public class Ticket : IOperatorScoped
     public ICollection<TicketCredential> Credentials { get; set; } = new List<TicketCredential>();
 
     /// <summary>
-    /// Returns the [EffectiveFrom, ExpiresAt) half-open UTC interval if both or lower bound are set.
+    /// Returns [EffectiveFrom, ExpiresAt); each NULL bound is unbounded.
     /// EndExclusive semantics: lower bound is inclusive, upper bound is exclusive.
     /// </summary>
-    public TimeWindow? GetValidityWindow()
-    {
-        if (!EffectiveFrom.HasValue) return null;
-        return new TimeWindow(EffectiveFrom.Value, ExpiresAt);
-    }
+    public TimeWindow GetValidityWindow() => new(EffectiveFrom, ExpiresAt);
 
     /// <summary>
     /// Checks validity at the specified UTC instant.
@@ -67,12 +63,7 @@ public class Ticket : IOperatorScoped
             return false;
         }
 
-        if (!EffectiveFrom.HasValue)
-        {
-            return true;
-        }
-
-        return GetValidityWindow()!.Value.Contains(timestampUtc);
+        return GetValidityWindow().Contains(timestampUtc);
     }
 
     /// <summary>
@@ -84,12 +75,7 @@ public class Ticket : IOperatorScoped
         var thisWindow = GetValidityWindow();
         var otherWindow = other.GetValidityWindow();
 
-        if (!thisWindow.HasValue || !otherWindow.HasValue)
-        {
-            // Open-ended window overlaps with anything
-            return true;
-        }
-
-        return thisWindow.Value.Overlaps(otherWindow.Value);
+        return thisWindow.Overlaps(otherWindow);
     }
 }
+

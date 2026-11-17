@@ -11,9 +11,9 @@ public class ActualStopTime : IOperatorScoped
     public short SequenceNo { get; set; }
     public DateTime? ActualArrivalAt { get; set; }
     public DateTime? ActualDepartureAt { get; set; }
-    public int? DwellSeconds { get; set; }
-    public string? Irregularity { get; set; }
+    public string Source { get; set; } = "MANUAL"; // MANUAL, OCC_IMPORT, SIMULATION
 
     public ActualTrip ActualTrip { get; set; } = null!;
     public Station Station { get; set; } = null!;
 }
+

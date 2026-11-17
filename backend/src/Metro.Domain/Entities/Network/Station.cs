@@ -12,6 +12,7 @@ public class Station : IOperatorScoped
     public string StationType { get; set; } = "ELEVATED"; // AT_GRADE, ELEVATED, UNDERGROUND, INTERCHANGE
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
+    public int MinTransferSeconds { get; set; } = 300;
     public string Status { get; set; } = "ACTIVE"; // PLANNED, ACTIVE, SUSPENDED, CLOSED
     public string? CreatedByUserId { get; set; }
     public string? UpdatedByUserId { get; set; }
@@ -22,3 +23,4 @@ public class Station : IOperatorScoped
     public ICollection<LineStation> LineStations { get; set; } = new List<LineStation>();
     public ICollection<PlannedStopTime> PlannedStopTimes { get; set; } = new List<PlannedStopTime>();
 }
+

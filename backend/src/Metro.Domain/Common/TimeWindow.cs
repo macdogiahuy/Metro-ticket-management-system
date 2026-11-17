@@ -7,18 +7,18 @@ namespace Metro.Domain.Common;
 /// </summary>
 public readonly record struct TimeWindow
 {
-    public DateTime StartUtc { get; }
+    public DateTime? StartUtc { get; }
     public DateTime? EndExclusiveUtc { get; }
 
-    public TimeWindow(DateTime startUtc, DateTime? endExclusiveUtc = null)
+    public TimeWindow(DateTime? startUtc, DateTime? endExclusiveUtc = null)
     {
-        var start = NormalizeToUtc(startUtc);
+        DateTime? start = startUtc.HasValue ? NormalizeToUtc(startUtc.Value) : null;
         DateTime? end = null;
 
         if (endExclusiveUtc.HasValue)
         {
             var normalizedEnd = NormalizeToUtc(endExclusiveUtc.Value);
-            if (normalizedEnd <= start)
+            if (start.HasValue && normalizedEnd <= start.Value)
             {
                 throw new ArgumentException(
                     $"EndExclusiveUtc ({normalizedEnd:O}) must be strictly greater than StartUtc ({start:O}).",
@@ -31,13 +31,13 @@ public readonly record struct TimeWindow
         EndExclusiveUtc = end;
     }
 
-    private static DateTime NormalizeToUtc(DateTime dt)
+    public static DateTime NormalizeToUtc(DateTime dt)
     {
         return dt.Kind switch
         {
             DateTimeKind.Utc => dt,
             DateTimeKind.Local => dt.ToUniversalTime(),
-            _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc)
+            _ => throw new ArgumentException("A timestamp must specify UTC or Local kind.", nameof(dt))
         };
     }
 
@@ -47,7 +47,7 @@ public readonly record struct TimeWindow
     public bool Contains(DateTime timestampUtc)
     {
         var utc = NormalizeToUtc(timestampUtc);
-        return utc >= StartUtc && (!EndExclusiveUtc.HasValue || utc < EndExclusiveUtc.Value);
+        return (!StartUtc.HasValue || utc >= StartUtc.Value) && (!EndExclusiveUtc.HasValue || utc < EndExclusiveUtc.Value);
     }
 
     /// <summary>
@@ -56,8 +56,9 @@ public readonly record struct TimeWindow
     /// </summary>
     public bool Overlaps(TimeWindow other)
     {
-        var startsBeforeOtherEnds = !other.EndExclusiveUtc.HasValue || StartUtc < other.EndExclusiveUtc.Value;
-        var otherStartsBeforeEnds = !EndExclusiveUtc.HasValue || other.StartUtc < EndExclusiveUtc.Value;
+        var startsBeforeOtherEnds = !other.EndExclusiveUtc.HasValue || !StartUtc.HasValue || StartUtc.Value < other.EndExclusiveUtc.Value;
+        var otherStartsBeforeEnds = !EndExclusiveUtc.HasValue || !other.StartUtc.HasValue || other.StartUtc.Value < EndExclusiveUtc.Value;
         return startsBeforeOtherEnds && otherStartsBeforeEnds;
     }
 }
+

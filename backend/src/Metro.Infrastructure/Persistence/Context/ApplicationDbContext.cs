@@ -64,6 +64,32 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketCredential> TicketCredentials => Set<TicketCredential>();
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        ValidateOperatorWrites();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        ValidateOperatorWrites();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void ValidateOperatorWrites()
+    {
+        foreach (var entry in ChangeTracker.Entries().Where(e =>
+                     e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+        {
+            if (entry.Entity is not IOperatorScoped && entry.Entity is not IOptionalOperatorScoped) continue;
+            var property = entry.Property("OperatorId");
+            if (CurrentOperatorId is null || CurrentOperatorId == Guid.Empty ||
+                !Equals(property.CurrentValue, CurrentOperatorId) ||
+                (entry.State != EntityState.Added && !Equals(property.OriginalValue, CurrentOperatorId)))
+                throw new InvalidOperationException("The current operator cannot write this scoped entity.");
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -100,12 +126,14 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>
     private void ConfigureOperatorFilter<TEntity>(ModelBuilder builder)
         where TEntity : class, IOperatorScoped
     {
-        builder.Entity<TEntity>().HasQueryFilter(e => CurrentOperatorId == null || e.OperatorId == CurrentOperatorId);
+        builder.Entity<TEntity>().Property(e => e.OperatorId).IsConcurrencyToken();
+        builder.Entity<TEntity>().HasQueryFilter(e => CurrentOperatorId != null && CurrentOperatorId != Guid.Empty && e.OperatorId == CurrentOperatorId);
     }
 
     private void ConfigureOptionalOperatorFilter<TEntity>(ModelBuilder builder)
         where TEntity : class, IOptionalOperatorScoped
     {
-        builder.Entity<TEntity>().HasQueryFilter(e => CurrentOperatorId == null || e.OperatorId == CurrentOperatorId);
+        builder.Entity<TEntity>().Property(e => e.OperatorId).IsConcurrencyToken();
+        builder.Entity<TEntity>().HasQueryFilter(e => CurrentOperatorId != null && CurrentOperatorId != Guid.Empty && e.OperatorId == CurrentOperatorId);
     }
 }

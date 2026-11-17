@@ -14,6 +14,9 @@ public class PlannedTrip : IOperatorScoped
     public DateTime PlannedStartAt { get; set; }
     public DateTime PlannedEndAt { get; set; }
     public string Status { get; set; } = "PLANNED"; // PLANNED, READY, IN_SERVICE, COMPLETED, DELAYED, CANCELLED, DISRUPTED
+    public Guid? LoadProfileId { get; set; }
+    public Guid? BoardingStationId { get; set; }
+    public string BoardingStatus { get; set; } = "OPEN";
     public string? CancellationReason { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -25,3 +28,4 @@ public class PlannedTrip : IOperatorScoped
 
     public TimeWindow GetPlannedWindow() => new(PlannedStartAt, PlannedEndAt);
 }
+

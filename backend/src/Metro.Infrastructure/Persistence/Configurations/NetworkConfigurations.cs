@@ -41,6 +41,7 @@ public class StationConfiguration : IEntityTypeConfiguration<Station>
         builder.Property(e => e.OperatorId).HasColumnName("operator_id").IsRequired();
         builder.Property(e => e.Code).HasColumnName("code").HasMaxLength(40).IsRequired();
         builder.Property(e => e.Name).HasColumnName("name").IsRequired();
+        builder.Property(e => e.MinTransferSeconds).HasColumnName("min_transfer_seconds").HasDefaultValue(300).HasSentinel(-1).IsRequired();
         builder.Property(e => e.StationType).HasColumnName("station_type").HasDefaultValue("ELEVATED").IsRequired();
         builder.Property(e => e.Latitude).HasColumnName("latitude").HasPrecision(9, 6);
         builder.Property(e => e.Longitude).HasColumnName("longitude").HasPrecision(9, 6);
@@ -72,6 +73,7 @@ public class LineStationConfiguration : IEntityTypeConfiguration<LineStation>
         builder.Property(e => e.StationId).HasColumnName("station_id").IsRequired();
         builder.Property(e => e.Direction).HasColumnName("direction").IsRequired();
         builder.Property(e => e.SequenceNo).HasColumnName("sequence_no").IsRequired();
+        builder.Property(e => e.TravelTimeSeconds).HasColumnName("travel_time_seconds").HasDefaultValue(180).HasSentinel(-1).IsRequired();
         builder.Property(e => e.DistanceFromOriginM).HasColumnName("distance_from_origin_m").IsRequired();
         builder.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("clock_timestamp()").IsRequired();
 
@@ -187,6 +189,9 @@ public class PlannedTripConfiguration : IEntityTypeConfiguration<PlannedTrip>
         builder.Property(e => e.PlannedStartAt).HasColumnName("planned_start_at").IsRequired();
         builder.Property(e => e.PlannedEndAt).HasColumnName("planned_end_at").IsRequired();
         builder.Property(e => e.Status).HasColumnName("status").HasDefaultValue("PLANNED").IsRequired();
+        builder.Property(e => e.LoadProfileId).HasColumnName("load_profile_id");
+        builder.Property(e => e.BoardingStationId).HasColumnName("boarding_station_id");
+        builder.Property(e => e.BoardingStatus).HasColumnName("boarding_status").HasDefaultValue("OPEN").IsRequired();
         builder.Property(e => e.CancellationReason).HasColumnName("cancellation_reason");
         builder.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("clock_timestamp()").IsRequired();
         builder.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("clock_timestamp()").IsRequired();
@@ -203,6 +208,11 @@ public class PlannedTripConfiguration : IEntityTypeConfiguration<PlannedTrip>
             .WithMany(l => l.PlannedTrips)
             .HasForeignKey(e => new { e.OperatorId, e.LineId })
             .HasPrincipalKey(l => new { l.OperatorId, l.Id })
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Station>().WithMany()
+            .HasForeignKey(e => new { e.OperatorId, e.BoardingStationId })
+            .HasPrincipalKey(s => new { s.OperatorId, s.Id })
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(e => new { e.OperatorId, e.ServiceDate, e.TripCode }).IsUnique();
@@ -284,8 +294,7 @@ public class ActualStopTimeConfiguration : IEntityTypeConfiguration<ActualStopTi
         builder.Property(e => e.SequenceNo).HasColumnName("sequence_no").IsRequired();
         builder.Property(e => e.ActualArrivalAt).HasColumnName("actual_arrival_at");
         builder.Property(e => e.ActualDepartureAt).HasColumnName("actual_departure_at");
-        builder.Property(e => e.DwellSeconds).HasColumnName("dwell_seconds");
-        builder.Property(e => e.Irregularity).HasColumnName("irregularity");
+        builder.Property(e => e.Source).HasColumnName("source").IsRequired();
 
         builder.HasOne(e => e.ActualTrip)
             .WithMany(a => a.StopTimes)
@@ -300,3 +309,4 @@ public class ActualStopTimeConfiguration : IEntityTypeConfiguration<ActualStopTi
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
+
