@@ -77,7 +77,7 @@ public sealed class TicketChangeRequestConfiguration : IEntityTypeConfiguration<
 
         builder.HasIndex(x => new { x.OperatorId, x.RequestCode }).IsUnique();
         builder.HasIndex(x => new { x.OperatorId, x.CorrelationId }).IsUnique();
-        builder.HasIndex(x => new { x.OperatorId, x.TicketId }).HasDatabaseName("uq_ticket_change_open").IsUnique().HasFilter("status IN ('REQUESTED','APPROVED')");
-        builder.HasIndex(x => new { x.OperatorId, x.TicketId }).HasDatabaseName("uq_ticket_change_applied").IsUnique().HasFilter("status = 'APPLIED'");
+        builder.HasIndex(x => new { x.OperatorId, x.TicketId }, "uq_ticket_change_open").HasDatabaseName("uq_ticket_change_open").IsUnique().HasFilter("status IN ('REQUESTED','APPROVED')");
+        builder.HasIndex(x => new { x.OperatorId, x.TicketId }, "uq_ticket_change_applied").HasDatabaseName("uq_ticket_change_applied").IsUnique().HasFilter("status = 'APPLIED'");
     }
 }

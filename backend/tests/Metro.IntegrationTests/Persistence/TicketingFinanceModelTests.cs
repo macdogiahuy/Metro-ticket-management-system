@@ -77,13 +77,27 @@ public class TicketingFinanceModelTests
     [InlineData(typeof(Journey), "uq_ticket_open_journey", "'OPEN'")]
     [InlineData(typeof(TripSuggestion), "uq_trip_suggestions_current", "superseded_at IS NULL")]
     [InlineData(typeof(PurchaseConsent), "uq_purchase_consents_pending", "'REQUESTED'")]
-    [InlineData(typeof(TicketChangeRequest), "uq_ticket_change_applied", "'APPLIED'")]
     public void Critical_partial_unique_indexes_are_preserved(Type entityType, string indexName, string predicate)
     {
         using var db = CreateContext();
         var index = Assert.Single(db.Model.FindEntityType(entityType)!.GetIndexes(), i => i.GetDatabaseName() == indexName);
         Assert.True(index.IsUnique);
         Assert.Contains(predicate, index.GetFilter());
+    }
+
+    [Theory]
+    [InlineData("uq_ticket_change_open", "status IN ('REQUESTED','APPROVED')")]
+    [InlineData("uq_ticket_change_applied", "status = 'APPLIED'")]
+    public void Ticket_change_partial_unique_indexes_keep_distinct_model_metadata(string indexName, string filter)
+    {
+        using var db = CreateContext();
+        var index = Assert.Single(db.Model.FindEntityType(typeof(TicketChangeRequest))!.GetIndexes(),
+            index => index.GetDatabaseName() == indexName);
+
+        Assert.Equal(indexName, index.Name);
+        Assert.True(index.IsUnique);
+        Assert.Equal(new[] { "OperatorId", "TicketId" }, index.Properties.Select(property => property.Name));
+        Assert.Equal(filter, index.GetFilter());
     }
 
     [Fact]
