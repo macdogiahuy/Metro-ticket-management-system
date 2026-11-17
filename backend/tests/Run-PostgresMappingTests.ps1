@@ -39,11 +39,16 @@ try {
 
     $ready = $false
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
-        docker exec $containerName pg_isready -U metro_test -d $databaseName *> $null
-        if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+        # The entrypoint's temporary initialization server accepts Unix sockets
+        # before POSTGRES_DB exists. Only the final server accepts TCP connections.
+        docker exec $containerName pg_isready -h 127.0.0.1 -U metro_test -d $databaseName *> $null
+        if ($LASTEXITCODE -eq 0) {
+            docker exec $containerName psql -U metro_test -d $databaseName -Atqc 'SELECT 1' *> $null
+            if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+        }
         Start-Sleep -Seconds 1
     }
-    if (-not $ready) { throw 'PostgreSQL did not become ready within 60 seconds.' }
+    if (-not $ready) { throw 'PostgreSQL did not finish initialization with a usable test database within 60 seconds.' }
 
     $deployment = Join-Path $repoRoot 'infra/database/deploy.sql'
     docker cp $deployment "${containerName}:/tmp/metro-deploy.sql"

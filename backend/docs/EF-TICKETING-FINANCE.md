@@ -129,6 +129,9 @@ và bàn giao đồ một lần.
 - Mật khẩu container là giá trị ngẫu nhiên cho từng lần chạy, được mask trong
   GitHub Actions, truyền qua môi trường cho Docker và không lưu vào source.
   Container chỉ bind localhost, không có volume, được xóa trong `finally`.
+- Chỉ deploy SQL sau khi server PostgreSQL cuối cùng nhận kết nối TCP và truy
+  vấn được database test. Không dùng readiness qua Unix socket của server tạm
+  trong entrypoint vì database có thể chưa được tạo.
 - Regression BE-02A kiểm tra ngay entity vé đang tracking sau INSERT: các
   trường do trigger sinh phải được đọc lại và `IsValidAt` phải trả false tại
   hoặc sau thời điểm hết hạn. Không gọi `ChangeTracker.Clear()` để che lỗi này.
