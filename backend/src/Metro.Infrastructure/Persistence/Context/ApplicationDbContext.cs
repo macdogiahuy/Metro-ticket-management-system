@@ -1,3 +1,8 @@
+using Metro.Domain.Entities.Finance;
+using Metro.Domain.Entities.LostProperty;
+using Metro.Domain.Entities.Passengers;
+using Metro.Domain.Entities.Ticketing;
+using Metro.Infrastructure.Persistence.Mapping;
 using System.Reflection;
 using Metro.Application.Abstractions.MultiTenancy;
 using Metro.Domain.Common;
@@ -64,6 +69,24 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketCredential> TicketCredentials => Set<TicketCredential>();
 
+    // Ticketing and finance extensions share the BE-02A core entities.
+    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PaymentEvent> PaymentEvents => Set<PaymentEvent>();
+    public DbSet<RefundRequest> RefundRequests => Set<RefundRequest>();
+    public DbSet<RefundTransaction> RefundTransactions => Set<RefundTransaction>();
+    public DbSet<RefundAttempt> RefundAttempts => Set<RefundAttempt>();
+    public DbSet<RefundPayoutRevision> RefundPayoutRevisions => Set<RefundPayoutRevision>();
+    public DbSet<Journey> Journeys => Set<Journey>();
+    public DbSet<AfcEvent> AfcEvents => Set<AfcEvent>();
+    public DbSet<TripSuggestion> TripSuggestions => Set<TripSuggestion>();
+    public DbSet<PurchaseConsent> PurchaseConsents => Set<PurchaseConsent>();
+    public DbSet<GuardianLink> GuardianLinks => Set<GuardianLink>();
+    public DbSet<TicketChangeRequest> TicketChangeRequests => Set<TicketChangeRequest>();
+    public DbSet<LostReport> LostReports => Set<LostReport>();
+    public DbSet<FoundItem> FoundItems => Set<FoundItem>();
+    public DbSet<LostItemClaim> LostItemClaims => Set<LostItemClaim>();
+    public DbSet<LostItemHandover> LostItemHandovers => Set<LostItemHandover>();
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         ValidateOperatorWrites();
@@ -93,6 +116,8 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<IdentityUser>().ToTable("AspNetUsers", "public");
+        ExternalReferences.Configure(builder);
 
         // Apply entity configurations from current assembly
         builder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);

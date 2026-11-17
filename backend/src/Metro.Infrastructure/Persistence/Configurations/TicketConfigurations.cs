@@ -96,13 +96,13 @@ public class TicketCredentialConfiguration : IEntityTypeConfiguration<TicketCred
 {
     public void Configure(EntityTypeBuilder<TicketCredential> builder)
     {
-        builder.ToTable("ticket_credentials", "metro");
+        builder.ToTable("ticket_credentials", "metro", table => table.ExcludeFromMigrations());
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
         builder.Property(e => e.OperatorId).HasColumnName("operator_id").IsRequired();
         builder.Property(e => e.TicketId).HasColumnName("ticket_id").IsRequired();
         builder.Property(e => e.CredentialType).HasColumnName("credential_type").IsRequired();
-        builder.Property(e => e.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
+        builder.Property(e => e.TokenHash).HasColumnName("token_hash").HasColumnType("char(64)").HasMaxLength(64).IsFixedLength().IsRequired();
         builder.Property(e => e.TokenLast4).HasColumnName("token_last4").HasMaxLength(4);
         builder.Property(e => e.Status).HasColumnName("status").HasDefaultValue("ACTIVE").IsRequired();
         builder.Property(e => e.IssuedAt).HasColumnName("issued_at").HasDefaultValueSql("clock_timestamp()").IsRequired();
@@ -116,12 +116,12 @@ public class TicketCredentialConfiguration : IEntityTypeConfiguration<TicketCred
             .WithMany(t => t.Credentials)
             .HasForeignKey(e => new { e.OperatorId, e.TicketId })
             .HasPrincipalKey(t => new { t.OperatorId, t.Id })
-            .OnDelete(DeleteBehavior.Restrict);
+            .OnDelete(DeleteBehavior.NoAction);
 
         builder.HasOne(e => e.ReplacedBy)
             .WithMany()
             .HasForeignKey(e => new { e.OperatorId, e.ReplacedById })
             .HasPrincipalKey(c => new { c.OperatorId, c.Id })
-            .OnDelete(DeleteBehavior.Restrict);
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }
