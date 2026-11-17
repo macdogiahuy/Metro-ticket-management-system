@@ -37,7 +37,7 @@ hoặc sửa migration đã áp dụng.
   mapping. Các use case tiếp theo triển khai trong Application qua abstraction
   cần thiết; Infrastructure thực hiện truy cập dữ liệu.
 
-BE-02B hiện lấy nền từ `feature/be-02a-ef-core-mapping` tại commit `0b429e1` (bao gồm bản sửa trigger-generated ticket `3a458a9`).
+BE-02B hiện lấy nền từ `feature/be-02a-ef-core-mapping` tại commit `c5e7259` (bao gồm bản sửa trigger-generated ticket `3a458a9`).
 Các FK tới identity, network, orders, order_versions và tickets dùng trực tiếp
 entity/configuration BE-02A. `Persistence/Mapping/ExternalReferences.cs` chỉ còn
 hai shared type chứa khóa cho `incidents` và `cars`, thuộc phạm vi khác.
