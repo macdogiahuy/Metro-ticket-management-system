@@ -1,6 +1,8 @@
+using Metro.Application.Abstractions.MultiTenancy;
 using Metro.Application.Abstractions.Storage;
 using Metro.Infrastructure.Configuration;
 using Metro.Infrastructure.Persistence.Context;
+using Metro.Infrastructure.Persistence.MultiTenancy;
 using Metro.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -16,6 +18,8 @@ public static class DependencyInjection
         var connectionString = NeonConnectionString.Resolve(
             configuration["DATABASE_URL"],
             configuration.GetConnectionString("DefaultConnection"));
+
+        services.AddScoped<IOperatorContext, OperatorContext>();
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString, npgsql => npgsql.EnableRetryOnFailure(3)));
