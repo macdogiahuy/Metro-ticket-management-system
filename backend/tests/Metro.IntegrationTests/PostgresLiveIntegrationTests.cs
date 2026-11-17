@@ -156,12 +156,12 @@ public class PostgresLiveIntegrationTests
         // Both integer columns permit zero; EF must not substitute their non-zero DB defaults.
         var zeroStation = await ca.Stations.SingleAsync(x => x.Id == station.Id);
         zeroStation.MinTransferSeconds = 0;
-        var zeroTravel = await ca.LineStations.SingleAsync(x => x.LineId == line.Id);
+        var zeroTravel = await ca.LineStations.SingleAsync(x => x.LineId == line.Id && x.StationId == station.Id);
         zeroTravel.TravelTimeSeconds = 0;
         await ca.SaveChangesAsync();
         ca.ChangeTracker.Clear();
         Assert.Equal(0, (await ca.Stations.SingleAsync(x => x.Id == station.Id)).MinTransferSeconds);
-        Assert.Equal(0, (await ca.LineStations.SingleAsync(x => x.LineId == line.Id)).TravelTimeSeconds);
+        Assert.Equal(0, (await ca.LineStations.SingleAsync(x => x.LineId == line.Id && x.StationId == station.Id)).TravelTimeSeconds);
         // Forging the local operator must not update/delete another operator's row by PK.
         var foreignLine = await cb.Lines.SingleAsync(x => x.Code == suffix);
         ca.ChangeTracker.Clear();
