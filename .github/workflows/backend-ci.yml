@@ -13,13 +13,13 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_DB: metro_ticket
+          POSTGRES_DB: metro_be02a_test_ci
           POSTGRES_USER: metro_user
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U metro_user -d metro_ticket"
+          --health-cmd "pg_isready -U metro_user -d metro_be02a_test_ci"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -34,8 +34,26 @@ jobs:
       - name: Build
         working-directory: backend
         run: dotnet build Metro.sln --configuration Release --no-restore
+      - name: Install PostgreSQL client if needed
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Check SQL deployment package
+        run: python3 infra/database/build_deploy.py --check
+      - name: Deploy and verify test schema
+        env:
+          # Credential belongs only to the disposable CI service above.
+          PGPASSWORD: postgres
+        run: |
+          psql -X -h localhost -p 5432 -U metro_user -d metro_be02a_test_ci -v ON_ERROR_STOP=1 -f infra/database/deploy.sql
+          psql -X -h localhost -p 5432 -U metro_user -d metro_be02a_test_ci -v ON_ERROR_STOP=1 -f infra/database/scripts/09_verify.sql
       - name: Test
         working-directory: backend
-        run: dotnet test Metro.sln --configuration Release --no-build
+        run: dotnet test Metro.sln --configuration Release --no-build --no-restore
         env:
-          ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=metro_ticket;Username=metro_user;Password=postgres
+          ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=metro_be02a_test_ci;Username=metro_user;Password=postgres
+          METRO_TEST_POSTGRES_CONNECTION_STRING: Host=localhost;Port=5432;Database=metro_be02a_test_ci;Username=metro_user;Password=postgres
+          METRO_TEST_POSTGRES_DATABASE: metro_be02a_test_ci
+          METRO_TEST_POSTGRES_REQUIRED: '1'
