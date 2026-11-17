@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, dev]
   pull_request:
-    branches: [main, dev]
+    branches: [main, dev, 'feature/**']
 
 jobs:
   backend-build:
@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
+      - name: Check SQL deployment package
+        run: python3 infra/database/build_deploy.py --check
       - name: Restore
         working-directory: backend
         run: dotnet restore Metro.sln

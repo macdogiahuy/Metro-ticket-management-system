@@ -30,9 +30,14 @@ dotnet test backend/tests/Metro.IntegrationTests/Metro.IntegrationTests.csproj -
 Without test configuration, optional PostgreSQL facts have an explicit Skip
 reason. A configured connection, wrong target, schema or constraint error
 fails; no application connection environment variable is used as fallback.
-A skipped run is not PostgreSQL acceptance evidence. The existing CI must
-supply the dedicated test configuration/schema before its PostgreSQL result
-can be used as acceptance evidence; this change does not alter CI infrastructure.
+A skipped run is not PostgreSQL acceptance evidence. Backend CI checks deploy.sql
+against migration sources and invokes the same disposable-database runner used
+locally: backend/tests/Run-PostgresMappingTests.ps1. It creates a PostgreSQL 17
+database with a metro_be02a_test_ prefix, generates a new password for each run,
+waits for TCP readiness, deploys SQL 001-006, runs 09_verify.sql, and sets all
+METRO_TEST_POSTGRES_* variables including REQUIRED=1. It rejects failed/skipped
+tests and publishes TRX results. CI also runs for feature-to-feature stacked PRs.
+No hardcoded service password or external application database is required.
 
 The live suite covers all 27 mapped core tables plus Identity users, reads
 fresh rows after clearing tracking, checks changed fields/JSON/arrays, PK,

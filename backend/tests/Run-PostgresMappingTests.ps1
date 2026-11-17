@@ -56,6 +56,12 @@ try {
     docker exec $containerName psql -v ON_ERROR_STOP=1 -U metro_test -d $databaseName -f /tmp/metro-deploy.sql
     if ($LASTEXITCODE -ne 0) { throw 'Test database deployment failed.' }
 
+    $verification = Join-Path $repoRoot 'infra/database/scripts/09_verify.sql'
+    docker cp $verification ($containerName + ':/tmp/metro-verify.sql')
+    if ($LASTEXITCODE -ne 0) { throw 'Could not copy the SQL schema verification.' }
+    docker exec $containerName psql -v ON_ERROR_STOP=1 -U metro_test -d $databaseName -f /tmp/metro-verify.sql
+    if ($LASTEXITCODE -ne 0) { throw 'Test database schema verification failed.' }
+
     $binding = docker port $containerName 5432/tcp
     if ($LASTEXITCODE -ne 0 -or $binding -notmatch '^127\.0\.0\.1:(\d+)$') {
         throw 'Could not determine the temporary PostgreSQL port.'

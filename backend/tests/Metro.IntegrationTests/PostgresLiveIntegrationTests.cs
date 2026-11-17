@@ -146,7 +146,7 @@ public class PostgresLiveIntegrationTests
         Assert.Empty(await missing.Lines.ToListAsync());
         Assert.Equal("OCC_IMPORT", (await ca.ActualStopTimes.SingleAsync(x => x.Id == stop.Id)).Source);
         Assert.Equal(42, (await ca.Stations.SingleAsync(x => x.Id == station.Id)).MinTransferSeconds);
-        Assert.Equal(77, (await ca.LineStations.SingleAsync(x => x.LineId == line.Id)).TravelTimeSeconds);
+        Assert.Equal(77, (await ca.LineStations.SingleAsync(x => x.LineId == line.Id && x.StationId == station.Id)).TravelTimeSeconds);
         var readTrip = await ca.PlannedTrips.SingleAsync(x => x.Id == trip.Id);
         Assert.Equal("PAUSED", readTrip.BoardingStatus);
         Assert.Equal(station.Id, readTrip.BoardingStationId);
