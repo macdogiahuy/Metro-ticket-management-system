@@ -1,9 +1,15 @@
+using System.Security.Cryptography;
+using System.Text;
 using FluentValidation.AspNetCore;
 using Metro.API.Configuration;
 using Metro.API.Endpoints;
 using Metro.API.Middleware;
 using Metro.Application;
+using Metro.Application.Abstractions.Auth;
 using Metro.Infrastructure;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +32,48 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 // DoD BE-01: validation pipeline — FluentValidation validators trong Metro.Application
 // chạy trước khi request vào controller, trả 400 ValidationProblemDetails khi fail.
 builder.Services.AddFluentValidationAutoValidation();
+
+// BE-03: Identity + JWT. Signing key is required in Production; Development uses
+// an ephemeral key so the API stays runnable without committing secrets.
+var jwtSection = builder.Configuration.GetSection("Jwt");
+var signingKey = jwtSection["SigningKey"];
+if (string.IsNullOrWhiteSpace(signingKey))
+{
+    if (builder.Environment.IsProduction())
+        throw new InvalidOperationException("Jwt:SigningKey must be configured (env Jwt__SigningKey).");
+    signingKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+}
+
+var jwtOptions = new JwtOptions
+{
+    Issuer = jwtSection["Issuer"] ?? "metro-api",
+    Audience = jwtSection["Audience"] ?? "metro-web",
+    SigningKey = signingKey,
+    AccessTokenMinutes = int.TryParse(jwtSection["AccessTokenMinutes"], out var accessMinutes) ? accessMinutes : 15,
+    RefreshTokenDays = int.TryParse(jwtSection["RefreshTokenDays"], out var refreshDays) ? refreshDays : 7,
+    ExposeVerificationCode = builder.Environment.IsDevelopment() || builder.Configuration["METRO_TEST_MODE"] == "1",
+};
+builder.Services.AddSingleton(Options.Create(jwtOptions));
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options => options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidIssuer = jwtOptions.Issuer,
+        ValidateAudience = true,
+        ValidAudience = jwtOptions.Audience,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.Zero,
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Passenger", policy => policy.RequireRole("Passenger"));
+    options.AddPolicy("StationStaff", policy => policy.RequireRole("StationStaff"));
+    options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options => options.ConfigureMetroApi());
@@ -69,8 +117,10 @@ app.UseCors("Frontend");
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapAuthEndpoints();
 app.MapHealthEndpoints();
 
 if (app.Environment.IsDevelopment())
@@ -79,3 +129,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.Run();
+
+// Exposed for WebApplicationFactory-based integration tests.
+public partial class Program { }
