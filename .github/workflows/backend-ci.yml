@@ -39,10 +39,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo pg_ctlcluster 17 main start || true
           database_port="$(pg_lsclusters --no-header | awk '$1 == "17" && $2 == "main" { print $3 }')"
           if [[ -z "${database_port}" ]]; then
-            echo "PostgreSQL 17 main cluster was not created." >&2
+            sudo pg_createcluster 17 main --port 55432 --start
+            database_port="$(pg_lsclusters --no-header | awk '$1 == "17" && $2 == "main" { print $3 }')"
+          else
+            sudo pg_ctlcluster 17 main start || true
+          fi
+          if [[ -z "${database_port}" ]]; then
+            echo "PostgreSQL 17 main cluster could not be created." >&2
             exit 1
           fi
           server_version_num="$(sudo -u postgres psql --port "${database_port}" --tuples-only --no-align --command 'SHOW server_version_num')"
