@@ -5,6 +5,7 @@ using Metro.Domain.Entities.Orders;
 using Metro.Domain.Entities.Tickets;
 using Metro.Infrastructure.Persistence.Context;
 using Metro.Infrastructure.Persistence.MultiTenancy;
+using Metro.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -12,40 +13,18 @@ using Npgsql;
 
 namespace Metro.IntegrationTests;
 
-public sealed class PostgresFactAttribute : FactAttribute
-{
-    public PostgresFactAttribute()
-    {
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("METRO_TEST_POSTGRES_CONNECTION_STRING")) &&
-            Environment.GetEnvironmentVariable("METRO_TEST_POSTGRES_REQUIRED") != "1")
-            Skip = "Dedicated PostgreSQL test database is not configured. This is not acceptance evidence.";
-    }
-}
-
 public class PostgresLiveIntegrationTests
 {
     private static string ConnectionString()
     {
-        var value = Environment.GetEnvironmentVariable("METRO_TEST_POSTGRES_CONNECTION_STRING");
-        if (string.IsNullOrWhiteSpace(value))
-            throw new InvalidOperationException("Required dedicated PostgreSQL test configuration is missing.");
-        NpgsqlConnectionStringBuilder settings;
-        try { settings = new(value); }
-        catch { throw new InvalidOperationException("Dedicated PostgreSQL test configuration is invalid."); }
-        var expected = Environment.GetEnvironmentVariable("METRO_TEST_POSTGRES_DATABASE");
-        if (string.IsNullOrWhiteSpace(expected) || !expected.StartsWith("metro_be02a_test_", StringComparison.Ordinal) ||
-            settings.Database != expected)
-            throw new InvalidOperationException("Test database must match METRO_TEST_POSTGRES_DATABASE and start with metro_be02a_test_.");
-        settings.IncludeErrorDetail = false;
-        settings.Timeout = 10;
-        return settings.ConnectionString;
+        return PostgreSqlTestConfiguration.LoadRequired().ConnectionString;
     }
 
     private static ApplicationDbContext Context(NpgsqlConnection connection, Guid? op) =>
         new(new DbContextOptionsBuilder<ApplicationDbContext>().UseNpgsql(connection).Options,
             new OperatorContext { CurrentOperatorId = op });
 
-    [PostgresFact]
+    [PostgreSqlFact]
     [Trait("Category", "PostgreSQL")]
     public async Task Core_Mappings_RoundTrip_Constraints_And_Operator_Isolation()
     {
@@ -224,7 +203,7 @@ public class PostgresLiveIntegrationTests
         Assert.Equal(state, error.SqlState);
     }
 
-    [PostgresFact]
+    [PostgreSqlFact]
     [Trait("Category", "PostgreSQL")]
     public async Task EndExclusive_Matches_Postgres_For_Null_Bounds_And_Abutting_Ranges()
     {

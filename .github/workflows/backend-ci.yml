@@ -4,30 +4,55 @@ on:
   push:
     branches: [main, dev]
   pull_request:
-    branches: [main, dev, 'feature/**']
+    branches: [main, dev, "feature/**"]
 
 jobs:
   backend-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: "9.0.x"
+      - name: Start dedicated PostgreSQL
+        shell: bash
+        run: |
+          sudo systemctl start postgresql.service
+          database_name="metro_test_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          database_password="$(openssl rand -hex 32)"
+          echo "::add-mask::${database_password}"
+          sudo -u postgres psql -v ON_ERROR_STOP=1 \
+            --command "CREATE ROLE metro_test LOGIN PASSWORD '${database_password}'"
+          sudo -u postgres createdb --owner=metro_test "${database_name}"
+          {
+            echo "PGHOST=127.0.0.1"
+            echo "PGPORT=5432"
+            echo "PGDATABASE=${database_name}"
+            echo "PGUSER=metro_test"
+            echo "PGPASSWORD=${database_password}"
+            echo "METRO_TEST_POSTGRES_DATABASE=${database_name}"
+            echo "METRO_TEST_POSTGRES_REQUIRED=1"
+            echo "METRO_TEST_POSTGRES_CONNECTION_STRING=Host=127.0.0.1;Port=5432;Database=${database_name};Username=metro_test;Password=${database_password};Include Error Detail=false"
+          } >> "${GITHUB_ENV}"
       - name: Check SQL deployment package
         run: python3 infra/database/build_deploy.py --check
+      - name: Deploy and verify test schema
+        shell: bash
+        run: |
+          psql -v ON_ERROR_STOP=1 -f infra/database/deploy.sql
+          psql -v ON_ERROR_STOP=1 -f infra/database/scripts/09_verify.sql
       - name: Restore
         working-directory: backend
         run: dotnet restore Metro.sln
       - name: Build
         working-directory: backend
-        run: dotnet build Metro.sln --configuration Release --no-restore
-      - name: Test against disposable PostgreSQL
+        run: dotnet build Metro.sln --configuration Release --no-restore --warnaserror
+      - name: Test against PostgreSQL without Docker
         shell: pwsh
         working-directory: backend
-        run: ./tests/Run-PostgresMappingTests.ps1 -NoBuild -ResultsDirectory (Join-Path $env:RUNNER_TEMP 'backend-test-results')
+        run: ./tests/Run-PostgresTests.ps1 -NoBuild -NoRestore -ResultsDirectory (Join-Path $env:RUNNER_TEMP 'backend-test-results')
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

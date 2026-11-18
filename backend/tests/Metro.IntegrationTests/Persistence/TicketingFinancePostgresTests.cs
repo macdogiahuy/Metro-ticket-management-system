@@ -5,6 +5,7 @@ using Metro.Domain.Entities.LostProperty;
 using Metro.Domain.Entities.Passengers;
 using Metro.Domain.Entities.Ticketing;
 using Metro.Infrastructure.Persistence.Context;
+using Metro.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -28,7 +29,7 @@ public class TicketingFinancePostgresTests
     private static readonly string Hash = new('a', 64);
 
     private static ApplicationDbContext CreateContext(Guid? operatorId = null) => TicketingFinanceModelTests.CreateContext(
-        Environment.GetEnvironmentVariable("METRO_TEST_CONNECTION"), operatorId);
+        PostgreSqlTestConfiguration.LoadRequired().ConnectionString, operatorId);
 
     private static async Task<ApplicationDbContext> SeedAsync(Guid? operatorId = null)
     {
@@ -62,7 +63,7 @@ public class TicketingFinancePostgresTests
         Assert.Equal(sqlState, Assert.IsType<PostgresException>(error.InnerException).SqlState);
     }
 
-    [PostgresFact]
+    [PostgreSqlFact]
     public async Task Every_mapped_column_and_foreign_key_matches_the_deployed_SQL_schema()
     {
         await using var db = CreateContext();
@@ -126,7 +127,7 @@ public class TicketingFinancePostgresTests
         .Replace("character varying", "varchar").Replace("character(", "char(")
         .Replace("timestamp with time zone", "timestamptz");
 
-    [PostgresFact]
+    [PostgreSqlFact]
     public async Task Payments_and_verified_events_roundtrip_defaults_and_reject_duplicate_callbacks()
     {
         await using var db = await SeedAsync();
@@ -166,7 +167,7 @@ public class TicketingFinancePostgresTests
         await AssertDatabaseRejectsAsync(db, PostgresErrorCodes.UniqueViolation);
     }
 
-    [PostgresFact]
+    [PostgreSqlFact]
     public async Task Composite_foreign_key_rejects_a_payment_for_another_operators_order()
     {
         // The write is valid for this context's operator, but the order belongs to another operator.
@@ -178,7 +179,7 @@ public class TicketingFinancePostgresTests
         await AssertDatabaseRejectsAsync(db, PostgresErrorCodes.ForeignKeyViolation);
     }
 
-    [PostgresFact]
+    [PostgreSqlFact]
     public async Task Refund_history_roundtrips_json_ciphertext_and_unknown_outcomes()
     {
         await using var db = await SeedAsync();
@@ -226,7 +227,7 @@ public class TicketingFinancePostgresTests
         await AssertDatabaseRejectsAsync(db, PostgresErrorCodes.UniqueViolation);
     }
 
-    [PostgresFact]
+    [PostgreSqlFact]
     public async Task Inspection_roundtrips_credential_replacement_paired_journey_and_entry_trip_context()
     {
         await using var db = await SeedAsync();
@@ -274,7 +275,7 @@ public class TicketingFinancePostgresTests
         await AssertDatabaseRejectsAsync(db, PostgresErrorCodes.UniqueViolation);
     }
 
-    [PostgresFact]
+    [PostgreSqlFact]
     public async Task Guardian_consent_and_suggestions_preserve_dates_version_and_current_suggestion_uniqueness()
     {
         await using var db = await SeedAsync();
@@ -337,7 +338,7 @@ public class TicketingFinancePostgresTests
         await AssertDatabaseRejectsAsync(db, PostgresErrorCodes.UniqueViolation);
     }
 
-    [PostgresFact]
+    [PostgreSqlFact]
     public async Task Ticket_change_history_keeps_related_child_and_allows_only_one_applied_change()
     {
         await using var db = await SeedAsync();
@@ -361,7 +362,7 @@ public class TicketingFinancePostgresTests
         await AssertDatabaseRejectsAsync(db, PostgresErrorCodes.UniqueViolation);
     }
 
-    [PostgresFact]
+    [PostgreSqlFact]
     public async Task Lost_property_roundtrips_private_details_claim_and_single_handover()
     {
         await using var db = await SeedAsync();

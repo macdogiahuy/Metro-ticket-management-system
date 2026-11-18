@@ -164,7 +164,7 @@ Kết quả thực chạy sau khi sửa hai nhận xét review, ngày **17/11/20
 | PostgreSQL acceptance | Hai test live đều chạy và pass trên PostgreSQL 17 với migrations 001–006 |
 | Diff whitespace | `git diff --check` đạt cho bản sửa review |
 
-Instance PostgreSQL được tạo riêng trong thư mục tạm, chỉ nghe localhost ở port riêng. Database có tên bắt đầu bằng `metro_be02a_test_`. Dữ liệu test là dữ liệu tổng hợp; transaction được rollback. Instance đã dừng sau kiểm thử. Không sử dụng hoặc reset database dùng chung/production.
+Instance PostgreSQL được tạo riêng trong thư mục tạm, chỉ nghe localhost ở port riêng. Database test hiện dùng tiền tố `metro_test_`. Dữ liệu test là dữ liệu tổng hợp; transaction được rollback. Instance đã dừng sau kiểm thử. Không sử dụng hoặc reset database dùng chung/production.
 
 Các lệnh kiểm thử chính, chạy từ gốc worktree:
 
@@ -176,7 +176,7 @@ dotnet test backend/Metro.sln --no-build --no-restore -m:1
 Để hai test PostgreSQL thực sự chạy, cần cấu hình trong cùng phiên gọi test:
 
 - `METRO_TEST_POSTGRES_CONNECTION_STRING`: connection tới DB test riêng; giữ kín giá trị.
-- `METRO_TEST_POSTGRES_DATABASE`: tên chính xác, bắt đầu bằng `metro_be02a_test_`.
+- `METRO_TEST_POSTGRES_DATABASE`: tên chính xác, bắt đầu bằng `metro_test_`.
 - `METRO_TEST_POSTGRES_REQUIRED=1`: thiếu cấu hình phải fail thay vì skip.
 
 Tham khảo hướng dẫn chi tiết tại `backend/tests/Metro.IntegrationTests/BE-02A-TESTING.md`. Không lưu secret/connection string vào tài liệu hoặc commit.

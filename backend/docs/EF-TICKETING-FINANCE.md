@@ -86,35 +86,32 @@ Các FK composite giữ thứ tự `(OperatorId, Id)` và
 ## Kiểm tra
 
 
-Từ thư mục gốc, với Docker Desktop đang chạy:
+Từ thư mục gốc, với một PostgreSQL test riêng đã được triển khai schema:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ./backend/tests/Run-PostgresMappingTests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File ./backend/tests/Run-PostgresTests.ps1
 ```
 
-Script tạo PostgreSQL 17 với cổng tạm chỉ bind localhost, triển khai `deploy.sql`,
-chạy toàn bộ test backend ở Release rồi xóa container. Database tạm dùng tiền tố
-`metro_be02a_test_`; script thiết lập cả cấu hình PostgreSQL BE-02A và BE-02B,
-để chạy đủ 10 test database của hai phần. Mật khẩu container được sinh ngẫu nhiên cho mỗi lần chạy; không lưu credential vào repo. Không dùng volume hoặc
-connection string của ứng dụng. Mỗi test dữ liệu tự rollback transaction, phù
-hợp quy tắc không DELETE lịch sử.
+Script kiểm tra cấu hình test, chạy toàn bộ test backend ở Release và từ chối
+kết quả có test fail hoặc skip. CI khởi động PostgreSQL trực tiếp trên hosted
+runner, không dùng Docker/Testcontainers. Không dùng connection string của ứng
+dụng. Mỗi test mapping tự rollback transaction, phù hợp quy tắc không DELETE
+lịch sử.
 
 Nếu đã có database test riêng đã triển khai SQL, tên database phải bắt đầu bằng
-`metro_be02a_test_`. Thiết lập riêng tư `METRO_TEST_POSTGRES_CONNECTION_STRING`
+`metro_test_`. Thiết lập riêng tư `METRO_TEST_POSTGRES_CONNECTION_STRING`
 và `METRO_TEST_POSTGRES_DATABASE` theo
 [`BE-02A-TESTING.md`](../tests/Metro.IntegrationTests/BE-02A-TESTING.md), rồi chạy
 từ `backend`. Không ghi credential vào source, command history hoặc test output.
 
 ```powershell
-$env:METRO_TEST_CONNECTION = $env:METRO_TEST_POSTGRES_CONNECTION_STRING
 $env:METRO_TEST_POSTGRES_REQUIRED = '1'
 dotnet test Metro.sln --configuration Release
 ```
 
-Không có `METRO_TEST_CONNECTION` thì 8 test PostgreSQL BE-02B được đánh dấu skip
-rõ lý do; 13 test model BE-02B vẫn chạy. Hai test PostgreSQL BE-02A dùng thêm
-các biến `METRO_TEST_POSTGRES_*`. CI dùng runner Docker ở trên để triển khai SQL
-và thiết lập đầy đủ cấu hình cho cả hai nhóm; acceptance không chấp nhận skip.
+Không có `METRO_TEST_POSTGRES_CONNECTION_STRING` thì các test PostgreSQL được
+đánh dấu skip rõ lý do; các test model vẫn chạy. CI thiết lập đầy đủ các biến
+`METRO_TEST_POSTGRES_*`; acceptance không chấp nhận skip.
 
 Các test kiểm tra toàn bộ cột và FK của 17 bảng với catalog PostgreSQL, kiểm
 tra model/enum/index, ghi–đọc cả 17 entity, default sinh từ DB, JSON/ciphertext,
@@ -124,13 +121,13 @@ và bàn giao đồ một lần.
 
 ## Kiểm tra trước khi gửi review
 
-- Chạy `Run-PostgresMappingTests.ps1`: toàn bộ 46 test phải pass, gồm 10 test
-  PostgreSQL (2 BE-02A và 8 BE-02B), không có test skip. Script đọc TRX và
+- Chạy `Run-PostgresTests.ps1`: toàn bộ test phải pass, không có test skip.
+  Script đọc TRX và
   từ chối kết quả có test fail/skip hoặc không thực thi test PostgreSQL.
 - CI dùng chính script này với `-NoBuild`, không duy trì bộ cấu hình database
   thứ hai. Kết quả TRX được lưu thành artifact `backend-test-results`.
 - `Test-CiCredentialPolicy.ps1` kiểm tra workflow và test runner, chặn password
-  ghi trực tiếp trong YAML, connection string hoặc tham số Docker. Đây là guard
+  ghi trực tiếp trong YAML hoặc connection string. Đây là guard
   cho cấu hình test, không thay thế secret scanner. Không tắt GitGuardian hay
   thêm ngoại lệ bỏ quét file.
 - Mật khẩu container là giá trị ngẫu nhiên cho từng lần chạy, được mask trong

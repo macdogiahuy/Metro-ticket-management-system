@@ -10,7 +10,7 @@ dotnet test backend/Metro.sln --configuration Release --no-build --no-restore
 ## Dedicated PostgreSQL acceptance run
 
 Provision a **dedicated disposable database** whose name begins with
-`metro_be02a_test_`. Apply the official SQL migrations 001-006 using the
+`metro_test_`. Apply the official SQL migrations 001-006 using the
 repository deployment procedure; do not use EF migrations or EnsureCreated.
 Do not point these tests at an application/shared database. Do not load the
 legacy capacity fixture. Tests create synthetic data in one transaction and
@@ -31,20 +31,13 @@ Without test configuration, optional PostgreSQL facts have an explicit Skip
 reason. A configured connection, wrong target, schema or constraint error
 fails; no application connection environment variable is used as fallback.
 A skipped run is not PostgreSQL acceptance evidence. Backend CI checks deploy.sql
-against migration sources and invokes the same disposable-database runner used
-locally: backend/tests/Run-PostgresMappingTests.ps1. It creates a PostgreSQL 17
-database with a metro_be02a_test_ prefix, generates and masks a new password for
-each run, waits for TCP readiness, deploys SQL 001-006, runs 09_verify.sql, and
-sets METRO_TEST_CONNECTION and all METRO_TEST_POSTGRES_* variables including
-REQUIRED=1. It rejects failed/skipped tests or missing PostgreSQL execution and
-publishes TRX results. The BE-02A baseline contains 25 tests, including two
-PostgreSQL tests. This integrated BE-02B branch must report 46 tests passed
-(17 unit and 29 integration, including 10 PostgreSQL tests), with zero skipped.
-CI also runs for feature-to-feature stacked PRs. The container binds only to a
-temporary 127.0.0.1 port, uses no persistent volume, and is removed in finally
-with the process environment restored. Test-CiCredentialPolicy.ps1 rejects
-hardcoded database passwords in the workflow and runner. No application
-database or fixed password is used.
+against migration sources and invokes the same acceptance runner used locally:
+`backend/tests/Run-PostgresTests.ps1`. CI starts PostgreSQL directly on the
+hosted Ubuntu runner, creates a fresh `metro_test_` database, masks its generated
+password, deploys the official SQL package, runs `09_verify.sql`, and sets all
+`METRO_TEST_POSTGRES_*` variables including `REQUIRED=1`. It rejects failed or
+skipped tests, requires PostgreSQL execution and publishes TRX results. No
+Docker/Testcontainers, application database, or fixed password is used.
 
 The live suite covers all 27 mapped core tables plus Identity users, reads
 fresh rows after clearing tracking, checks changed fields/JSON/arrays, PK,
