@@ -1,6 +1,7 @@
 \set ON_ERROR_STOP on
 -- Deterministic local/demo data. Requires infra/database/deploy.sql first.
--- The demo identities deliberately have no password hashes or credentials.
+-- Demo accounts use the documented password `MetroDemo2026!`; the stored value is
+-- an ASP.NET Core Identity v3 PBKDF2 hash (never a plain-text password).
 BEGIN;
 SET LOCAL search_path = metro, public, pg_catalog;
 
@@ -12,12 +13,13 @@ ON CONFLICT ("Id") DO NOTHING;
 
 INSERT INTO public."AspNetUsers" (
     "Id", "UserName", "NormalizedUserName", "Email", "NormalizedEmail",
-    "EmailConfirmed", "PhoneNumberConfirmed", "TwoFactorEnabled", "LockoutEnabled", "AccessFailedCount"
+    "EmailConfirmed", "PasswordHash", "SecurityStamp", "ConcurrencyStamp",
+    "PhoneNumberConfirmed", "TwoFactorEnabled", "LockoutEnabled", "AccessFailedCount"
 ) VALUES
-    ('demo-passenger', 'demo-passenger', 'DEMO-PASSENGER', 'passenger@example.invalid', 'PASSENGER@EXAMPLE.INVALID', true, false, false, false, 0),
-    ('demo-staff', 'demo-staff', 'DEMO-STAFF', 'station-staff@example.invalid', 'STATION-STAFF@EXAMPLE.INVALID', true, false, false, false, 0),
-    ('demo-admin', 'demo-admin', 'DEMO-ADMIN', 'admin@example.invalid', 'ADMIN@EXAMPLE.INVALID', true, false, false, false, 0)
-ON CONFLICT ("Id") DO NOTHING;
+    ('demo-passenger', 'demo-passenger', 'DEMO-PASSENGER', 'passenger@example.invalid', 'PASSENGER@EXAMPLE.INVALID', true, 'AQAAAAEAAYagAAAAEAABAgMEBQYHCAkKCwwNDg/EfT/zR0RYmdpLhPYyQArKU4iI/ucErDNYYCaIlKL/3g==', 'DEMO-PASSENGER-SEED', 'DEMO-PASSENGER-SEED', false, false, false, 0),
+    ('demo-staff', 'demo-staff', 'DEMO-STAFF', 'station-staff@example.invalid', 'STATION-STAFF@EXAMPLE.INVALID', true, 'AQAAAAEAAYagAAAAEAABAgMEBQYHCAkKCwwNDg/EfT/zR0RYmdpLhPYyQArKU4iI/ucErDNYYCaIlKL/3g==', 'DEMO-STAFF-SEED', 'DEMO-STAFF-SEED', false, false, false, 0),
+    ('demo-admin', 'demo-admin', 'DEMO-ADMIN', 'admin@example.invalid', 'ADMIN@EXAMPLE.INVALID', true, 'AQAAAAEAAYagAAAAEAABAgMEBQYHCAkKCwwNDg/EfT/zR0RYmdpLhPYyQArKU4iI/ucErDNYYCaIlKL/3g==', 'DEMO-ADMIN-SEED', 'DEMO-ADMIN-SEED', false, false, false, 0)
+ON CONFLICT ("Id") DO UPDATE SET "PasswordHash" = EXCLUDED."PasswordHash";
 
 INSERT INTO public."AspNetUserRoles" ("UserId", "RoleId") VALUES
     ('demo-passenger', 'demo-role-passenger'),
@@ -30,17 +32,17 @@ INSERT INTO metro.operators (id, code, name) VALUES
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO metro.lines (id, operator_id, code, name, created_by_user_id) VALUES
-    ('20000000-0000-0000-0000-000000000018', '10000000-0000-0000-0000-000000000018', 'DEMO-L1', 'Cat Linh - Ha Dong', 'demo-admin'),
+    ('20000000-0000-0000-0000-000000000018', '10000000-0000-0000-0000-000000000018', 'DEMO-L1', 'Cát Linh - Hà Đông', 'demo-admin'),
     ('20000000-0000-0000-0000-000000000019', '10000000-0000-0000-0000-000000000018', 'DEMO-L2', 'Demo Line 2', 'demo-admin')
 ON CONFLICT (operator_id, code) DO NOTHING;
 
 INSERT INTO metro.stations (id, operator_id, code, name, station_type, created_by_user_id) VALUES
-    ('30000000-0000-0000-0000-000000000018', '10000000-0000-0000-0000-000000000018', 'DEMO-L1-S01', 'Cat Linh', 'ELEVATED', 'demo-admin'),
+    ('30000000-0000-0000-0000-000000000018', '10000000-0000-0000-0000-000000000018', 'DEMO-L1-S01', 'Cát Linh', 'ELEVATED', 'demo-admin'),
     ('30000000-0000-0000-0000-000000000019', '10000000-0000-0000-0000-000000000018', 'DEMO-L1-S02', 'La Thanh', 'ELEVATED', 'demo-admin'),
     ('30000000-0000-0000-0000-000000000020', '10000000-0000-0000-0000-000000000018', 'DEMO-L1-S03', 'Thai Ha', 'ELEVATED', 'demo-admin'),
-    ('30000000-0000-0000-0000-000000000021', '10000000-0000-0000-0000-000000000018', 'DEMO-L1-S04', 'Lang', 'ELEVATED', 'demo-admin'),
-    ('30000000-0000-0000-0000-000000000022', '10000000-0000-0000-0000-000000000018', 'DEMO-L1-S05', 'Vanh dai 3', 'ELEVATED', 'demo-admin'),
-    ('30000000-0000-0000-0000-000000000023', '10000000-0000-0000-0000-000000000018', 'DEMO-L1-S06', 'Yen Nghia', 'ELEVATED', 'demo-admin'),
+    ('30000000-0000-0000-0000-000000000021', '10000000-0000-0000-0000-000000000018', 'DEMO-L1-S04', 'Láng', 'ELEVATED', 'demo-admin'),
+    ('30000000-0000-0000-0000-000000000022', '10000000-0000-0000-0000-000000000018', 'DEMO-L1-S05', 'Vành đai 3', 'ELEVATED', 'demo-admin'),
+    ('30000000-0000-0000-0000-000000000023', '10000000-0000-0000-0000-000000000018', 'DEMO-L1-S06', 'Yên Nghĩa', 'ELEVATED', 'demo-admin'),
     ('30000000-0000-0000-0000-000000000024', '10000000-0000-0000-0000-000000000018', 'DEMO-L2-S01', 'Demo Station 2.1', 'UNDERGROUND', 'demo-admin'),
     ('30000000-0000-0000-0000-000000000025', '10000000-0000-0000-0000-000000000018', 'DEMO-L2-S02', 'Demo Station 2.2', 'UNDERGROUND', 'demo-admin'),
     ('30000000-0000-0000-0000-000000000026', '10000000-0000-0000-0000-000000000018', 'DEMO-L2-S03', 'Demo Station 2.3', 'UNDERGROUND', 'demo-admin'),
@@ -100,8 +102,8 @@ INSERT INTO metro.fare_matrix_entries (operator_id, fare_policy_version_id, tick
 SELECT '10000000-0000-0000-0000-000000000018', fp.id, tp.id, l.id, o.id, d.id, 'ANY', 'ORDINARY', 10000 + (ds.sequence_no - os.sequence_no) * 5000
 FROM metro.fare_policy_versions fp JOIN metro.ticket_products tp ON tp.operator_id = fp.operator_id AND tp.code = 'DEMO-SINGLE'
 JOIN metro.lines l ON l.operator_id = fp.operator_id AND l.code IN ('DEMO-L1','DEMO-L2')
-JOIN metro.line_stations os ON os.operator_id = l.operator_id AND os.line_id = l.id AND os.direction = 0 AND os.sequence_no = 1
-JOIN metro.line_stations ds ON ds.operator_id = l.operator_id AND ds.line_id = l.id AND ds.direction = 0 AND ds.sequence_no = 6
+JOIN metro.line_stations os ON os.operator_id = l.operator_id AND os.line_id = l.id AND os.direction = 0
+JOIN metro.line_stations ds ON ds.operator_id = l.operator_id AND ds.line_id = l.id AND ds.direction = os.direction AND ds.sequence_no > os.sequence_no
 JOIN metro.stations o ON o.operator_id = os.operator_id AND o.id = os.station_id
 JOIN metro.stations d ON d.operator_id = ds.operator_id AND d.id = ds.station_id
 WHERE fp.code = 'DEMO-FARE'
