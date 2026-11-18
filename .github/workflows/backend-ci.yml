@@ -16,25 +16,56 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "9.0.x"
-      - name: Start dedicated PostgreSQL
+      - name: Install PostgreSQL 17
         shell: bash
         run: |
-          sudo systemctl start postgresql.service
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes ca-certificates curl gpg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail --show-error --silent \
+            --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          key_fingerprints="$(gpg --show-keys --with-colons /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            | awk -F: '$1 == "fpr" { print $10 }')"
+          grep --fixed-strings --line-regexp --quiet 'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8' \
+            <<< "${key_fingerprints}"
+          source /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-17
+      - name: Start dedicated PostgreSQL 17
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo pg_ctlcluster 17 main start || true
+          database_port="$(pg_lsclusters --no-header | awk '$1 == "17" && $2 == "main" { print $3 }')"
+          if [[ -z "${database_port}" ]]; then
+            echo "PostgreSQL 17 main cluster was not created." >&2
+            exit 1
+          fi
+          server_version_num="$(sudo -u postgres psql --port "${database_port}" --tuples-only --no-align --command 'SHOW server_version_num')"
+          if (( server_version_num < 170000 )); then
+            echo "Expected PostgreSQL 17+, got server_version_num=${server_version_num}." >&2
+            exit 1
+          fi
+          echo "Using PostgreSQL $(sudo -u postgres psql --port "${database_port}" --tuples-only --no-align --command 'SHOW server_version') on port ${database_port}."
           database_name="metro_test_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
           database_password="$(openssl rand -hex 32)"
           echo "::add-mask::${database_password}"
-          sudo -u postgres psql -v ON_ERROR_STOP=1 \
+          sudo -u postgres psql --port "${database_port}" -v ON_ERROR_STOP=1 \
             --command "CREATE ROLE metro_test LOGIN PASSWORD '${database_password}'"
-          sudo -u postgres createdb --owner=metro_test "${database_name}"
+          sudo -u postgres createdb --port "${database_port}" --owner=metro_test "${database_name}"
           {
             echo "PGHOST=127.0.0.1"
-            echo "PGPORT=5432"
+            echo "PGPORT=${database_port}"
             echo "PGDATABASE=${database_name}"
             echo "PGUSER=metro_test"
             echo "PGPASSWORD=${database_password}"
             echo "METRO_TEST_POSTGRES_DATABASE=${database_name}"
             echo "METRO_TEST_POSTGRES_REQUIRED=1"
-            echo "METRO_TEST_POSTGRES_CONNECTION_STRING=Host=127.0.0.1;Port=5432;Database=${database_name};Username=metro_test;Password=${database_password};Include Error Detail=false"
+            echo "METRO_TEST_POSTGRES_CONNECTION_STRING=Host=127.0.0.1;Port=${database_port};Database=${database_name};Username=metro_test;Password=${database_password};Include Error Detail=false"
           } >> "${GITHUB_ENV}"
       - name: Check SQL deployment package
         run: python3 infra/database/build_deploy.py --check
