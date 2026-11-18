@@ -34,7 +34,7 @@ ON CONFLICT (code) DO NOTHING;
 INSERT INTO metro.lines (id, operator_id, code, name, created_by_user_id) VALUES
     ('20000000-0000-0000-0000-000000000018', '10000000-0000-0000-0000-000000000018', 'DEMO-L1', 'Cát Linh - Hà Đông', 'demo-admin'),
     ('20000000-0000-0000-0000-000000000019', '10000000-0000-0000-0000-000000000018', 'DEMO-L2', 'Demo Line 2', 'demo-admin')
-ON CONFLICT (operator_id, code) DO NOTHING;
+ON CONFLICT (operator_id, code) DO UPDATE SET name = EXCLUDED.name;
 
 INSERT INTO metro.stations (id, operator_id, code, name, station_type, created_by_user_id) VALUES
     ('30000000-0000-0000-0000-000000000018', '10000000-0000-0000-0000-000000000018', 'DEMO-L1-S01', 'Cát Linh', 'ELEVATED', 'demo-admin'),
@@ -49,7 +49,7 @@ INSERT INTO metro.stations (id, operator_id, code, name, station_type, created_b
     ('30000000-0000-0000-0000-000000000027', '10000000-0000-0000-0000-000000000018', 'DEMO-L2-S04', 'Demo Station 2.4', 'UNDERGROUND', 'demo-admin'),
     ('30000000-0000-0000-0000-000000000028', '10000000-0000-0000-0000-000000000018', 'DEMO-L2-S05', 'Demo Station 2.5', 'UNDERGROUND', 'demo-admin'),
     ('30000000-0000-0000-0000-000000000029', '10000000-0000-0000-0000-000000000018', 'DEMO-L2-S06', 'Demo Station 2.6', 'UNDERGROUND', 'demo-admin')
-ON CONFLICT (operator_id, code) DO NOTHING;
+ON CONFLICT (operator_id, code) DO UPDATE SET name = EXCLUDED.name;
 
 INSERT INTO metro.line_stations (operator_id, line_id, station_id, direction, sequence_no, distance_from_origin_m)
 SELECT '10000000-0000-0000-0000-000000000018', l.id, s.id, 0, right(s.code, 2)::smallint,
