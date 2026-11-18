@@ -16,7 +16,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Metro.Infrastructure.Persistence.Context;
 
-public class ApplicationDbContext : IdentityDbContext<IdentityUser>
+public class ApplicationDbContext : IdentityDbContext<IdentityUser, IdentityRole, string>
 {
     private readonly IOperatorContext? _operatorContext;
 

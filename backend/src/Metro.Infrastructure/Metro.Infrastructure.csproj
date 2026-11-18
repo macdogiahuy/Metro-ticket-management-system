@@ -8,6 +8,7 @@
   <ItemGroup>
     <!-- AWS SDK 4.1 pulls System.IO.Hashing 11, which does not support net9.0. -->
     <PackageReference Include="AWSSDK.S3" Version="4.0.104.12" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.10" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.10">

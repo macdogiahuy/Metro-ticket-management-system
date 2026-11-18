@@ -912,8 +912,10 @@ ASPNETCORE_URLS=http://+:8080
 ConnectionStrings__DefaultConnection=
 Redis__ConnectionString=
 
-Jwt__Issuer=
-Jwt__Audience=
+Jwt__Issuer=metro-api
+Jwt__Audience=metro-web
+# Production requires a >= 32-character signing key; Development generates an
+# ephemeral one when empty (tokens become invalid after a restart).
 Jwt__SigningKey=
 
 Frontend__AllowedOrigins=http://localhost:5173

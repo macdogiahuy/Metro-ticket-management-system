@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using FluentValidation;
+using Metro.Application.Abstractions.Auth;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,6 +19,7 @@ public sealed class GlobalExceptionHandler(
     {
         var (status, title) = exception switch
         {
+            AuthException auth => (auth.Status, "Authentication failed"),
             FluentValidation.ValidationException => (StatusCodes.Status400BadRequest, "Validation failed"),
             UnauthorizedAccessException => (StatusCodes.Status403Forbidden, "Forbidden"),
             KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found"),
@@ -38,19 +40,25 @@ public sealed class GlobalExceptionHandler(
 
         httpContext.Response.StatusCode = status;
 
+        var problem = new ProblemDetails
+        {
+            Status = status,
+            Title = title,
+            // 5xx không lộ chi tiết exception ra ngoài; môi trường Development vẫn hiện để debug.
+            Detail = status < StatusCodes.Status500InternalServerError || environment.IsDevelopment()
+                ? exception.Message
+                : null,
+        };
+        if (exception is AuthException authError)
+        {
+            problem.Extensions["code"] = authError.Code;
+        }
+
         return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
         {
             HttpContext = httpContext,
             Exception = exception,
-            ProblemDetails = new ProblemDetails
-            {
-                Status = status,
-                Title = title,
-                // 5xx không lộ chi tiết exception ra ngoài; môi trường Development vẫn hiện để debug.
-                Detail = status < StatusCodes.Status500InternalServerError || environment.IsDevelopment()
-                    ? exception.Message
-                    : null,
-            },
+            ProblemDetails = problem,
         });
     }
 }

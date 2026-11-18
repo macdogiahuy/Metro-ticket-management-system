@@ -1,6 +1,8 @@
+using Metro.Application.Abstractions.Auth;
 using Metro.Application.Abstractions.MultiTenancy;
 using Metro.Application.Abstractions.Storage;
 using Metro.Infrastructure.Configuration;
+using Metro.Infrastructure.Identity;
 using Metro.Infrastructure.Persistence.Context;
 using Metro.Infrastructure.Persistence.MultiTenancy;
 using Metro.Infrastructure.Storage;
@@ -25,7 +27,10 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString, npgsql => npgsql.EnableRetryOnFailure(3)));
 
         services.AddIdentityCore<Microsoft.AspNetCore.Identity.IdentityUser>()
+            .AddRoles<Microsoft.AspNetCore.Identity.IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>();
+
+        services.AddScoped<IAuthService, AuthService>();
 
         var storageOptions = new NeonStorageOptions
         {
