@@ -17,6 +17,8 @@
 
 **Thời lượng mục tiêu: 18–20 phút** (6 kịch bản, ~3 phút/kịch bản).
 
+**Tài khoản seed:** `demo-passenger`, `demo-staff`, `demo-admin` (hoặc email tương ứng trong DB); mật khẩu chung `MetroDemo2026!`. Seed lưu hash ASP.NET Core Identity, không lưu mật khẩu dạng rõ.
+
 ---
 
 ## Kịch bản 1 — Đăng ký, đăng nhập, hồ sơ (UC01–UC06) · ~3 phút
