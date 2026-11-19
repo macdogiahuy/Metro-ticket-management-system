@@ -1,6 +1,51 @@
-@Metro.API_HostAddress = http://localhost:5192
+@baseUrl = http://localhost:5192
+@email = be18b-local@example.invalid
+@password = replace-with-local-test-password
+@verificationCode = replace-with-devVerificationCode
+@accessToken = replace-with-accessToken
+@refreshToken = replace-with-refreshToken
 
-GET {{Metro.API_HostAddress}}/weatherforecast/
+GET {{baseUrl}}/health/live
 Accept: application/json
 
-###
+### Register
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "fullName": "BE-18B Local Test",
+  "birthDate": "2000-01-01"
+}
+
+### Verify email
+POST {{baseUrl}}/api/v1/auth/verify-email
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "code": "{{verificationCode}}"
+}
+
+### Login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Current account (401 without a valid token)
+GET {{baseUrl}}/api/v1/auth/me
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Logout (safe to send repeatedly)
+POST {{baseUrl}}/api/v1/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}

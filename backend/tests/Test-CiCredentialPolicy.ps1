@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $paths = @(
     '.github/workflows/backend-ci.yml',
-    'backend/tests/Run-PostgresMappingTests.ps1'
+    'backend/tests/Run-PostgresTests.ps1'
 )
 # Check only the workflow and disposable-database runner. Do not exclude either from secret scanning.
 $literalCredentialPatterns = @(

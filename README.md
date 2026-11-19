@@ -820,6 +820,15 @@ storage bucket; `/health/live` is a liveness-only probe.
 > Do **not** run `dotnet ef database update` — the EF Migrations folder
 > is intentionally empty.
 
+### Run backend tests
+
+Unit tests can run with `dotnet test backend/Metro.sln`. Database acceptance
+uses xUnit, `WebApplicationFactory` and a dedicated real PostgreSQL database;
+it does not require Docker or Testcontainers. See
+`backend/tests/README.md` for the required `metro_test_` database variables and
+the local acceptance command. PostgreSQL tests that are skipped because no test
+database was configured are not acceptance evidence.
+
 ### Run frontend
 
 In another terminal:
