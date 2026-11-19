@@ -121,6 +121,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapAuthEndpoints();
+app.MapProfileEndpoints();
 app.MapHealthEndpoints();
 
 if (app.Environment.IsDevelopment())

@@ -46,6 +46,7 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser, IdentityRole
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<AccountRoleAssignment> AccountRoleAssignments => Set<AccountRoleAssignment>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<EligibilityEvidence> EligibilityEvidence => Set<EligibilityEvidence>();
 
     // Network domain entities
     public DbSet<Line> Lines => Set<Line>();

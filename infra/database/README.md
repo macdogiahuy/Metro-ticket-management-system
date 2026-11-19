@@ -19,6 +19,7 @@ Do not use the application login as the migration owner. Application roles shoul
 4. `migrations/004_support_analytics_automation.sql`
 5. `migrations/005_transactional_capacity_retention.sql`
 6. `migrations/006_srs_v1_2_alignment.sql`
+7. `migrations/007_profile_eligibility_evidence.sql`
 
 `build_deploy.py` combines those sources into `deploy.sql`, wraps them in one transaction, verifies migration checksums, and serializes deployments with a PostgreSQL advisory lock. Edit only migration sources; never hand-edit `deploy.sql`.
 

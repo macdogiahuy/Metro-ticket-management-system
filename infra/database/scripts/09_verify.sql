@@ -11,8 +11,8 @@ BEGIN
     IF current_setting('server_encoding') <> 'UTF8' THEN
         RAISE EXCEPTION 'UTF8 server encoding is required';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 6) THEN
-        RAISE EXCEPTION 'Migration 006 is not installed';
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 7) THEN
+        RAISE EXCEPTION 'Migration 007 is not installed';
     END IF;
 
     SELECT string_agg(name, ', ') INTO v_missing
