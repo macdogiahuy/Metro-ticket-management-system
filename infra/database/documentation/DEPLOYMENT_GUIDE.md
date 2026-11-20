@@ -19,9 +19,59 @@ psql -v ON_ERROR_STOP=1 -d metro_ticket -f infra/database/scripts/09_verify.sql
 The deploy file uses one transaction, a 15-second lock timeout, a 5-minute
 statement timeout and an advisory transaction lock. It refuses PostgreSQL below
 version 17, non-UTF8 encoding, or an existing unversioned `metro` schema containing
-tables. The current artifact contains six checksummed migrations; `09_verify.sql`
-requires migration 6, the 14 workflow functions, the 16 SRS v1.2 tables, the
+tables. The current artifact contains nine checksummed migrations; `09_verify.sql`
+requires migration 9, the 14 workflow functions, the SRS v1.2 and profile verification/purge tables, the
 `ex_tickets_no_overlapping_validity` constraint and 25 retention triggers.
+
+## BE-04 production release gate
+
+Neon production was upgraded from 006 to **008**, then to **009** on 20 November
+2026. The two database releases, retained backups and rollback details are in
+the [production deployment record](../../../backend/docs/BE-04-PRODUCTION-007-008.md).
+The application rollout is separate from the database release.
+
+1. Obtain explicit user authorization for the named Neon project/production
+   branch and release window. Separately obtain M01's PR review and explicit
+   exception to the 400-line logic limit. Record links to those approvals in the
+   PR; neither is implied by a test result.
+2. Before production SQL or starting the new worker, create a **separate backup
+   branch** from the production branch at the pre-release point, for example
+   `backup/be04-pre-009-<release-id>`. Record its actual branch ID, source,
+   creation time and restore procedure; verify it is usable. Retain it throughout
+   release acceptance. A Git branch is not a database backup.
+3. Create a separate rehearsal branch from that same production state. Check
+   `metro.schema_migrations` and checksums, apply the generated `deploy.sql`
+   with `ON_ERROR_STOP=1`, then run `09_verify.sql`. Exercise profile ownership,
+   anonymous 401, non-Admin 403 and migrated legacy evidence using a private test
+   bucket. Never run acceptance fixtures/tests against production or let a
+   rehearsal worker delete objects from the production bucket.
+4. In the authorized release window, pause profile writes/lifecycle workers,
+   recheck the target branch and its 001-008 checksums, then apply the reviewed
+   package once using the migration role/direct connection. Its transaction and
+   checksum guard skip 001-008 and apply 009. Verify versions 1-9
+   and run `09_verify.sql`. Grant the lifecycle runtime role only the needed
+   `SELECT`, `INSERT`, and `DELETE` permissions on
+   `metro.profile_eligibility_purge_queue` when the role lacks them. A separate
+   runtime role also needs `UPDATE` on at least one column for
+   `FOR UPDATE SKIP LOCKED`. Confirm its existing profile and audit privileges
+   and deploy the new API and worker after schema verification succeeds.
+5. Smoke-test auth/ownership and monitor purge retry warnings and queue depth
+   without logging queue object keys or PII. Record deployment time, schema
+   verification and smoke-test evidence before marking production complete.
+6. If SQL fails before commit, the deployment transaction rolls back; keep the
+   previous application running. If application rollout fails after schema
+   commit, stop the new worker and roll back the application while retaining
+   the additive schema/queue. Any restore or production branch switch needs
+   explicit user authorization and reconciliation of writes since backup.
+   A database backup does not restore object bytes already purged: coordinate
+   object-storage recovery before restoring references to them.
+
+Migration 008 is retained unchanged to preserve checksums of any existing test
+or staging installation. Its `pg_get_constraintdef LIKE '%status%'` matcher is a
+known maintenance risk. Subsequent state-check changes must target the explicit
+names `ck_profile_eligibility_status` and `ck_profile_eligibility_decision` in a
+new migration, without matching constraint text. All constraints introduced by
+009 already have explicit names.
 
 ## Validation tests
 

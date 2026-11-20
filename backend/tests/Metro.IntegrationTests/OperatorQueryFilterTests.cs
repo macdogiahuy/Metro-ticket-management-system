@@ -75,4 +75,32 @@ public class OperatorQueryFilterTests
             context.SaveChanges();
         });
     }
+
+    [Fact]
+    public async Task Tenantless_profile_audit_can_be_added_but_not_updated_deleted_or_used_to_move_tenant_logs()
+    {
+        var database = Guid.NewGuid().ToString();
+        using (var global = Context(database))
+        {
+            var audit = new AuditLog { Action = "PROFILE_UPDATED", EntityType = "user_profiles", EntityId = "owner" };
+            global.AuditLogs.Add(audit);
+            Assert.Equal(1, await global.SaveChangesAsync());
+            audit.Reason = "Change history after insert";
+            await Assert.ThrowsAsync<InvalidOperationException>(() => global.SaveChangesAsync());
+            global.Entry(audit).State = EntityState.Unchanged;
+            global.AuditLogs.Remove(audit);
+            Assert.Throws<InvalidOperationException>(() => global.SaveChanges());
+        }
+
+        var ownerOperator = Guid.NewGuid();
+        using var scoped = Context(database, new OperatorContext { CurrentOperatorId = ownerOperator });
+        var ownAudit = new AuditLog { OperatorId = ownerOperator, Action = "TENANT_ACTION" };
+        scoped.AuditLogs.Add(ownAudit);
+        Assert.Equal(1, await scoped.SaveChangesAsync());
+        ownAudit.OperatorId = null;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => scoped.SaveChangesAsync());
+        scoped.ChangeTracker.Clear();
+        scoped.AuditLogs.Add(new AuditLog { OperatorId = Guid.NewGuid(), Action = "FOREIGN_ACTION" });
+        Assert.Throws<InvalidOperationException>(() => scoped.SaveChanges());
+    }
 }
