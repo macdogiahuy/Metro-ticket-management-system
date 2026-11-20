@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Data.Common;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -13,6 +14,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -448,6 +451,167 @@ public sealed class ProfileEndpointsTests(MetroWebApplicationFactory factory)
         services.AddSingleton<IObjectStorage>(storage);
     }));
 
+    [PostgreSqlFact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task Lifecycle_save_or_commit_failure_keeps_evidence_downloadable_and_does_not_delete_storage()
+    {
+        foreach (var failOnSave in new[] { true, false })
+        {
+            var storage = new MemoryObjectStorage();
+            using var app = CreateApp(storage);
+            var owner = await CreatePassengerAsync(app);
+            using var client = owner.Client;
+            var id = await PrepareRetainedEvidenceAsync(app, client);
+            IInterceptor fault = failOnSave ? new FailLifecycleSave() : new FailLifecycleCommit("ELIGIBILITY_EVIDENCE_PURGE_QUEUED");
+            await using (var db = LifecycleDb(fault))
+            {
+                var lifecycle = new ProfileEligibilityLifecycle(db, storage, NullLogger<ProfileEligibilityLifecycle>.Instance);
+                await Assert.ThrowsAsync<InvalidOperationException>(() => lifecycle.RunOnceAsync(DateTime.UtcNow));
+            }
+
+            Assert.Empty(storage.DeletedKeys);
+            using (var download = await client.GetAsync($"/api/v1/me/eligibility/{id}/evidence"))
+            {
+                Assert.Equal(HttpStatusCode.OK, download.StatusCode);
+                Assert.Equal(Pdf("retained private evidence 0"), await download.Content.ReadAsByteArrayAsync());
+            }
+            await using (var db = LifecycleDb())
+            {
+                Assert.NotNull((await db.EligibilityEvidence.AsNoTracking().SingleAsync(x => x.Id == id)).EvidenceObjectKey);
+                Assert.Equal(0, await PurgeJobCountAsync(db, id));
+            }
+            await RunLifecycleAsync(app);
+            Assert.Empty(storage.Objects);
+        }
+    }
+
+    [PostgreSqlFact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task Lifecycle_storage_failure_retries_committed_queue_without_logging_private_details()
+    {
+        const string privateMessage = "passenger-secret@example.invalid";
+        var storage = new MemoryObjectStorage { FailOnDelete = 2, DeleteFailureMessage = privateMessage };
+        using var app = CreateApp(storage);
+        var owner = await CreatePassengerAsync(app);
+        using var client = owner.Client;
+        var id = await PrepareRetainedEvidenceAsync(app, client, 2);
+        var keys = storage.Objects.Keys.ToArray();
+        storage.BeforeDelete = async _ =>
+        {
+            // Read through another connection: detachment and the cleanup intent must
+            // already be committed before even the first storage deletion starts.
+            await using var db = LifecycleDb();
+            var request = await db.EligibilityEvidence.Include(x => x.Attachments).AsNoTracking().SingleAsync(x => x.Id == id);
+            Assert.Null(request.EvidenceObjectKey);
+            Assert.All(request.Attachments, x => Assert.Null(x.ObjectKey));
+            Assert.Equal(1, await PurgeJobCountAsync(db, id));
+        };
+        await RunLifecycleAsync(app);
+        storage.BeforeDelete = null;
+        Assert.Single(storage.Objects);
+        await using (var db = LifecycleDb())
+        {
+            Assert.Equal(1, await PurgeJobCountAsync(db, id));
+            Assert.Empty(await db.AuditLogs.IgnoreQueryFilters().Where(x => x.EntityId == id.ToString() && x.Action == "ELIGIBILITY_EVIDENCE_PURGED").ToListAsync());
+        }
+        var messages = string.Join('\n', factory.TestLogs.Messages);
+        Assert.Contains("evidence purge will retry after IOException", messages);
+        Assert.DoesNotContain(privateMessage, messages);
+        Assert.All(keys, key => Assert.DoesNotContain(key, messages));
+
+        // Independent worker scopes also exercise SKIP LOCKED and idempotent replay
+        // of an object that was deleted before the previous batch failed.
+        await Task.WhenAll(RunLifecycleAsync(app), RunLifecycleAsync(app));
+        await RunLifecycleAsync(app);
+        Assert.Empty(storage.Objects);
+        await using var verified = LifecycleDb();
+        Assert.Equal(0, await PurgeJobCountAsync(verified, id));
+        Assert.Single(await verified.AuditLogs.IgnoreQueryFilters().Where(x => x.EntityId == id.ToString() && x.Action == "ELIGIBILITY_EVIDENCE_PURGED").ToListAsync());
+    }
+
+    [PostgreSqlFact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task Lifecycle_cleanup_commit_failure_preserves_queue_for_idempotent_retry()
+    {
+        var storage = new MemoryObjectStorage();
+        using var app = CreateApp(storage);
+        var owner = await CreatePassengerAsync(app);
+        using var client = owner.Client;
+        var id = await PrepareRetainedEvidenceAsync(app, client);
+        await using (var db = LifecycleDb(new FailLifecycleCommit("ELIGIBILITY_EVIDENCE_PURGED")))
+        {
+            var lifecycle = new ProfileEligibilityLifecycle(db, storage, NullLogger<ProfileEligibilityLifecycle>.Instance);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => lifecycle.RunOnceAsync(DateTime.UtcNow));
+        }
+        Assert.Empty(storage.Objects);
+        await using (var db = LifecycleDb())
+        {
+            Assert.Equal(1, await PurgeJobCountAsync(db, id));
+            Assert.Null((await db.EligibilityEvidence.AsNoTracking().SingleAsync(x => x.Id == id)).EvidenceObjectKey);
+        }
+        await RunLifecycleAsync(app);
+        await using var verified = LifecycleDb();
+        Assert.Equal(0, await PurgeJobCountAsync(verified, id));
+        Assert.Single(await verified.AuditLogs.IgnoreQueryFilters().Where(x => x.EntityId == id.ToString() && x.Action == "ELIGIBILITY_EVIDENCE_PURGED").ToListAsync());
+    }
+
+    private static ApplicationDbContext LifecycleDb(params IInterceptor[] interceptors) => new(
+        new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseNpgsql(PostgreSqlTestConfiguration.LoadRequired().ConnectionString)
+            .AddInterceptors(interceptors).Options);
+
+    private static Task<int> PurgeJobCountAsync(ApplicationDbContext db, Guid id) => db.Database.SqlQuery<int>($"""
+        SELECT count(*)::integer AS "Value" FROM metro.profile_eligibility_purge_queue WHERE request_id = {id}
+        """).SingleAsync();
+
+    private static async Task RunLifecycleAsync(WebApplicationFactory<Program> app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<ProfileEligibilityLifecycle>().RunOnceAsync(DateTime.UtcNow);
+    }
+
+    private static async Task<Guid> PrepareRetainedEvidenceAsync(WebApplicationFactory<Program> app, HttpClient client, int files = 1)
+    {
+        var id = await SubmitAsync(client);
+        for (var i = 0; i < files; i++)
+            Assert.Equal(HttpStatusCode.OK, (await UploadAsync(client, id, Pdf($"retained private evidence {i}"))).StatusCode);
+        using var admin = await CreateReviewerAsync(app);
+        Assert.Equal(HttpStatusCode.OK, (await DecideAsync(admin, id, "REJECTED", "Retention regression fixture")).StatusCode);
+        await using var db = LifecycleDb();
+        var request = await db.EligibilityEvidence.Include(x => x.Attachments).SingleAsync(x => x.Id == id);
+        request.DecidedAt = DateTime.UtcNow.AddDays(-31);
+        // Exercise legacy 007 references alongside the attachments backfilled by 008.
+        var first = request.Attachments[0];
+        request.EvidenceObjectKey = first.ObjectKey;
+        request.EvidenceFileName = first.FileName;
+        request.EvidenceContentType = first.ContentType;
+        request.EvidenceSize = first.Size;
+        request.EvidenceSha256 = first.Sha256;
+        await db.SaveChangesAsync();
+        return id;
+    }
+
+    private sealed class FailLifecycleSave : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+            => HasAudit(eventData.Context, "ELIGIBILITY_EVIDENCE_PURGE_QUEUED")
+                ? throw new InvalidOperationException("Simulated lifecycle save failure.")
+                : ValueTask.FromResult(result);
+    }
+
+    private sealed class FailLifecycleCommit(string action) : DbTransactionInterceptor
+    {
+        public override ValueTask<InterceptionResult> TransactionCommittingAsync(DbTransaction transaction,
+            TransactionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
+            => HasAudit(eventData.Context, action)
+                ? throw new InvalidOperationException("Simulated lifecycle commit failure.")
+                : ValueTask.FromResult(result);
+    }
+
+    private static bool HasAudit(DbContext? db, string action) =>
+        db?.ChangeTracker.Entries<AuditLog>().Any(x => x.Entity.Action == action) == true;
+
     private static async Task<(HttpClient Client, string UserId)> CreatePassengerAsync(WebApplicationFactory<Program> app)
     {
         var client = app.CreateClient();
@@ -514,7 +678,11 @@ public sealed class ProfileEndpointsTests(MetroWebApplicationFactory factory)
         public ConcurrentDictionary<string, byte[]> Objects { get; } = new();
         public ConcurrentBag<string> DeletedKeys { get; } = [];
         public int? FailOnPut { get; init; }
+        public int? FailOnDelete { get; init; }
+        public string DeleteFailureMessage { get; init; } = "Simulated storage delete failure.";
+        public Func<string, Task>? BeforeDelete { get; set; }
         private int _putCount;
+        private int _deleteCount;
         public Task<bool> IsReachableAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
         public async Task PutAsync(string key, Stream content, string contentType, CancellationToken cancellationToken = default)
         {
@@ -525,11 +693,12 @@ public sealed class ProfileEndpointsTests(MetroWebApplicationFactory factory)
         }
         public Task<Stream> GetAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<Stream>(new MemoryStream(Objects[key], writable: false));
         public Task<Uri> CreateDownloadUrlAsync(string key, TimeSpan lifetime, CancellationToken cancellationToken = default) => throw new InvalidOperationException("Private evidence must be streamed through an authorized endpoint.");
-        public Task DeleteAsync(string key, CancellationToken cancellationToken = default)
+        public async Task DeleteAsync(string key, CancellationToken cancellationToken = default)
         {
+            if (BeforeDelete is { } beforeDelete) await beforeDelete(key);
+            if (Interlocked.Increment(ref _deleteCount) == FailOnDelete) throw new IOException(DeleteFailureMessage);
             Objects.TryRemove(key, out _);
             DeletedKeys.Add(key);
-            return Task.CompletedTask;
         }
     }
 }

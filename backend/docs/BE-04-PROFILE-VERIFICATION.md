@@ -77,16 +77,30 @@ notification consumer to deliver/read those rows.
 ## Expiry and retention
 
 The lifecycle worker runs every minute outside Testing. It marks overdue VERIFIED
-requests EXPIRED using the Vietnam calendar day, then purges private object bytes
-30 days after final expiry/rejection/revocation unless evidence_hold is active.
-Attachment and decision metadata remain for the required minimum 24 months
-(this implementation does not delete historical metadata). Failed storage
-deletions leave references intact for retry. Audits record expiry and purges.
+requests EXPIRED using the Vietnam calendar day. Once a request has been expired,
+rejected or revoked for 30 days, the worker can queue its private evidence for
+purge unless `evidence_hold` is active.
+
+The worker writes a purge task to the outbox and detaches live object references
+in one database transaction. A rollback preserves the live references and the
+files. After commit the worker claims the task with `FOR UPDATE SKIP LOCKED`.
+It keeps the task for retry if storage fails and logs only the exception type.
+It removes the task and audits completion after the files have been deleted.
+Attachment and decision metadata remain for the required minimum 24 months.
 
 ## Database deployment and checks
 
-Migrations 001 through 007 are unchanged. Migration 008 adds attachment/decision
-history tables and extends status/hold fields, preserving existing 007 uploads.
+Migration 008 adds attachment and decision history tables and extends the status
+and hold fields while preserving existing 007 uploads. Neon production was
+verified at migrations 001–009 after the 20 November 2026 deployment. See the
+[production deployment record](BE-04-PRODUCTION-007-008.md).
+
+The revised worker requires migration 009 and its
+`metro.profile_eligibility_purge_queue` table. Apply 009 to the target database
+before starting this version of the API and worker. Keep the checksum of the
+deployed 008 migration. If a future migration changes the state checks, refer
+to `ck_profile_eligibility_status` and `ck_profile_eligibility_decision` by name.
+
 Never point tests at Neon production. Use an isolated UTF8 PostgreSQL 17+
 database whose name begins `metro_test_`:
 

@@ -3518,4 +3518,34 @@ COMMENT ON TABLE metro.profile_eligibility_decisions IS 'Retain decision metadat
   VALUES (8, '008_profile_verification_workflow.sql', 'a6f4a8c072a6f9a6f0643755eb28ff583c961c6ed1591aaa2b62ac88d38be34e');
 END $migration_008$;
 
+-- 009_profile_evidence_purge_queue.sql
+DO $migration_009$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 9) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 9
+                   AND name = '009_profile_evidence_purge_queue.sql' AND checksum = 'b50b99c95403d4f324e362e46921335281e367ea9758cb8ff9c6889e92c0f12a') THEN
+      RAISE EXCEPTION 'Migration 009 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 009 already applied';
+    RETURN;
+  END IF;
+
+-- Durable mark-then-purge: detach evidence references and enqueue in one transaction.
+-- Preserve checksums of migrations 001-008, including databases already using 008.
+CREATE TABLE metro.profile_eligibility_purge_queue (
+    request_id uuid CONSTRAINT pk_profile_eligibility_purge_queue PRIMARY KEY,
+    object_keys text[] NOT NULL,
+    queued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT fk_profile_eligibility_purge_request FOREIGN KEY (request_id)
+        REFERENCES metro.profile_eligibility_requests(id) ON DELETE RESTRICT,
+    CONSTRAINT ck_profile_eligibility_purge_keys CHECK (
+        cardinality(object_keys) > 0 AND array_position(object_keys, NULL) IS NULL)
+);
+COMMENT ON TABLE metro.profile_eligibility_purge_queue IS
+    'Private cleanup outbox; delete objects only after enqueue commits. Retry until all deletes succeed; never log object_keys.';
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (9, '009_profile_evidence_purge_queue.sql', 'b50b99c95403d4f324e362e46921335281e367ea9758cb8ff9c6889e92c0f12a');
+END $migration_009$;
+
 COMMIT;
