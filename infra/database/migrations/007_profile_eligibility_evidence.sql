@@ -1,5 +1,7 @@
 -- BE-04: concession evidence requests and private object-storage references.
-CREATE TABLE metro.eligibility_evidence (
+-- Keep profile verification requests separate from the ticketing-domain
+-- eligibility_evidence table created by migration 003.
+CREATE TABLE metro.profile_eligibility_requests (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id text NOT NULL REFERENCES public."AspNetUsers" ("Id") ON DELETE RESTRICT,
     category varchar(40) NOT NULL CHECK (category IN ('STUDENT','ELDERLY','DISABILITY','PRIORITY','OTHER')),
@@ -22,6 +24,6 @@ CREATE TABLE metro.eligibility_evidence (
     CHECK ((status = 'PENDING' AND decided_at IS NULL AND decided_by_user_id IS NULL)
         OR (status <> 'PENDING' AND decided_at IS NOT NULL AND decided_by_user_id IS NOT NULL))
 );
-CREATE INDEX ix_eligibility_evidence_user_time ON metro.eligibility_evidence (user_id, created_at DESC);
-CREATE INDEX ix_eligibility_evidence_status ON metro.eligibility_evidence (status, created_at) WHERE status = 'PENDING';
-COMMENT ON COLUMN metro.eligibility_evidence.evidence_object_key IS 'Private object storage key; never store document bytes or signed URLs in the database or audit log.';
+CREATE INDEX ix_profile_eligibility_requests_user_time ON metro.profile_eligibility_requests (user_id, created_at DESC);
+CREATE INDEX ix_profile_eligibility_requests_status ON metro.profile_eligibility_requests (status, created_at) WHERE status = 'PENDING';
+COMMENT ON COLUMN metro.profile_eligibility_requests.evidence_object_key IS 'Private object storage key; never store document bytes or signed URLs in the database or audit log.';

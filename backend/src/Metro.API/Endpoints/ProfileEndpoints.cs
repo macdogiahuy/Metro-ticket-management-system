@@ -76,7 +76,7 @@ public static class ProfileEndpoints
         var userId = UserId(principal);
         var item = new EligibilityEvidence { UserId = userId, Category = request.Category, ValidFrom = request.ValidFrom, ValidTo = request.ValidTo };
         db.EligibilityEvidence.Add(item);
-        db.AuditLogs.Add(Audit(principal, "ELIGIBILITY_SUBMITTED", "eligibility_evidence", item.Id.ToString(), ["category", "valid_from", "valid_to"], null, HashEvidence(item)));
+        db.AuditLogs.Add(Audit(principal, "ELIGIBILITY_SUBMITTED", "profile_eligibility_requests", item.Id.ToString(), ["category", "valid_from", "valid_to"], null, HashEvidence(item)));
         await db.SaveChangesAsync(ct);
         return Results.Created($"/api/v1/me/eligibility/{item.Id}", ToResponse(item));
     }
@@ -105,7 +105,7 @@ public static class ProfileEndpoints
         item.EvidenceSize = signature.Value.Bytes.Length;
         item.EvidenceSha256 = Convert.ToHexStringLower(SHA256.HashData(signature.Value.Bytes));
         item.UpdatedAt = DateTime.UtcNow;
-        db.AuditLogs.Add(Audit(principal, "ELIGIBILITY_EVIDENCE_UPLOADED", "eligibility_evidence", id.ToString(), ["evidence_object_key", "evidence_file_name", "evidence_content_type", "evidence_size", "evidence_sha256"], before, HashEvidence(item)));
+        db.AuditLogs.Add(Audit(principal, "ELIGIBILITY_EVIDENCE_UPLOADED", "profile_eligibility_requests", id.ToString(), ["evidence_object_key", "evidence_file_name", "evidence_content_type", "evidence_size", "evidence_sha256"], before, HashEvidence(item)));
         await db.SaveChangesAsync(ct);
         if (oldKey is not null) await storage.DeleteAsync(oldKey, ct);
         return Results.Ok(ToResponse(item));
@@ -136,7 +136,7 @@ public static class ProfileEndpoints
         item.DecidedByUserId = UserId(principal);
         item.DecidedAt = DateTime.UtcNow;
         item.UpdatedAt = DateTime.UtcNow;
-        db.AuditLogs.Add(Audit(principal, "ELIGIBILITY_" + decision, "eligibility_evidence", id.ToString(), ["status", "decision_reason", "decided_by_user_id", "decided_at"], before, HashEvidence(item), request.Reason.Trim()));
+        db.AuditLogs.Add(Audit(principal, "ELIGIBILITY_" + decision, "profile_eligibility_requests", id.ToString(), ["status", "decision_reason", "decided_by_user_id", "decided_at"], before, HashEvidence(item), request.Reason.Trim()));
         await db.SaveChangesAsync(ct);
         return Results.Ok(ToResponse(item));
     }

@@ -8,7 +8,7 @@ public sealed class EligibilityEvidenceConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<EligibilityEvidence> builder)
     {
-        builder.ToTable("eligibility_evidence", "metro");
+        builder.ToTable("profile_eligibility_requests", "metro");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
         builder.Property(x => x.UserId).HasColumnName("user_id").IsRequired();
