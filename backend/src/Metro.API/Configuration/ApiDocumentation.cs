@@ -52,6 +52,28 @@ public static class ApiDocumentation
             }
             """;
 
+        private const string NotFound404Example =
+            """
+            {
+              "type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+              "title": "Resource not found",
+              "status": 404,
+              "detail": "Station or line was not found.",
+              "code": "STATION_NOT_FOUND"
+            }
+            """;
+
+        private const string Unprocessable422Example =
+            """
+            {
+              "type": "https://tools.ietf.org/html/rfc9110#section-15.5.21",
+              "title": "Route unavailable",
+              "status": 422,
+              "detail": "No serving metro route is currently available between the selected stations.",
+              "code": "PATH_UNAVAILABLE"
+            }
+            """;
+
         private const string ServerError500Example =
             """
             {
@@ -68,6 +90,20 @@ public static class ApiDocumentation
             {
                 operation.Responses.Add("400", BuildResponse(context, typeof(ValidationProblemDetails),
                     "Yêu cầu không hợp lệ — validation thất bại.", Validation400Example));
+            }
+
+            if (operation.Responses.TryGetValue("404", out var notFound) &&
+                notFound.Content.TryGetValue("application/problem+json", out var notFoundMedia) &&
+                notFoundMedia.Example is null)
+            {
+                notFoundMedia.Example = new OpenApiString(NotFound404Example);
+            }
+
+            if (operation.Responses.TryGetValue("422", out var unprocessable) &&
+                unprocessable.Content.TryGetValue("application/problem+json", out var unprocessableMedia) &&
+                unprocessableMedia.Example is null)
+            {
+                unprocessableMedia.Example = new OpenApiString(Unprocessable422Example);
             }
 
             if (!operation.Responses.ContainsKey("500"))

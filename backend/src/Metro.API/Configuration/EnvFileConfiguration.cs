@@ -52,11 +52,12 @@ public static class EnvFileConfiguration
                 continue;
             }
 
-            var key = line[..separator].Trim();
+            var rawKey = line[..separator].Trim();
+            var key = rawKey.Replace("__", ConfigurationPath.KeyDelimiter, StringComparison.Ordinal);
             var value = Unquote(line[(separator + 1)..].Trim());
 
             // A real environment variable wins over the local file.
-            if (Environment.GetEnvironmentVariable(key) is null)
+            if (Environment.GetEnvironmentVariable(rawKey) is null)
             {
                 values[key] = value;
             }

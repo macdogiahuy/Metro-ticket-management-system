@@ -1,6 +1,9 @@
 using Metro.Application.Abstractions.Auth;
+using Metro.Application.Abstractions.Catalog;
 using Metro.Application.Abstractions.MultiTenancy;
 using Metro.Application.Abstractions.Storage;
+using Metro.Infrastructure.Caching;
+using Metro.Infrastructure.Catalog;
 using Metro.Infrastructure.Configuration;
 using Metro.Infrastructure.Identity;
 using Metro.Infrastructure.Persistence.Context;
@@ -10,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using StackExchange.Redis;
 
 namespace Metro.Infrastructure;
 
@@ -31,6 +35,35 @@ public static class DependencyInjection
             .AddEntityFrameworkStores<ApplicationDbContext>();
 
         services.AddScoped<IAuthService, AuthService>();
+
+        services.Configure<CatalogCacheOptions>(configuration.GetSection("CatalogCache"));
+        var redisConnection = new[]
+        {
+            configuration["Redis:ConnectionString"],
+            configuration["Redis__ConnectionString"],
+            configuration.GetConnectionString("Redis"),
+        }.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+        if (!string.IsNullOrWhiteSpace(redisConnection))
+        {
+            var redisOptions = ConfigurationOptions.Parse(redisConnection);
+            redisOptions.AbortOnConnectFail = false;
+            if (redisOptions.ConnectTimeout == 5000) redisOptions.ConnectTimeout = 1500;
+            if (redisOptions.SyncTimeout == 5000) redisOptions.SyncTimeout = 1500;
+            if (redisOptions.AsyncTimeout == 5000) redisOptions.AsyncTimeout = 1500;
+
+            services.AddStackExchangeRedisCache(options =>
+            {
+                options.ConfigurationOptions = redisOptions;
+                options.InstanceName = "metro:";
+            });
+        }
+        else
+        {
+            services.AddDistributedMemoryCache();
+        }
+
+        services.AddSingleton<ICatalogCache, DistributedCatalogCache>();
+        services.AddScoped<ICatalogService, CatalogService>();
 
         var storageOptions = new NeonStorageOptions
         {

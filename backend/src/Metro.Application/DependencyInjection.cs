@@ -1,4 +1,6 @@
 using FluentValidation;
+using Metro.Application.Abstractions.Catalog;
+using Metro.Application.Catalog;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Metro.Application;
@@ -11,6 +13,7 @@ public static class DependencyInjection
         // được quét và đăng ký tự động; pipeline auto-validation ở Metro.API gọi chúng
         // trước khi request đi vào controller, trả 400 ValidationProblemDetails khi fail.
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, includeInternalTypes: true);
+        services.AddSingleton<IRouteFinder, RouteFinder>();
 
         return services;
     }

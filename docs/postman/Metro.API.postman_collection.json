@@ -10,7 +10,10 @@
     { "key": "password", "value": "", "type": "secret" },
     { "key": "verificationCode", "value": "", "type": "secret" },
     { "key": "accessToken", "value": "", "type": "secret" },
-    { "key": "refreshToken", "value": "", "type": "secret" }
+    { "key": "refreshToken", "value": "", "type": "secret" },
+    { "key": "lineId", "value": "" },
+    { "key": "originStationId", "value": "" },
+    { "key": "destinationStationId", "value": "" }
   ],
   "item": [
     {
@@ -139,6 +142,115 @@
           "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
         },
         "url": "{{baseUrl}}/api/v1/auth/logout"
+      }
+    },
+    {
+      "name": "Catalog — List lines (UC07)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('lines returns 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('lines payload has array', () => pm.expect(body.lines).to.be.an('array'));",
+              "if (body.lines.length > 0) {",
+              "  const firstLine = body.lines[0];",
+              "  pm.collectionVariables.set('lineId', firstLine.id);",
+              "  if (firstLine.stops && firstLine.stops.length >= 2) {",
+              "    pm.collectionVariables.set('originStationId', firstLine.stops[0].stationId);",
+              "    pm.collectionVariables.set('destinationStationId', firstLine.stops[firstLine.stops.length - 1].stationId);",
+              "  }",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/lines"
+      }
+    },
+    {
+      "name": "Catalog — List stations by line (UC07)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('stations returns 200', () => pm.response.to.have.status(200));",
+              "pm.test('stations payload has array', () => pm.expect(pm.response.json().stations).to.be.an('array'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/stations?lineId={{lineId}}"
+      }
+    },
+    {
+      "name": "Catalog — Stations unknown line returns 404 (UC07)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('unknown line returns 404', () => pm.response.to.have.status(404));",
+              "pm.test('problem code is LINE_NOT_FOUND', () => pm.expect(pm.response.json().code).to.eql('LINE_NOT_FOUND'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/stations?lineId=00000000-0000-0000-0000-000000000000"
+      }
+    },
+    {
+      "name": "Catalog — Search journeys (UC08)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('journeys returns 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('at least one optimal route returned', () => pm.expect(body.options.length).to.be.above(0));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/journeys?originStationId={{originStationId}}&destinationStationId={{destinationStationId}}"
+      }
+    },
+    {
+      "name": "Catalog — Service status (UC10)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('service status returns 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('has overallStatus and dataAsOf', () => {",
+              "  pm.expect(body.overallStatus).to.be.a('string');",
+              "  pm.expect(body.dataAsOf).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/service-status?lineId={{lineId}}"
       }
     }
   ]
