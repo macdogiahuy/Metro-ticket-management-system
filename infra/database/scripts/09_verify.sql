@@ -11,8 +11,8 @@ BEGIN
     IF current_setting('server_encoding') <> 'UTF8' THEN
         RAISE EXCEPTION 'UTF8 server encoding is required';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 7) THEN
-        RAISE EXCEPTION 'Migration 007 is not installed';
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 8) THEN
+        RAISE EXCEPTION 'Migration 008 is not installed';
     END IF;
 
     SELECT string_agg(name, ', ') INTO v_missing
@@ -51,6 +51,7 @@ BEGIN
         ('guardian_links'), ('load_observations'), ('trip_eta_updates'),
         ('ticket_change_requests'), ('lost_reports'), ('found_items'),
         ('profile_eligibility_requests'),
+        ('profile_eligibility_attachments'), ('profile_eligibility_decisions'),
         ('lost_item_claims'), ('lost_item_handovers'),
         ('station_support_capacities'), ('accessibility_requests'),
         ('accessibility_request_events'), ('data_quality_days'),

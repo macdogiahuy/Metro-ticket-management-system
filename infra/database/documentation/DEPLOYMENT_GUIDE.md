@@ -19,8 +19,8 @@ psql -v ON_ERROR_STOP=1 -d metro_ticket -f infra/database/scripts/09_verify.sql
 The deploy file uses one transaction, a 15-second lock timeout, a 5-minute
 statement timeout and an advisory transaction lock. It refuses PostgreSQL below
 version 17, non-UTF8 encoding, or an existing unversioned `metro` schema containing
-tables. The current artifact contains seven checksummed migrations; `09_verify.sql`
-requires migration 7, the 14 workflow functions, the 16 SRS v1.2 tables, the
+tables. The current artifact contains eight checksummed migrations; `09_verify.sql`
+requires migration 8, the 14 workflow functions, the SRS v1.2 and profile verification tables, the
 `ex_tickets_no_overlapping_validity` constraint and 25 retention triggers.
 
 ## Validation tests

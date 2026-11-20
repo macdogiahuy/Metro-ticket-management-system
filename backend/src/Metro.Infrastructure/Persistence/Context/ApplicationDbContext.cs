@@ -107,6 +107,8 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser, IdentityRole
         {
             if (entry.Entity is not IOperatorScoped && entry.Entity is not IOptionalOperatorScoped) continue;
             var property = entry.Property("OperatorId");
+            // Profile/auth audits have no operator; do not permit moving a tenant log to global scope.
+            if (entry.Entity is AuditLog && property.CurrentValue is null && entry.State == EntityState.Added) continue;
             if (CurrentOperatorId is null || CurrentOperatorId == Guid.Empty ||
                 !Equals(property.CurrentValue, CurrentOperatorId) ||
                 (entry.State != EntityState.Added && !Equals(property.OriginalValue, CurrentOperatorId)))

@@ -77,6 +77,8 @@ public static class DependencyInjection
         services.AddSingleton<IObjectStorage>(_ =>
             new NeonObjectStorage(Options.Create(storageOptions)));
 
+        services.AddProfileEligibilityLifecycle();
+
         return services;
     }
 }
