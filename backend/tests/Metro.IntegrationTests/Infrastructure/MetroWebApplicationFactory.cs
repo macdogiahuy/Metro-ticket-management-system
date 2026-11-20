@@ -17,6 +17,7 @@ public sealed class MetroWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.UseEnvironment("Testing");
         builder.UseSetting("DATABASE_URL", postgres.ConnectionString);
+        builder.UseSetting("Redis:ConnectionString", Environment.GetEnvironmentVariable("METRO_TEST_REDIS_CONNECTION_STRING") ?? string.Empty);
         builder.UseSetting("Jwt:SigningKey", _signingKey);
         builder.UseSetting("Jwt:Issuer", "metro-api");
         builder.UseSetting("Jwt:Audience", "metro-web");
