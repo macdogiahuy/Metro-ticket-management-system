@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using FluentValidation;
 using Metro.Application.Abstractions.Auth;
+using Metro.Application.Abstractions.Catalog;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,6 +21,12 @@ public sealed class GlobalExceptionHandler(
         var (status, title) = exception switch
         {
             AuthException auth => (auth.Status, "Authentication failed"),
+            CatalogException catalog => (catalog.Status, catalog.Status switch
+            {
+                StatusCodes.Status404NotFound => "Resource not found",
+                StatusCodes.Status422UnprocessableEntity => "Route unavailable",
+                _ => "Invalid catalog request",
+            }),
             FluentValidation.ValidationException => (StatusCodes.Status400BadRequest, "Validation failed"),
             UnauthorizedAccessException => (StatusCodes.Status403Forbidden, "Forbidden"),
             KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found"),
@@ -52,6 +59,10 @@ public sealed class GlobalExceptionHandler(
         if (exception is AuthException authError)
         {
             problem.Extensions["code"] = authError.Code;
+        }
+        else if (exception is CatalogException catalogError)
+        {
+            problem.Extensions["code"] = catalogError.Code;
         }
 
         return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
