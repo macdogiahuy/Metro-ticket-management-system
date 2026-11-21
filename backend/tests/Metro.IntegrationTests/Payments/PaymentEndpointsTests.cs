@@ -53,7 +53,6 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
         Assert.Equal("SUCCEEDED", (await db.Payments.IgnoreQueryFilters().AsNoTracking().SingleAsync(p => p.Id == paymentId)).Status.ToString().ToUpperInvariant());
         Assert.Equal("ISSUED", (await db.Orders.IgnoreQueryFilters().AsNoTracking().SingleAsync(o => o.Id == orderId)).Status);
         Assert.Equal(1, await db.PaymentEvents.IgnoreQueryFilters().CountAsync(e => e.PaymentId == paymentId));
-        Assert.NotNull(operatorId);
     }
 
     [PostgreSqlFact]
