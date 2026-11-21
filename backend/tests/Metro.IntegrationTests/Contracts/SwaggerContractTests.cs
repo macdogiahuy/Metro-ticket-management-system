@@ -28,6 +28,9 @@ public sealed class SwaggerContractTests(MetroWebApplicationFactory factory)
         Assert.Contains("/api/v1/admin/fares/{id}/entries", swagger.Paths.Keys);
         Assert.Contains("/api/v1/admin/fares/{id}/approve", swagger.Paths.Keys);
         Assert.Contains("/api/v1/admin/fares/{id}/publish", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/eligibility-policies", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/eligibility-policies/{id}/approve", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/eligibility-policies/{id}/publish", swagger.Paths.Keys);
         Assert.Contains("/api/v1/service-status", swagger.Paths.Keys);
         Assert.Contains("/api/v1/payments", swagger.Paths.Keys);
         Assert.Contains("/api/v1/payments/{id}/retry", swagger.Paths.Keys);

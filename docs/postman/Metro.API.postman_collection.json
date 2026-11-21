@@ -61,6 +61,10 @@
     {
       "key": "adminFareVersionId",
       "value": ""
+    },
+    {
+      "key": "adminEligibilityPolicyId",
+      "value": ""
     }
   ],
   "item": [
@@ -490,6 +494,33 @@
           "raw": "{\n  \"ticketProductId\": \"{{adminProductId}}\",\n  \"lineId\": null,\n  \"originStationId\": null,\n  \"destinationStationId\": null,\n  \"paymentChannel\": \"ANY\",\n  \"eligibilityGroup\": \"ORDINARY\",\n  \"amountMinor\": 30000,\n  \"sellable\": true,\n  \"reason\": \"Set base day fare\"\n}"
         },
         "url": "{{baseUrl}}/api/v1/admin/fares/{{adminFareVersionId}}/entries"
+      }
+    },
+    {
+      "name": "Admin — Create eligibility policy (UC25)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('create eligibility policy returns 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('adminEligibilityPolicyId', pm.response.json().id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" },
+          { "key": "Idempotency-Key", "value": "pm-create-elig-{{$timestamp}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"ELDERLY-{{$timestamp}}\",\n  \"beneficiaryGroup\": \"ELDERLY\",\n  \"discountType\": \"PERCENT\",\n  \"discountValue\": 20,\n  \"eligibleProductCodes\": [],\n  \"requiredEvidenceTypes\": [\"CITIZEN_ID_DEMO\"],\n  \"effectiveFrom\": \"2027-01-01T00:00:00Z\",\n  \"effectiveTo\": null,\n  \"reason\": \"BR-071 20% elderly discount\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/admin/eligibility-policies"
       }
     }
   ]
