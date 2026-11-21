@@ -49,7 +49,7 @@ Mỗi người mở đúng khối của mình, làm từ trên xuống: xong tas
 | --- | --- | --- | --- | --- |
 | 18/11 | `BE-01` | Nền API | S0 | Done |
 | 25/11 | `BE-03` | Identity + JWT | S1 | Done |
-| 04/12 | `BE-08` | Payment MoMo TEST | S1 | To Do |
+| 04/12 | `BE-08` | Payment MoMo TEST | S1 | Done |
 | 09/12 | `BE-17` | Hardening | S2 | To Do |
 | 20/12 | `DOC-01` | Demo script + README chạy máy sạch + tài liệu bàn giao | S3 | In Progress |
 
@@ -127,7 +127,7 @@ Mỗi người mở đúng khối của mình, làm từ trên xuống: xong tas
 | **30/11** | [#23](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/23) | `BE-07` | Booking | Thành | Tuyên | S1 | 26/11 | 8 | To Do |
 | **01/12** | [#27](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/27) | `BE-14` | Cập nhật ETA + trạng thái tải/gián đoạn + gợi ý chuyến dự… | My | Hoàng | S1 | 30/11 | 2 | To Do |
 | **02/12** | [#29](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/29) | `BE-15` | Báo cáo vé/doanh thu + export CSV | Tiên | My | S1 | 30/11 | 3 | To Do |
-| **04/12** | [#26](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/26) | `BE-08` | Payment MoMo TEST | Huy | — | S1 | 01/12 | 5 | To Do |
+| **04/12** | [#26](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/26) | `BE-08` | Payment MoMo TEST | Huy | — | S1 | 01/12 | 5 | Done |
 | **04/12** | [#30](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/30) | `BE-10` | Soát vé tại cổng | Thành | Tiên | S2 | 01/12 | 5 | To Do |
 | **05/12** | [#31](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/31) | `BE-11` | Hỗ trợ tại cổng | Tiên | Thành | S2 | 05/12 | 1 | To Do |
 | **06/12** | [#28](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/28) | `BE-16` | Hủy đơn chưa thu + hoàn khoản thu lỗi + đổi vé do gián đoạn… | Tuyên | Hoàng | S1 | 05/12 | 2 | To Do |
