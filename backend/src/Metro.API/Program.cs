@@ -130,6 +130,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapAuthEndpoints();
 app.MapCatalogEndpoints();
+app.MapFareEndpoints();
 app.MapPaymentEndpoints();
 app.MapHealthEndpoints();
 

@@ -13,7 +13,8 @@
     { "key": "refreshToken", "value": "", "type": "secret" },
     { "key": "lineId", "value": "" },
     { "key": "originStationId", "value": "" },
-    { "key": "destinationStationId", "value": "" }
+    { "key": "destinationStationId", "value": "" },
+    { "key": "productCode", "value": "DEMO-SINGLE" }
   ],
   "item": [
     {
@@ -251,6 +252,31 @@
         "method": "GET",
         "header": [{ "key": "Accept", "value": "application/json" }],
         "url": "{{baseUrl}}/api/v1/service-status?lineId={{lineId}}"
+      }
+    },
+    {
+      "name": "Fare — Quote single trip (UC09)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('fare quote returns 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('quote contains version and VND total', () => {",
+              "  pm.expect(body.isReferenceQuote).to.eql(true);",
+              "  pm.expect(body.currency).to.eql('VND');",
+              "  pm.expect(body.farePolicy.id).to.be.a('string');",
+              "  pm.expect(body.totalAmountMinor).to.be.a('number');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/fares/quote?productCode={{productCode}}&originStationId={{originStationId}}&destinationStationId={{destinationStationId}}&eligibilityGroup=ORDINARY"
       }
     }
   ]
