@@ -14,7 +14,9 @@
     { "key": "lineId", "value": "" },
     { "key": "originStationId", "value": "" },
     { "key": "destinationStationId", "value": "" },
-    { "key": "productCode", "value": "DEMO-SINGLE" }
+    { "key": "productCode", "value": "DEMO-SINGLE" },
+    { "key": "adminAccessToken", "value": "", "type": "secret" },
+    { "key": "adminProductId", "value": "" }
   ],
   "item": [
     {
@@ -277,6 +279,56 @@
         "method": "GET",
         "header": [{ "key": "Accept", "value": "application/json" }],
         "url": "{{baseUrl}}/api/v1/fares/quote?productCode={{productCode}}&originStationId={{originStationId}}&destinationStationId={{destinationStationId}}&eligibilityGroup=ORDINARY"
+      }
+    },
+    {
+      "name": "Admin — List ticket products (UC25)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('list products returns 200', () => pm.response.to.have.status(200));",
+              "const items = pm.response.json();",
+              "if (items.length > 0) pm.collectionVariables.set('adminProductId', items[0].id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/v1/admin/products"
+      }
+    },
+    {
+      "name": "Admin — Create ticket product (UC25)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('create product returns 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('adminProductId', pm.response.json().id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" },
+          { "key": "Idempotency-Key", "value": "pm-create-day-{{$timestamp}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"DAY-PASS-{{$timestamp}}\",\n  \"name\": \"Ve ngay\",\n  \"productType\": \"DAY\",\n  \"durationValue\": 1,\n  \"durationUnit\": \"DAY\",\n  \"expiryRule\": \"NEXT_LOCAL_MIDNIGHT\",\n  \"requiresNamedHolder\": false,\n  \"capacityControlled\": false,\n  \"status\": \"ACTIVE\",\n  \"reason\": \"Create demo day pass\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/admin/products"
       }
     }
   ]

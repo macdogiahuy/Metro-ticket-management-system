@@ -131,6 +131,7 @@ app.MapControllers();
 app.MapAuthEndpoints();
 app.MapCatalogEndpoints();
 app.MapFareEndpoints();
+app.MapAdminProductEndpoints();
 app.MapPaymentEndpoints();
 app.MapHealthEndpoints();
 
