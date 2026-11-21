@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Metro.Domain\Metro.Domain.csproj" />
     <ProjectReference Include="..\..\src\Metro.Application\Metro.Application.csproj" />
+    <ProjectReference Include="..\..\src\Metro.Infrastructure\Metro.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

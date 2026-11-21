@@ -13,6 +13,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Metro.Application.Abstractions.Payment;
+using Metro.Infrastructure.Payments;
 using StackExchange.Redis;
 
 namespace Metro.Infrastructure;
@@ -76,6 +78,10 @@ public static class DependencyInjection
 
         services.AddSingleton<IObjectStorage>(_ =>
             new NeonObjectStorage(Options.Create(storageOptions)));
+
+        // BE-08: MoMo TEST gateway + payment orchestration.
+        services.Configure<MoMoOptions>(configuration.GetSection("Payment"));
+        services.AddScoped<IPaymentService, PaymentService>();
 
         return services;
     }

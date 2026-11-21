@@ -7,6 +7,8 @@ using Metro.API.Middleware;
 using Metro.Application;
 using Metro.Application.Abstractions.Auth;
 using Metro.Infrastructure;
+using Metro.Infrastructure.Payments;
+using Metro.Application.Abstractions.Payment;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -75,6 +77,12 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
 });
 
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddHttpClient<IPaymentGateway, MoMoPaymentGateway>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options => options.ConfigureMetroApi());
 
@@ -122,6 +130,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapAuthEndpoints();
 app.MapCatalogEndpoints();
+app.MapPaymentEndpoints();
 app.MapHealthEndpoints();
 
 if (app.Environment.IsDevelopment())
