@@ -66,12 +66,16 @@ The application rollout is separate from the database release.
    A database backup does not restore object bytes already purged: coordinate
    object-storage recovery before restoring references to them.
 
-Migration 008 is retained unchanged to preserve checksums of any existing test
-or staging installation. Its `pg_get_constraintdef LIKE '%status%'` matcher is a
-known maintenance risk. Subsequent state-check changes must target the explicit
+Migration 008 is retained unchanged to preserve checksums of the deployed
+production release and existing test/staging installations. Its
+`pg_get_constraintdef LIKE '%status%'` matcher is a known maintenance risk.
+Subsequent state-check changes must target the explicit
 names `ck_profile_eligibility_status` and `ck_profile_eligibility_decision` in a
 new migration, without matching constraint text. All constraints introduced by
-009 already have explicit names.
+009 already have explicit names. `09_verify.sql` requires both named workflow
+checks to exist on `metro.profile_eligibility_requests` as validated CHECK
+constraints. Run that verification after a clean deployment or upgrade; it does
+not alter the deployed migration or its checksum.
 
 ## Validation tests
 

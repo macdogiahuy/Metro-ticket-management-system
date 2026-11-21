@@ -63,6 +63,19 @@ BEGIN
         RAISE EXCEPTION 'Missing SRS v1.2 tables: %', v_missing;
     END IF;
 
+    SELECT string_agg(name, ', ') INTO v_missing
+    FROM (VALUES
+        ('ck_profile_eligibility_status'), ('ck_profile_eligibility_decision')
+    ) required(name)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM pg_constraint c
+        WHERE c.conrelid = 'metro.profile_eligibility_requests'::regclass
+          AND c.conname = required.name AND c.contype = 'c' AND c.convalidated
+    );
+    IF v_missing IS NOT NULL THEN
+        RAISE EXCEPTION 'Missing or unvalidated profile workflow checks: %', v_missing;
+    END IF;
+
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint c
         JOIN pg_class t ON t.oid = c.conrelid
