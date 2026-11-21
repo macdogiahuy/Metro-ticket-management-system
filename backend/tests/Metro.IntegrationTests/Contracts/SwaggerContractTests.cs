@@ -21,6 +21,9 @@ public sealed class SwaggerContractTests(MetroWebApplicationFactory factory)
         Assert.Contains("/api/v1/stations", swagger.Paths.Keys);
         Assert.Contains("/api/v1/journeys", swagger.Paths.Keys);
         Assert.Contains("/api/v1/service-status", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/payments", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/payments/{id}/retry", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/webhooks/momo", swagger.Paths.Keys);
         Assert.DoesNotContain("/api/v1/auth/_role-probe", swagger.Paths.Keys);
     }
 }
