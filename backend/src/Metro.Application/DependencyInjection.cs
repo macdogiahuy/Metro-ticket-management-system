@@ -1,6 +1,8 @@
 using FluentValidation;
 using Metro.Application.Abstractions.Catalog;
+using Metro.Application.Abstractions.Fare;
 using Metro.Application.Catalog;
+using Metro.Application.Fare;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Metro.Application;
@@ -14,6 +16,7 @@ public static class DependencyInjection
         // trước khi request đi vào controller, trả 400 ValidationProblemDetails khi fail.
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, includeInternalTypes: true);
         services.AddSingleton<IRouteFinder, RouteFinder>();
+        services.AddSingleton<IFareCalculator, FareCalculator>();
 
         return services;
     }
