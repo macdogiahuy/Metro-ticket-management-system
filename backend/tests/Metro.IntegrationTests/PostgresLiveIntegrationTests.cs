@@ -103,10 +103,14 @@ public class PostgresLiveIntegrationTests
         Assert.Equal(station.Id, generatedTicket.OriginStationId);
         Assert.Equal(destination.Id, generatedTicket.DestinationStationId);
         Assert.Equal(expectedEnd, ca.Entry(generatedTicket).Property(t => t.ExpiresAt).OriginalValue);
+        // SQL-created ISSUED now waits for QR readiness (BE-09); bounds still round-trip.
+        Assert.False(generatedTicket.IsValidAt(expectedStart));
+        generatedTicket.Status = "ACTIVE";
         Assert.True(generatedTicket.IsValidAt(expectedStart));
         Assert.False(generatedTicket.IsValidAt(expectedStart.AddTicks(-10)));
         Assert.False(generatedTicket.IsValidAt(expectedEnd));
         Assert.False(generatedTicket.IsValidAt(expectedEnd.AddDays(4)));
+        generatedTicket.Status = "ISSUED";
         var trackedTicket = await ca.Tickets.SingleAsync(t => t.Id == generatedTicket.Id);
         Assert.Same(generatedTicket, trackedTicket);
         Assert.False(trackedTicket.IsValidAt(expectedEnd.AddDays(4)));
