@@ -2,7 +2,7 @@
 
 Issue: [#19 — BE-04 · Hồ sơ + xác minh ưu đãi, upload minh chứng, audit thay đổi](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/19) (UC05, UC06).
 
-PR triển khai chỉnh sửa hồ sơ hành khách, khóa thông tin định danh sau xác minh và cho phép tải tối đa ba minh chứng (5 MiB mỗi tệp) để Admin duyệt. Lịch sử quyết định, audit và thông báo được lưu cùng transaction. Nhánh đã đồng bộ với `dev`, giữ các endpoint hồ sơ và catalog, đồng thời bổ sung tài liệu API và Postman collection.
+PR triển khai chỉnh sửa hồ sơ hành khách, khóa thông tin định danh sau xác minh và cho phép tải tối đa ba minh chứng (5 MiB mỗi tệp) để Admin duyệt. Lịch sử quyết định, audit và thông báo được lưu cùng transaction. Nhánh đã merge `origin/dev` tại `a70125b`, giữ các endpoint hồ sơ, catalog và payment BE-08, đồng thời bổ sung tài liệu API và Postman collection.
 
 ## Quyền truy cập và xử lý lặp
 
@@ -14,7 +14,16 @@ PR triển khai chỉnh sửa hồ sơ hành khách, khóa thông tin định da
 
 Bản sửa trong commit `41e65d0` lưu tác vụ purge vào outbox migration 009 trong cùng transaction với thao tác gỡ tham chiếu file. Khi commit thành công, worker mới xóa file. Job giữ lại tác vụ nếu storage lỗi và tiếp tục thử sau. Các ca rollback trước commit, retry khi xóa dở và nhiều worker chạy đồng thời có test hồi quy.
 
-## Kiểm thử
+## Đồng bộ dev và kiểm thử local ngày 22/11/2026
+
+- [x] Merge `origin/dev` (`a70125b`, đã gồm BE-08) vào nhánh BE-04 từ `cf003fd`. `Program.cs` giữ đăng ký payment gateway và cả profile/catalog/payment endpoints; `DependencyInjection.cs` giữ profile lifecycle cùng payment options/service; Swagger contract giữ cả kiểm tra profile và payment. Không còn file unmerged.
+- [x] Restore dependency mới từ dev; build Release với `--no-restore --warnaserror` đạt **0 warning, 0 error**.
+- [x] `Run-PostgresTests.ps1 -NoBuild -NoRestore` đạt **100/100**: **40 unit + 60 integration**, 0 fail, 0 skip, trên PostgreSQL **17.12** riêng. Bao gồm 3 integration test payment và 2 Swagger contract test; runner báo riêng 32 test PostgreSQL theo danh sách lớp sẵn có (chưa tính payment và Swagger).
+- [x] `python infra/database/build_deploy.py --check` đạt; deploy sạch **001–009** và `09_verify.sql` đạt trên database local riêng. Giữ nguyên migrations 007–009 và checksum 008 đã deploy.
+- [x] Frontend: `npm.cmd run typecheck`, `npm.cmd test` (**1/1**) và `npm.cmd run build` đều đạt.
+- [ ] **CI của head mới chưa được xác minh**: chỉ thực hiện local, chưa push hoặc cập nhật PR trên GitHub. Cần `backend-build` và `frontend-build` chạy trên đúng head sau khi push; GitGuardian hoặc CI của head cũ không thay thế hai job này. Trạng thái DIRTY trên GitHub chỉ được đánh giá lại sau khi nhánh PR được cập nhật.
+
+## Bằng chứng kiểm thử trước khi merge dev
 
 - [x] Unit tests: **39/39** đạt.
 - [x] Integration tests: **57/57** đạt, gồm **32** test trên PostgreSQL thật; 0 lỗi, 0 skip.
@@ -38,7 +47,7 @@ Package SQL khớp source; deploy sạch 001–009 và nâng cấp 008 → 009 �
 
 ## Ngoại lệ quy mô PR — chờ M01 xác nhận
 
-Diff tại commit `41e65d0` so với merge-base của `origin/dev`: **+2.121 / −5 dòng, 23 file** (`git diff --stat origin/dev...41e65d0`). Sau sửa review local (working tree): **+2.168 / −5 dòng, 23 file**; cần gắn số liệu với head thực tế khi cập nhật PR.
+Diff tại commit `41e65d0` so với merge-base của `origin/dev`: **+2.121 / −5 dòng, 23 file** (`git diff --stat origin/dev...41e65d0`). Sau merge dev `a70125b` và cập nhật tài liệu lần này: **+2.177 / −5 dòng, 23 file**. Khi cập nhật PR, đối chiếu bằng `git diff --stat origin/dev...HEAD` và gắn với SHA của head thực tế.
 
 Phân loại 2.121 dòng thêm để M01 đối chiếu:
 

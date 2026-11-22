@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using FluentValidation;
 using Metro.Application.Abstractions.Auth;
 using Metro.Application.Abstractions.Catalog;
+using Metro.Application.Abstractions.Payment;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,6 +22,14 @@ public sealed class GlobalExceptionHandler(
         var (status, title) = exception switch
         {
             AuthException auth => (auth.Status, "Authentication failed"),
+            PaymentException payment => (payment.Status, payment.Status switch
+            {
+                StatusCodes.Status401Unauthorized => "Payment authentication failed",
+                StatusCodes.Status403Forbidden => "Payment forbidden",
+                StatusCodes.Status404NotFound => "Payment resource not found",
+                StatusCodes.Status409Conflict => "Payment state conflict",
+                _ => "Payment provider error",
+            }),
             CatalogException catalog => (catalog.Status, catalog.Status switch
             {
                 StatusCodes.Status404NotFound => "Resource not found",
@@ -59,6 +68,10 @@ public sealed class GlobalExceptionHandler(
         if (exception is AuthException authError)
         {
             problem.Extensions["code"] = authError.Code;
+        }
+        else if (exception is PaymentException paymentError)
+        {
+            problem.Extensions["code"] = paymentError.Code;
         }
         else if (exception is CatalogException catalogError)
         {
