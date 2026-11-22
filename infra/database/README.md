@@ -19,6 +19,9 @@ Do not use the application login as the migration owner. Application roles shoul
 4. `migrations/004_support_analytics_automation.sql`
 5. `migrations/005_transactional_capacity_retention.sql`
 6. `migrations/006_srs_v1_2_alignment.sql`
+7. `migrations/007_ticket_issuance.sql`
+8. `migrations/008_paid_ticket_issuance.sql`
+9. `migrations/009_free_child_ticket_issuance.sql`
 
 `build_deploy.py` combines those sources into `deploy.sql`, wraps them in one transaction, verifies migration checksums, and serializes deployments with a PostgreSQL advisory lock. Edit only migration sources; never hand-edit `deploy.sql`.
 
@@ -39,7 +42,7 @@ No production operator, user, credential, role assignment, fare, timetable, capa
 
 Application services should call these functions inside their normal request transaction:
 
-- `metro.confirm_payment_and_issue_tickets` — verifies the callback snapshot, records the event, succeeds the payment and issues the ticket in one transaction.
+- `metro.confirm_payment_and_issue_tickets` — verifies the callback snapshot, records the event, succeeds the payment and creates the pending ticket/job in one transaction. BE-09 prepares QR before marking the order ISSUED; see [BE-09 handover](../../docs/handover/BE-09-IMPLEMENTATION.md).
 - `metro.issue_free_order` — issues a fully discounted free child ticket without a payment row or fake `paid_at`.
 - `metro.cancel_unpaid_order` — cancels an unpaid order across both the current and legacy models.
 - `metro.revoke_unused_ticket` — revokes an unused ticket and active credentials without deleting history.
@@ -55,23 +58,9 @@ All workflow functions are `SECURITY DEFINER` with a pinned `search_path` and no
 
 ## Validation tests
 
-Run against a disposable database after `deploy.sql`, in this order:
+Current acceptance for migrations 007–009 uses real PostgreSQL through `backend/tests/Run-PostgresTests.ps1`. Deploy `deploy.sql`, run `scripts/09_verify.sql`, then follow [backend test setup](../../backend/tests/README.md). BE-09 tests cover paid/free SQL contracts, locking/races, current QR, eligibility, history and HTTP ownership. Never run fixtures against a shared DB.
 
-```powershell
-foreach ($f in "00_test_fixture.sql","business_rules_test.sql","constraints_test.sql","integrity_test.sql","review_regressions_test.sql","srs_v1_2_test.sql") {
-    psql -v ON_ERROR_STOP=1 -d metro_ticket_test -f "infra/database/tests/$f"
-}
-```
-
-`review_regressions_test.sql` locks in the review-driven behaviour: NULL-safe fare keys, mandatory product duration, multiple unassigned provider references, verified-signature and non-NULL payment snapshots, payment-event ownership, unique ticket codes, and operator-scoped credential replacement. `srs_v1_2_test.sql` covers guardian links, purchase consent, current trip suggestions, manual kg load, ETA, free issuance, overlapping-ticket validity, ticket changes, accessibility slots, data-quality days, lost property and history retention.
-
-## Migration and upgrades
-
-- Add a new numbered migration; never rewrite an applied migration.
-- Rebuild and commit `deploy.sql` with the migration.
-- Test from a clean database and against a copy of the previous schema version.
-- Take and verify a backup before production deployment.
-- Apply through one controlled release job, not independently from every application instance.
+The standalone SQL files under `tests/` predate 007 and preserve historical migration 005/006 expectations (group capacity issuance and orders immediately ISSUED). They are historical regression assets for those schema revisions, not the acceptance suite for the current Metro issuance contract. Do not run that old ordered fixture chain as validation of 007–009 or interpret its immediate-ISSUED assertions as current requirements.
 
 ## Backup and restore
 
