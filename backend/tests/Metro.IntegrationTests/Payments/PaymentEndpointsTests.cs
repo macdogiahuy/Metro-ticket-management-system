@@ -51,7 +51,7 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
             .Where(i => i.OrderId == orderId).Select(i => i.Id).SingleAsync();
         Assert.Equal(1, await db.Tickets.IgnoreQueryFilters().CountAsync(t => t.OrderItemId == orderItemId));
         Assert.Equal("SUCCEEDED", (await db.Payments.IgnoreQueryFilters().AsNoTracking().SingleAsync(p => p.Id == paymentId)).Status.ToString().ToUpperInvariant());
-        Assert.Equal("ISSUED", (await db.Orders.IgnoreQueryFilters().AsNoTracking().SingleAsync(o => o.Id == orderId)).Status);
+        Assert.Equal("PAID", (await db.Orders.IgnoreQueryFilters().AsNoTracking().SingleAsync(o => o.Id == orderId)).Status);
         Assert.Equal(1, await db.PaymentEvents.IgnoreQueryFilters().CountAsync(e => e.PaymentId == paymentId));
     }
 
