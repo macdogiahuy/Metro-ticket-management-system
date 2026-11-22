@@ -57,7 +57,7 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
 
     [PostgreSqlFact]
     [Trait("Category", "PostgreSQL")]
-    public async Task Protected_endpoints_require_a_valid_token_and_active_operator()
+    public async Task Protected_endpoints_require_a_valid_token_and_owned_resource()
     {
         using var client = factory.CreateClient();
         var (userId, _, _) = await SeedAsync();
@@ -74,9 +74,9 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
         }
 
         var noMembership = await client.PostAsJsonAsync("/api/v1/payments", new { orderId = Guid.NewGuid(), idempotencyKey = "idem-x" });
-        Assert.Equal(HttpStatusCode.Forbidden, noMembership.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, noMembership.StatusCode);
         using var problem = JsonDocument.Parse(await noMembership.Content.ReadAsStringAsync());
-        Assert.Equal("OPERATOR_NOT_FOUND", problem.RootElement.GetProperty("code").GetString());
+        Assert.Equal("ORDER_NOT_FOUND", problem.RootElement.GetProperty("code").GetString());
 
         client.DefaultRequestHeaders.Authorization = Bearer(userId);
         var own = await client.GetAsync("/api/v1/payments/" + Guid.NewGuid());
