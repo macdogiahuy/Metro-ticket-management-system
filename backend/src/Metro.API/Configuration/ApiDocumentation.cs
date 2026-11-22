@@ -26,6 +26,12 @@ public static class ApiDocumentation
         });
 
         options.OperationFilter<ProblemDetailsOperationFilter>();
+        options.AddSecurityDefinition("TicketBearer", new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT",
+            Description = "JWT do endpoint auth/login cấp; API luôn kiểm operator và ownership.",
+        });
+        options.OperationFilter<TicketOpenApiFilter>();
 
         var xmlFile = $"{typeof(ApiDocumentation).Assembly.GetName().Name}.xml";
         var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);

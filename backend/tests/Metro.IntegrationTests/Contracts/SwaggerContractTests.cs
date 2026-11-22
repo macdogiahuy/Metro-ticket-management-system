@@ -25,5 +25,13 @@ public sealed class SwaggerContractTests(MetroWebApplicationFactory factory)
         Assert.Contains("/api/v1/payments/{id}/retry", swagger.Paths.Keys);
         Assert.Contains("/api/v1/webhooks/momo", swagger.Paths.Keys);
         Assert.DoesNotContain("/api/v1/auth/_role-probe", swagger.Paths.Keys);
+        foreach (var path in new[] { "/api/v1/tickets", "/api/v1/tickets/{id}", "/api/v1/tickets/{id}/qr", "/api/v1/orders", "/api/v1/payments", "/api/v1/orders/{id}/issue-free" })
+            Assert.Contains(path, swagger.Paths.Keys);
+        var free = swagger.Paths["/api/v1/orders/{id}/issue-free"].Operations[Microsoft.OpenApi.Models.OperationType.Post];
+        Assert.Contains(free.Parameters, p => p.Name == "Idempotency-Key" && p.Required);
+        Assert.Contains("202", free.Responses.Keys);
+        Assert.NotEmpty(free.Security);
+        var qr = swagger.Paths["/api/v1/tickets/{id}/qr"].Operations[Microsoft.OpenApi.Models.OperationType.Get];
+        Assert.Contains("image/png", qr.Responses["200"].Content.Keys);
     }
 }

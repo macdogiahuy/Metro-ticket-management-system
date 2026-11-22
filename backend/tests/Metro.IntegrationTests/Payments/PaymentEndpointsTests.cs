@@ -52,6 +52,9 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
         Assert.Equal(1, await db.Tickets.IgnoreQueryFilters().CountAsync(t => t.OrderItemId == orderItemId));
         Assert.Equal("SUCCEEDED", (await db.Payments.IgnoreQueryFilters().AsNoTracking().SingleAsync(p => p.Id == paymentId)).Status.ToString().ToUpperInvariant());
         Assert.Equal("PAID", (await db.Orders.IgnoreQueryFilters().AsNoTracking().SingleAsync(o => o.Id == orderId)).Status);
+        scope.ServiceProvider.GetRequiredService<Metro.Application.Abstractions.MultiTenancy.IOperatorContext>().CurrentOperatorId = operatorId;
+        await scope.ServiceProvider.GetRequiredService<Metro.Infrastructure.Ticketing.TicketIssuanceProcessor>().ProcessDueAsync(500);
+        Assert.Equal("ISSUED", (await db.Orders.IgnoreQueryFilters().AsNoTracking().SingleAsync(o => o.Id == orderId)).Status);
         Assert.Equal(1, await db.PaymentEvents.IgnoreQueryFilters().CountAsync(e => e.PaymentId == paymentId));
     }
 
@@ -167,7 +170,7 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
             ProductType = "SINGLE_TRIP", ExpiryRule = "SINGLE_JOURNEY", CapacityControlled = false,
         });
         var orderId = Guid.NewGuid();
-        var day = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+        var day = Metro.Application.Ticketing.TicketRules.LocalDate(DateTimeOffset.UtcNow);
         var originId = Guid.NewGuid(); var destinationId = Guid.NewGuid();
         db.Stations.AddRange(
             new Metro.Domain.Entities.Network.Station { Id = originId, OperatorId = opId, Code = "A", Name = "Origin" },

@@ -40,6 +40,7 @@ public static class DependencyInjection
         services.Configure<Metro.Infrastructure.Ticketing.TicketQrOptions>(configuration.GetSection("TicketQr"));
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddSingleton<Metro.Infrastructure.Ticketing.TicketQrCodec>();
+        services.AddScoped<Metro.Application.Abstractions.Ticketing.ITicketService, Metro.Infrastructure.Ticketing.TicketService>();
         services.AddScoped<Metro.Infrastructure.Ticketing.TicketIssuanceProcessor>();
         services.AddHostedService<Metro.Infrastructure.Ticketing.TicketIssuanceWorker>();
 
