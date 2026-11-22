@@ -107,10 +107,16 @@ public class TicketCredentialConfiguration : IEntityTypeConfiguration<TicketCred
         builder.Property(e => e.Status).HasColumnName("status").HasDefaultValue("ACTIVE").IsRequired();
         builder.Property(e => e.IssuedAt).HasColumnName("issued_at").HasDefaultValueSql("clock_timestamp()").IsRequired();
         builder.Property(e => e.RevokedAt).HasColumnName("revoked_at");
+        builder.Property(e => e.Version).HasColumnName("version").HasDefaultValue(1).IsRequired();
+        builder.Property(e => e.KeyId).HasColumnName("key_id");
         builder.Property(e => e.ReplacedById).HasColumnName("replaced_by_id");
 
         builder.HasAlternateKey(e => new { e.OperatorId, e.Id });
         builder.HasIndex(e => new { e.OperatorId, e.TokenHash }).IsUnique();
+        builder.HasIndex(e => new { e.OperatorId, e.TicketId, e.Version }).HasDatabaseName("uq_signed_qr_version")
+            .IsUnique().HasFilter("credential_type='QR' AND key_id IS NOT NULL");
+        builder.HasIndex(e => new { e.OperatorId, e.TicketId }).HasDatabaseName("uq_current_signed_qr")
+            .IsUnique().HasFilter("credential_type='QR' AND status='ACTIVE' AND key_id IS NOT NULL");
 
         builder.HasOne(e => e.Ticket)
             .WithMany(t => t.Credentials)
