@@ -37,6 +37,11 @@ public static class DependencyInjection
             .AddEntityFrameworkStores<ApplicationDbContext>();
 
         services.AddScoped<IAuthService, AuthService>();
+        services.Configure<Metro.Infrastructure.Ticketing.TicketQrOptions>(configuration.GetSection("TicketQr"));
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddSingleton<Metro.Infrastructure.Ticketing.TicketQrCodec>();
+        services.AddScoped<Metro.Infrastructure.Ticketing.TicketIssuanceProcessor>();
+        services.AddHostedService<Metro.Infrastructure.Ticketing.TicketIssuanceWorker>();
 
         services.Configure<CatalogCacheOptions>(configuration.GetSection("CatalogCache"));
         var redisConnection = new[]
