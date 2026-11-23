@@ -58,7 +58,8 @@ public class Ticket : IOperatorScoped
     /// </summary>
     public bool IsValidAt(DateTime timestampUtc)
     {
-        if (Status != "ACTIVE" && Status != "ISSUED" && Status != "IN_USE")
+        // ISSUED is the SQL-created record awaiting QR readiness in BE-09.
+        if (Status != "ACTIVE" && Status != "IN_USE")
         {
             return false;
         }
@@ -78,4 +79,3 @@ public class Ticket : IOperatorScoped
         return thisWindow.Overlaps(otherWindow);
     }
 }
-
