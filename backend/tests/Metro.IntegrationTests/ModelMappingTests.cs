@@ -4,6 +4,8 @@ using Metro.Domain.Entities.Orders;
 using Metro.Domain.Entities.Tickets;
 using Metro.Infrastructure.Persistence.Context;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Metro.IntegrationTests;
 
@@ -53,6 +55,9 @@ public class ModelMappingTests
             // Orders & Pricing
             { typeof(TicketProduct), "ticket_products" },
             { typeof(FarePolicyVersion), "fare_policy_versions" },
+            { typeof(FareMatrixEntry), "fare_matrix_entries" },
+            { typeof(EligibilityPolicy), "eligibility_policies" },
+            { typeof(EligibilityApplication), "eligibility_applications" },
             { typeof(Order), "orders" },
             { typeof(OrderItem), "order_items" },
             { typeof(OrderVersion), "order_versions" },
@@ -123,6 +128,9 @@ public class ModelMappingTests
             .FindProperty(nameof(Station.MinTransferSeconds))!.GetDefaultValue());
         Assert.Equal(180, context.Model.FindEntityType(typeof(LineStation))!
             .FindProperty(nameof(LineStation.TravelTimeSeconds))!.GetDefaultValue());
+        var designModel = context.GetService<IDesignTimeModel>().Model;
+        var matrixIndex = Assert.Single(designModel.FindEntityType(typeof(FareMatrixEntry))!.GetIndexes(), i => i.IsUnique);
+        Assert.False(matrixIndex.GetAreNullsDistinct());
     }
 }
 
