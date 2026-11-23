@@ -19,9 +19,9 @@ public sealed class PaymentService(
 
     public async Task<PaymentResponse> CreateAsync(CreatePaymentRequest request, string userId, CancellationToken cancellationToken)
     {
-        var opId = await ResolveOperatorAsync(userId, cancellationToken);
+        var opId = await ResolveOrderOperatorAsync(request.OrderId, userId, cancellationToken);
         var order = await db.Orders.AsNoTracking()
-            .SingleOrDefaultAsync(o => o.OperatorId == opId && o.Id == request.OrderId, cancellationToken)
+            .SingleOrDefaultAsync(o => o.OperatorId == opId && o.Id == request.OrderId && o.PayerUserId == userId, cancellationToken)
             ?? throw new PaymentException("ORDER_NOT_FOUND", StatusCodes.Status404NotFound, "Order not found.");
         if (order.Status is not ("HELD" or "PENDING_PAYMENT"))
             throw new PaymentException("ORDER_NOT_CONFIRMABLE", StatusCodes.Status409Conflict, "Order is not awaiting payment.");
@@ -67,18 +67,20 @@ public sealed class PaymentService(
 
     public async Task<PaymentResponse> GetAsync(Guid paymentId, string userId, CancellationToken cancellationToken)
     {
-        var opId = await ResolveOperatorAsync(userId, cancellationToken);
+        var opId = await ResolvePaymentOperatorAsync(paymentId, userId, cancellationToken);
         var payment = await db.Payments.AsNoTracking()
-            .SingleOrDefaultAsync(p => p.OperatorId == opId && p.Id == paymentId, cancellationToken)
+            .SingleOrDefaultAsync(p => p.OperatorId == opId && p.Id == paymentId &&
+                db.Orders.Any(o => o.OperatorId == p.OperatorId && o.Id == p.OrderId && o.PayerUserId == userId), cancellationToken)
             ?? throw new PaymentException("PAYMENT_NOT_FOUND", StatusCodes.Status404NotFound, "Payment not found.");
         return ToResponse(payment, null);
     }
 
     public async Task<RetryPaymentResult> RetryAsync(Guid paymentId, string userId, CancellationToken cancellationToken)
     {
-        var opId = await ResolveOperatorAsync(userId, cancellationToken);
+        var opId = await ResolvePaymentOperatorAsync(paymentId, userId, cancellationToken);
         var payment = await db.Payments
-            .SingleOrDefaultAsync(p => p.OperatorId == opId && p.Id == paymentId, cancellationToken)
+            .SingleOrDefaultAsync(p => p.OperatorId == opId && p.Id == paymentId &&
+                db.Orders.Any(o => o.OperatorId == p.OperatorId && o.Id == p.OrderId && o.PayerUserId == userId), cancellationToken)
             ?? throw new PaymentException("PAYMENT_NOT_FOUND", StatusCodes.Status404NotFound, "Payment not found.");
         if (payment.Status == PaymentStatus.Succeeded)
             return new RetryPaymentResult(ToResponse(payment, null), false);
@@ -119,15 +121,24 @@ public sealed class PaymentService(
             .SingleAsync(cancellationToken);
     }
 
-    private async Task<Guid> ResolveOperatorAsync(string userId, CancellationToken cancellationToken)
+    private async Task<Guid> ResolveOrderOperatorAsync(Guid orderId, string userId, CancellationToken cancellationToken)
     {
-        var id = await db.OperatorAccounts.IgnoreQueryFilters().AsNoTracking()
-            .Where(a => a.UserId == userId && a.Status == "ACTIVE" && a.Operator.Status == "ACTIVE")
-            .OrderBy(a => a.Id)
-            .Select(a => (Guid?)a.OperatorId)
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new PaymentException("OPERATOR_NOT_FOUND", StatusCodes.Status403Forbidden,
-                "The account has no active operator membership.");
+        // Resolve the scope from an owned resource, not from staff membership or a client operator id.
+        var id = await db.Orders.IgnoreQueryFilters().AsNoTracking()
+            .Where(o => o.Id == orderId && o.PayerUserId == userId && o.Operator.Status == "ACTIVE")
+            .Select(o => (Guid?)o.OperatorId).SingleOrDefaultAsync(cancellationToken)
+            ?? throw new PaymentException("ORDER_NOT_FOUND", StatusCodes.Status404NotFound, "Order not found.");
+        operatorContext.CurrentOperatorId = id;
+        return id;
+    }
+
+    private async Task<Guid> ResolvePaymentOperatorAsync(Guid paymentId, string userId, CancellationToken cancellationToken)
+    {
+        var id = await db.Payments.IgnoreQueryFilters().AsNoTracking()
+            .Where(p => p.Id == paymentId && db.Orders.IgnoreQueryFilters().Any(o =>
+                o.OperatorId == p.OperatorId && o.Id == p.OrderId && o.PayerUserId == userId && o.Operator.Status == "ACTIVE"))
+            .Select(p => (Guid?)p.OperatorId).SingleOrDefaultAsync(cancellationToken)
+            ?? throw new PaymentException("PAYMENT_NOT_FOUND", StatusCodes.Status404NotFound, "Payment not found.");
         operatorContext.CurrentOperatorId = id;
         return id;
     }

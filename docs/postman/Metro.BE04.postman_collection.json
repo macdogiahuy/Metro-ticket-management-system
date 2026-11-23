@@ -1,0 +1,110 @@
+{
+  "info": {
+    "name": "Metro BE04 profile and concession verification",
+    "description": "Manual UC05/UC06 workflow. Start the API locally with an isolated development database. Obtain an owner accessToken and a different Administrator adminToken via the auth flow. Tokens are intentionally empty. Run owner submit/upload, administrator NEEDS_INFO if necessary, owner replacement, then administrator approval/revocation. Do not run all requests blindly. Select an illustrative local file in multipart Body. Default dates use UTC+7 and six months validity; adjust to document expiry. Decision notifications are persisted as IN_APP and EMAIL_MOCK only; no live email delivery is claimed. No credentials or real documents are bundled.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5192" },
+    { "key": "accessToken", "value": "", "type": "secret" },
+    { "key": "adminToken", "value": "", "type": "secret" },
+    { "key": "requestId", "value": "" },
+    { "key": "evidenceId", "value": "" },
+    { "key": "startDate", "value": "" },
+    { "key": "endDate", "value": "" },
+    { "key": "profileFullName", "value": "Demo Passenger" },
+    { "key": "profileLocale", "value": "vi-VN" },
+    { "key": "profilePhone", "value": "" }
+  ],
+  "event": [{
+    "listen": "prerequest",
+    "script": { "type": "text/javascript", "exec": [
+      "const today = new Date(Date.now() + 7 * 60 * 60 * 1000);",
+      "if (!pm.collectionVariables.get('startDate')) pm.collectionVariables.set('startDate', today.toISOString().slice(0, 10));",
+      "const end = new Date(today); end.setUTCMonth(end.getUTCMonth() + 6);",
+      "if (!pm.collectionVariables.get('endDate')) pm.collectionVariables.set('endDate', end.toISOString().slice(0, 10));"
+    ] }
+  }],
+  "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+  "item": [
+    {
+      "name": "Owner profile and evidence",
+      "item": [
+        { "name": "Get my profile", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/me", "description": "Read the current name before editing. Email is immutable; identity fields lock after approval." } },
+        { "name": "Update my profile", "request": {
+          "method": "PUT", "url": "{{baseUrl}}/api/v1/me",
+          "description": "Set profileFullName to the current name first. Empty phone clears the optional number. Optional birthDate can be added before first approval; changing name/DOB after verification returns409.",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"fullName\": \"{{profileFullName}}\",\n  \"locale\": \"{{profileLocale}}\",\n  \"emailNotifications\": true,\n  \"phoneNumber\": \"{{profilePhone}}\"\n}", "options": { "raw": { "language": "json" } } }
+        } },
+        { "name": "Submit STUDENT request", "request": {
+          "method": "POST", "url": "{{baseUrl}}/api/v1/me/eligibility",
+          "description": "Document dates must be valid. Supported categories: STUDENT or ELDERLY. Saves requestId after201.",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"category\": \"STUDENT\",\n  \"validFrom\": \"{{startDate}}\",\n  \"validTo\": \"{{endDate}}\"\n}", "options": { "raw": { "language": "json" } } }
+        }, "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('Created', () => pm.response.to.have.status(201));",
+          "if (pm.response.code === 201) pm.collectionVariables.set('requestId', pm.response.json().id);"
+        ] } }] },
+        { "name": "Upload one evidence file", "request": {
+          "method": "POST", "url": "{{baseUrl}}/api/v1/me/eligibility/{{requestId}}/evidence",
+          "description": "Select a local illustrative JPG, PNG or PDF in Body. Max three active files, each5MiB; MIME and signature must match. Do not manually set multipart Content-Type. Saves evidenceId.",
+          "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": null }] }
+        }, "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('Uploaded', () => pm.response.to.have.status(200));",
+          "if (pm.response.code === 200) { const active = pm.response.json().attachments.filter(a => !a.replacedAt && !a.purgedAt); if (active.length) pm.collectionVariables.set('evidenceId', active[active.length - 1].id); }"
+        ] } }] },
+        { "name": "List my requests", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/me/eligibility" } },
+        { "name": "Get my request and history", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/me/eligibility/{{requestId}}" } },
+        { "name": "Download my evidence", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/me/eligibility/{{requestId}}/evidence?evidenceId={{evidenceId}}", "description": "Private audited download. Use Send and Download to save response locally." } },
+        { "name": "Replace evidence after NEEDS_INFO", "request": {
+          "method": "POST", "url": "{{baseUrl}}/api/v1/me/eligibility/{{requestId}}/evidence?replaceEvidenceId={{evidenceId}}",
+          "description": "Select exactly one corrected file. replaceEvidenceId must identify current evidence. Preserves old metadata and decisions; resumes PENDING after NEEDS_INFO. Saves new evidenceId.",
+          "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": null }] }
+        }, "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('Replaced', () => pm.response.to.have.status(200));",
+          "if (pm.response.code === 200) { const active = pm.response.json().attachments.filter(a => !a.replacedAt && !a.purgedAt); if (active.length) pm.collectionVariables.set('evidenceId', active[active.length - 1].id); }"
+        ] } }] }
+      ]
+    },
+    {
+      "name": "Administrator review",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+      "item": [
+        { "name": "List review queue", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/eligibility?page=1&pageSize=20", "description": "Administrator required; StationStaff cannot review. Optional status filter." } },
+        { "name": "Get review detail and history", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/eligibility/{{requestId}}" } },
+        { "name": "Download evidence for review", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/eligibility/{{requestId}}/evidence?evidenceId={{evidenceId}}", "description": "Audited private download; no public storage URL is returned." } },
+        { "name": "Request more information", "request": {
+          "method": "POST", "url": "{{baseUrl}}/api/v1/eligibility/{{requestId}}/decision",
+          "description": "PENDING to NEEDS_INFO. Run owner replacement next.",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"decision\": \"NEEDS_INFO\",\n  \"reason\": \"Please replace the unreadable supporting document.\"\n}", "options": { "raw": { "language": "json" } } }
+        } },
+        { "name": "Approve verification", "request": {
+          "method": "POST", "url": "{{baseUrl}}/api/v1/eligibility/{{requestId}}/decision",
+          "description": "Requires PENDING, private evidence, a different administrator, <=12months validity and no later than document expiry. For ELDERLY add documentBirthDate matching profile DOB; checkout age is checked separately.",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"decision\": \"VERIFIED\",\n  \"reason\": \"Illustrative document manually reviewed.\",\n  \"validFrom\": \"{{startDate}}\",\n  \"validTo\": \"{{endDate}}\"\n}", "options": { "raw": { "language": "json" } } }
+        } },
+        { "name": "Revoke verification", "request": {
+          "method": "POST", "url": "{{baseUrl}}/api/v1/eligibility/{{requestId}}/decision",
+          "description": "Run after VERIFIED. REVOKED is a compatibility input; request status becomes REJECTED and history retains revocation.",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"decision\": \"REVOKED\",\n  \"reason\": \"Verification revoked after correcting a review error.\"\n}", "options": { "raw": { "language": "json" } } }
+        } },
+        { "name": "Hold evidence for a case", "request": {
+          "method": "PUT", "url": "{{baseUrl}}/api/v1/eligibility/{{requestId}}/hold",
+          "description": "Prevents scheduled deletion while evidence is needed for an open case.",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"hold\": true,\n  \"reason\": \"Evidence needed for an open illustrative review case.\"\n}", "options": { "raw": { "language": "json" } } }
+        } },
+        { "name": "Release evidence hold", "request": {
+          "method": "PUT", "url": "{{baseUrl}}/api/v1/eligibility/{{requestId}}/hold",
+          "description": "Enables normal30day retention after final expiry/rejection. Metadata and decision history remain.",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": { "mode": "raw", "raw": "{\n  \"hold\": false,\n  \"reason\": \"Illustrative review case closed.\"\n}", "options": { "raw": { "language": "json" } } }
+        } }
+      ]
+    }
+  ]
+}

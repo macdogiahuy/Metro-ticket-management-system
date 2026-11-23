@@ -25,7 +25,8 @@ public sealed class GlobalExceptionHandler(
         var pg = exception is DbUpdateException dbEx ? dbEx.InnerException as PostgresException : exception as PostgresException;
         var (status, title, safeDetail, errorCode) = exception switch
         {
-            AuthException auth => (auth.Status, "Authentication failed", auth.Message, (string?)auth.Code),
+            Metro.Application.Abstractions.Ticketing.TicketException ticket => (ticket.Status, "Ticket request failed"),
+            AuthException auth => (auth.Status, "Authentication failed"),
             PaymentException payment => (payment.Status, payment.Status switch
             {
                 StatusCodes.Status401Unauthorized => "Payment authentication failed",
@@ -81,7 +82,17 @@ public sealed class GlobalExceptionHandler(
             Title = title,
             Detail = safeDetail,
         };
-        if (errorCode is not null)
+        if (exception is Metro.Application.Abstractions.Ticketing.TicketException ticketError)
+            problem.Extensions["code"] = ticketError.Code;
+        else if (exception is AuthException authError)
+        {
+            problem.Extensions["code"] = authError.Code;
+        }
+        else if (exception is PaymentException paymentError)
+        {
+            problem.Extensions["code"] = paymentError.Code;
+        }
+        else if (exception is CatalogException catalogError)
         {
             problem.Extensions["code"] = errorCode;
         }

@@ -11,8 +11,12 @@ BEGIN
     IF current_setting('server_encoding') <> 'UTF8' THEN
         RAISE EXCEPTION 'UTF8 server encoding is required';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 6) THEN
-        RAISE EXCEPTION 'Migration 006 is not installed';
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 12) THEN
+        RAISE EXCEPTION 'Migration 012 is not installed';
+    END IF;
+
+    IF to_regclass('metro.ticket_issuance_jobs') IS NULL OR to_regclass('metro.ticket_issue_requests') IS NULL THEN
+        RAISE EXCEPTION 'Missing BE-09 durable issuance tables';
     END IF;
 
     SELECT string_agg(name, ', ') INTO v_missing
@@ -50,6 +54,9 @@ BEGIN
         ('trip_suggestions'), ('order_versions'), ('purchase_consents'),
         ('guardian_links'), ('load_observations'), ('trip_eta_updates'),
         ('ticket_change_requests'), ('lost_reports'), ('found_items'),
+        ('profile_eligibility_requests'),
+        ('profile_eligibility_attachments'), ('profile_eligibility_decisions'),
+        ('profile_eligibility_purge_queue'),
         ('lost_item_claims'), ('lost_item_handovers'),
         ('station_support_capacities'), ('accessibility_requests'),
         ('accessibility_request_events'), ('data_quality_days'),
@@ -58,6 +65,19 @@ BEGIN
     WHERE to_regclass('metro.' || name) IS NULL;
     IF v_missing IS NOT NULL THEN
         RAISE EXCEPTION 'Missing SRS v1.2 tables: %', v_missing;
+    END IF;
+
+    SELECT string_agg(name, ', ') INTO v_missing
+    FROM (VALUES
+        ('ck_profile_eligibility_status'), ('ck_profile_eligibility_decision')
+    ) required(name)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM pg_constraint c
+        WHERE c.conrelid = 'metro.profile_eligibility_requests'::regclass
+          AND c.conname = required.name AND c.contype = 'c' AND c.convalidated
+    );
+    IF v_missing IS NOT NULL THEN
+        RAISE EXCEPTION 'Missing or unvalidated profile workflow checks: %', v_missing;
     END IF;
 
     IF NOT EXISTS (

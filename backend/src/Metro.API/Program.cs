@@ -129,10 +129,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapAuthEndpoints();
+app.MapProfileEndpoints();
 app.MapCatalogEndpoints();
 app.MapFareEndpoints();
 app.MapAdminProductEndpoints();
 app.MapPaymentEndpoints();
+app.MapTicketEndpoints();
 app.MapHealthEndpoints();
 
 if (app.Environment.IsDevelopment())
