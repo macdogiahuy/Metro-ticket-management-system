@@ -78,8 +78,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("Passenger", policy => policy.RequireRole("Passenger", "StationStaff", "Admin"));
-    options.AddPolicy("StationStaff", policy => policy.RequireRole("StationStaff", "Admin"));
+    options.AddPolicy("Passenger", policy => policy.RequireRole("Passenger"));
+    options.AddPolicy("StationStaff", policy => policy.RequireRole("StationStaff"));
     options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
 });
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AdministrationAuthorizationHandler>();
@@ -140,6 +140,7 @@ app.MapProfileEndpoints();
 app.MapAdministrationEndpoints();
 app.MapCatalogEndpoints();
 app.MapPaymentEndpoints();
+app.MapTicketEndpoints();
 app.MapHealthEndpoints();
 
 if (app.Environment.IsDevelopment())

@@ -33,10 +33,12 @@ public sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired(true).HasDefaultValueSql("clock_timestamp()");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamptz").IsRequired(true).HasDefaultValueSql("clock_timestamp()");
 
+        builder.Property(x => x.OrderVersion).HasColumnName("order_version").HasColumnType("integer").ValueGeneratedOnAdd();
         builder.HasOne<Metro.Domain.Entities.Orders.Order>().WithMany()
             .HasForeignKey("OperatorId", "OrderId")
             .HasPrincipalKey("OperatorId", "Id").OnDelete(DeleteBehavior.NoAction);
 
+        builder.HasOne<Metro.Domain.Entities.Orders.OrderVersion>().WithMany().HasForeignKey(x => new { x.OperatorId, x.OrderId, x.OrderVersion }).HasPrincipalKey(x => new { x.OperatorId, x.OrderId, x.Version }).OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(x => new { x.OperatorId, x.PaymentCode }).IsUnique();
         builder.HasIndex(x => new { x.OperatorId, x.Provider, x.IdempotencyKey }).IsUnique();
         builder.HasIndex(x => new { x.OperatorId, x.Provider, x.ProviderPaymentReference }).IsUnique();

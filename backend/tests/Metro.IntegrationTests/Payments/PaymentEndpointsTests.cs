@@ -1,8 +1,5 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -11,22 +8,20 @@ using Metro.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.IdentityModel.Tokens;
+using static Metro.IntegrationTests.Payments.PaymentScenarioFixture;
 
 namespace Metro.IntegrationTests.Payments;
 
 [Collection(PaymentCollection.Name)]
 public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
 {
-    private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
-
     [PostgreSqlFact]
     [Trait("Category", "PostgreSQL")]
     public async Task Create_webhook_idempotently_issues_exactly_one_ticket_set()
     {
         using var client = factory.CreateClient();
         var (userId, operatorId, orderId) = await SeedAsync();
-        client.DefaultRequestHeaders.Authorization = await BearerAsync(userId);
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, userId);
 
         var created = await client.PostAsJsonAsync("/api/v1/payments", new { orderId, idempotencyKey = "idem-1" });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -51,16 +46,20 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
             .Where(i => i.OrderId == orderId).Select(i => i.Id).SingleAsync();
         Assert.Equal(1, await db.Tickets.IgnoreQueryFilters().CountAsync(t => t.OrderItemId == orderItemId));
         Assert.Equal("SUCCEEDED", (await db.Payments.IgnoreQueryFilters().AsNoTracking().SingleAsync(p => p.Id == paymentId)).Status.ToString().ToUpperInvariant());
+        Assert.Equal("PAID", (await db.Orders.IgnoreQueryFilters().AsNoTracking().SingleAsync(o => o.Id == orderId)).Status);
+        scope.ServiceProvider.GetRequiredService<Metro.Application.Abstractions.MultiTenancy.IOperatorContext>().CurrentOperatorId = operatorId;
+        await scope.ServiceProvider.GetRequiredService<Metro.Infrastructure.Ticketing.TicketIssuanceProcessor>().ProcessDueAsync(500);
         Assert.Equal("ISSUED", (await db.Orders.IgnoreQueryFilters().AsNoTracking().SingleAsync(o => o.Id == orderId)).Status);
         Assert.Equal(1, await db.PaymentEvents.IgnoreQueryFilters().CountAsync(e => e.PaymentId == paymentId));
     }
 
     [PostgreSqlFact]
     [Trait("Category", "PostgreSQL")]
-    public async Task Protected_endpoints_require_a_valid_token_and_active_operator()
+    public async Task Protected_endpoints_require_a_valid_token_and_owned_resource()
     {
         using var client = factory.CreateClient();
         var (userId, _, _) = await SeedAsync();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/payments/" + Guid.NewGuid())).StatusCode);
         // An authenticated user with no operator_accounts membership.
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -70,15 +69,15 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
             {
                 Id = id, UserName = id, Email = $"{id}@example.invalid", EmailConfirmed = true,
             })).Succeeded);
-            client.DefaultRequestHeaders.Authorization = await BearerAsync(id);
+            client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, id);
         }
 
         var noMembership = await client.PostAsJsonAsync("/api/v1/payments", new { orderId = Guid.NewGuid(), idempotencyKey = "idem-x" });
-        Assert.Equal(HttpStatusCode.Forbidden, noMembership.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, noMembership.StatusCode);
         using var problem = JsonDocument.Parse(await noMembership.Content.ReadAsStringAsync());
-        Assert.Equal("OPERATOR_NOT_FOUND", problem.RootElement.GetProperty("code").GetString());
+        Assert.Equal("ORDER_NOT_FOUND", problem.RootElement.GetProperty("code").GetString());
 
-        client.DefaultRequestHeaders.Authorization = await BearerAsync(userId);
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, userId);
         var own = await client.GetAsync("/api/v1/payments/" + Guid.NewGuid());
         Assert.Equal(HttpStatusCode.NotFound, own.StatusCode);
     }
@@ -117,27 +116,6 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
             orderId = "ignored-by-server",
         });
 
-    private async Task<AuthenticationHeaderValue> BearerAsync(string userId)
-    {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var user = await db.Users.SingleAsync(x => x.Id == userId);
-        var session = new Metro.Domain.Entities.Identity.AuthSession
-        {
-            UserId = userId, RefreshTokenHash = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant(),
-            ExpiresAt = DateTime.UtcNow.AddHours(1),
-        };
-        db.AuthSessions.Add(session);
-        await db.SaveChangesAsync();
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(PaymentTestFactory.SigningKey));
-        var token = new JwtSecurityToken("metro-api", "metro-web",
-            new[] { new Claim(JwtRegisteredClaimNames.Sub, userId), new Claim("security_stamp", user.SecurityStamp!),
-                new Claim("session_id", session.Id.ToString()) },
-            Now.UtcDateTime, Now.UtcDateTime.AddHours(1),
-            new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
-        return new AuthenticationHeaderValue("Bearer", new JwtSecurityTokenHandler().WriteToken(token));
-    }
-
     private async Task<(string UserId, Guid OperatorId, Guid OrderId)> SeedAsync()
     {
         await using var scope = factory.Services.CreateAsyncScope();
@@ -150,6 +128,11 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
         var suffix = Guid.NewGuid().ToString("N");
         var user = new IdentityUser { Id = suffix, UserName = suffix, Email = $"{suffix}@example.invalid", EmailConfirmed = true };
         Assert.True((await users.CreateAsync(user)).Succeeded);
+        db.UserProfiles.Add(new Metro.Domain.Entities.Identity.UserProfile
+        {
+            UserId = suffix, FullName = "Payment integration", NormalizedFullName = "PAYMENT INTEGRATION",
+            BirthDate = new DateOnly(1990, 1, 1), Status = "ACTIVE",
+        });
 
         db.Operators.Add(new Metro.Domain.Entities.Identity.Operator
         {
@@ -172,16 +155,30 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
             ProductType = "SINGLE_TRIP", ExpiryRule = "SINGLE_JOURNEY", CapacityControlled = false,
         });
         var orderId = Guid.NewGuid();
+        var day = Metro.Application.Ticketing.TicketRules.LocalDate(DateTimeOffset.UtcNow);
+        var originId = Guid.NewGuid(); var destinationId = Guid.NewGuid();
+        db.Stations.AddRange(
+            new Metro.Domain.Entities.Network.Station { Id = originId, OperatorId = opId, Code = "A", Name = "Origin" },
+            new Metro.Domain.Entities.Network.Station { Id = destinationId, OperatorId = opId, Code = "B", Name = "Destination" });
         db.Orders.Add(new Metro.Domain.Entities.Orders.Order
         {
             Id = orderId, OperatorId = opId, OrderCode = "ORD-" + suffix, Channel = "WEB",
             PayerUserId = suffix, BeneficiaryUserId = suffix, Status = "PENDING_PAYMENT",
             FarePolicyVersionId = fareId, TotalMinor = 15000, SubtotalMinor = 15000,
+            ServiceDate = day,
         });
         db.OrderItems.Add(new Metro.Domain.Entities.Orders.OrderItem
         {
             Id = Guid.NewGuid(), OperatorId = opId, OrderId = orderId, TicketProductId = productId,
             PassengerCount = 1, UnitPriceMinor = 15000, LineTotalMinor = 15000,
+            OriginStationId = originId, DestinationStationId = destinationId,
+        });
+        db.OrderVersions.Add(new Metro.Domain.Entities.Orders.OrderVersion
+        {
+            OperatorId = opId, OrderId = orderId, Version = 1, Status = "CONFIRMED", ConfirmedAt = DateTime.UtcNow,
+            TicketProductId = productId, BeneficiaryUserId = suffix, ServiceDate = day,
+            OriginStationId = originId, DestinationStationId = destinationId,
+            SubtotalMinor = 15000, TotalMinor = 15000, FarePolicyVersionId = fareId,
         });
         await db.SaveChangesAsync();
         return (suffix, opId, orderId);

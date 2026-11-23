@@ -33,6 +33,7 @@ public static class ApiDocumentation
             Description = "Access token from /api/v1/auth/login. Admin role is required for eligibility review.",
         });
         options.OperationFilter<EndpointAuthorizationOperationFilter>();
+        options.OperationFilter<TicketOpenApiFilter>();
 
         var xmlFile = $"{typeof(ApiDocumentation).Assembly.GetName().Name}.xml";
         var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);

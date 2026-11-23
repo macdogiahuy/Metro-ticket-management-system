@@ -22,6 +22,7 @@ public sealed class GlobalExceptionHandler(
         var (status, title) = exception switch
         {
             BadHttpRequestException => (StatusCodes.Status400BadRequest, "Invalid request"),
+            Metro.Application.Abstractions.Ticketing.TicketException ticket => (ticket.Status, "Ticket request failed"),
             AuthException auth => (auth.Status, "Authentication failed"),
             PaymentException payment => (payment.Status, payment.Status switch
             {
@@ -66,7 +67,9 @@ public sealed class GlobalExceptionHandler(
                 ? exception.Message
                 : null,
         };
-        if (exception is AuthException authError)
+        if (exception is Metro.Application.Abstractions.Ticketing.TicketException ticketError)
+            problem.Extensions["code"] = ticketError.Code;
+        else if (exception is AuthException authError)
         {
             problem.Extensions["code"] = authError.Code;
         }

@@ -2,12 +2,14 @@ using System.Data.Common;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Metro.Domain.Entities.Identity;
 using Metro.Infrastructure.Persistence.Context;
 using Metro.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +21,32 @@ namespace Metro.IntegrationTests.Endpoints;
 [Collection(DatabaseIntegrationCollection.Name)]
 public sealed class AdministrationEndpointsTests(MetroWebApplicationFactory factory)
 {
+    [PostgreSqlFact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task Authorization_policies_require_explicit_roles_without_implicit_staff_inheritance()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var authorization = scope.ServiceProvider.GetRequiredService<IAuthorizationService>();
+        foreach (var grantedRoles in new[]
+        {
+            Array.Empty<string>(), new[] { "Passenger" }, new[] { "StationStaff" }, new[] { "Admin" },
+            new[] { "Passenger", "StationStaff" }, new[] { "Passenger", "Admin" },
+        })
+        {
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(
+                grantedRoles.Select(role => new Claim(ClaimTypes.Role, role)), "Test"));
+            foreach (var policy in new[] { "Passenger", "StationStaff", "Admin" })
+                Assert.Equal(grantedRoles.Contains(policy),
+                    (await authorization.AuthorizeAsync(principal, resource: null, policyName: policy)).Succeeded);
+        }
+
+        var admin = await CreateAccountAsync("Admin");
+        using var client = Client(admin);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/auth/_role-probe")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/admin/roles")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/me")).StatusCode);
+    }
+
     [PostgreSqlFact]
     [Trait("Category", "PostgreSQL")]
     public async Task Administration_requires_admin_and_audits_rejected_staff_access()

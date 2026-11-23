@@ -58,7 +58,7 @@ Mỗi người mở đúng khối của mình, làm từ trên xuống: xong tas
 | Hạn | Mã | Task | Sprint | Trạng thái |
 | --- | --- | --- | --- | --- |
 | 18/11 | `BE-02A` | EF mapping lõi | S0 | Done |
-| 28/11 | `BE-09` | Phát hành vé + QR credential + vé miễn phí trẻ <6 + chặn… | S1 | To Do |
+| 28/11 | `BE-09` | Phát hành vé + QR credential + vé miễn phí trẻ <6 + chặn… | S1 | Done |
 | 06/12 | `BE-16` | Hủy đơn chưa thu + hoàn khoản thu lỗi + đổi vé do gián đoạn… | S1 | To Do |
 | 12/12 | `FE-04` | Booking → thanh toán → kết quả (kèm retry) | S2 | To Do |
 | 16/12 | `QA-02` | API regression Postman/Newman trên DB seed | S2 | To Do |
@@ -121,7 +121,7 @@ Mỗi người mở đúng khối của mình, làm từ trên xuống: xong tas
 | **25/11** | [#18](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/18) | `BE-03` | Identity + JWT | Huy | — | S1 | 23/11 | 5 | Done |
 | **25/11** | [#22](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/22) | `QA-01` | Test plan + ma trận test case theo UC + mẫu bug report | My | Tiên | S1 | 23/11 | 1 | To Do |
 | **27/11** | [#19](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/19) | `BE-04` | Hồ sơ + xác minh ưu đãi, upload minh chứng, audit thay đổi | My | Tuyên | S1 | 26/11 | 2 | To Do |
-| **28/11** | [#25](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/25) | `BE-09` | Phát hành vé + QR credential + vé miễn phí trẻ <6 + chặn… | Tuyên | Thành | S1 | 25/11 | 5 | To Do |
+| **28/11** | [#25](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/25) | `BE-09` | Phát hành vé + QR credential + vé miễn phí trẻ <6 + chặn… | Tuyên | Thành | S1 | 25/11 | 5 | Done |
 | **29/11** | [#24](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/24) | `BE-13` | Tuyến/ga + lịch/chuyến + hồ sơ tải kg + thời gian… | Hoàng | My | S1 | 26/11 | 5 | To Do |
 | **29/11** | [#21](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/21) | `BE-12` | Quản trị tài khoản/quyền + xem dữ liệu hành khách có audit | My | Hoàng | S1 | 28/11 | 2 | To Do |
 | **30/11** | [#23](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/23) | `BE-07` | Booking | Thành | Tuyên | S1 | 26/11 | 8 | To Do |

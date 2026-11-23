@@ -62,6 +62,9 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser, IdentityRole
     // Order & Pricing domain entities
     public DbSet<TicketProduct> TicketProducts => Set<TicketProduct>();
     public DbSet<FarePolicyVersion> FarePolicyVersions => Set<FarePolicyVersion>();
+    public DbSet<FareMatrixEntry> FareMatrixEntries => Set<FareMatrixEntry>();
+    public DbSet<EligibilityPolicy> EligibilityPolicies => Set<EligibilityPolicy>();
+    public DbSet<EligibilityApplication> EligibilityApplications => Set<EligibilityApplication>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<OrderVersion> OrderVersions => Set<OrderVersion>();

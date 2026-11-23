@@ -24,6 +24,7 @@ public class FarePolicyVersion : IOperatorScoped
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     public Operator Operator { get; set; } = null!;
+    public ICollection<FareMatrixEntry> MatrixEntries { get; set; } = new List<FareMatrixEntry>();
     public ICollection<Order> Orders { get; set; } = new List<Order>();
     public ICollection<OrderVersion> OrderVersions { get; set; } = new List<OrderVersion>();
 
