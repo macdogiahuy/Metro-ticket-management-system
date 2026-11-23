@@ -1,13 +1,13 @@
 # BE-09 — Vé, QR và lịch sử
 
-Cập nhật 22/11/2026 (Asia/Saigon). Task [#25](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/25), PB-009. Nhánh `feature/be-09-ticket-issuance`, nền `origin/dev` tại `a70125bf609bba473618c3efd58e9e68aed4e246`. Nguồn nghiệp vụ: SRS v1.2, UC v1.6, kế hoạch BE-09 và contract SQL BE-08/BE-09.
+Cập nhật 23/11/2026 (Asia/Saigon). Task [#25](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/25), PB-009. Nhánh `feature/be09-08-integration-handover`, PR #77; đã hợp nhất `origin/dev` tại `3c70bf4` (BE-04 profile). Nguồn nghiệp vụ: SRS v1.2, UC v1.6, kế hoạch BE-09 và contract SQL BE-08/BE-09.
 
-Code nằm tại `C:\Users\ACER\Documents\Codex\Metro-BE09-review-20261119`. Checkout cũ có cherry-pick conflict được giữ nguyên. Tài liệu này thay các đề xuất tích hợp trong `docs/planning/BE-09/CONTRACT-DRAFT.md`: BE-08 **không gọi service C# BE-09**.
+Code nằm tại `C:\Users\ACER\Documents\Codex\Metro-BE09-pr-stack-20261122`. Checkout cũ có cherry-pick conflict được giữ nguyên. Tài liệu này thay các đề xuất tích hợp trong `docs/planning/BE-09/CONTRACT-DRAFT.md`: BE-08 **không gọi service C# BE-09**.
 
 ## 1. Luồng phát hành
 
 1. BE-07 chuẩn bị đơn đã xác nhận, đúng một người, một item, `passenger_count=1`, phiên bản `CONFIRMED`, snapshot nhất quán. Vé lượt chọn ngày và hai ga, không giữ chỗ hoặc gắn bắt buộc với một planned trip. Ngày mua đến tối đa ngày mua +7, theo UTC+7.
-2. BE-08 kiểm chứng thông báo cổng và gọi đúng `metro.confirm_payment_and_issue_tickets` như trước. Migrations 007–009 giữ nguyên tám tham số và kiểu trả về `integer`; không bỏ kiểm chữ ký đã verify, amount/currency, quyền sở hữu event và idempotency. Cờ boolean không thay việc xác minh chữ ký ở BE-08.
+2. BE-08 kiểm chứng thông báo cổng và gọi đúng `metro.confirm_payment_and_issue_tickets` như trước. Migrations 010–012 giữ nguyên tám tham số và kiểu trả về `integer`; không bỏ kiểm chữ ký đã verify, amount/currency, quyền sở hữu event và idempotency. Cờ boolean không thay việc xác minh chữ ký ở BE-08.
 3. SQL lưu Payment `SUCCEEDED`, Order `PAID`, tạo đúng một Ticket `ISSUED` và một job `PENDING` trong cùng transaction. Giá/discount lấy snapshot đã chốt, không tra lại bảng giá hiện tại. C# không insert Ticket trả phí lần nữa.
 4. Worker BE-09 hoàn thiện QR, rồi commit credential `ACTIVE`, Ticket `ACTIVE`, job `READY`, Order `ISSUED` cùng `issued_at` trong một transaction. `ISSUED` trên bản ghi Ticket trước bước này **không phải vé đã sẵn sàng sử dụng**; `Ticket.IsValidAt` chỉ nhận `ACTIVE/IN_USE`. Cổng phải kiểm cả current credential và điều kiện Journey, không chỉ gọi helper kiểm thời gian.
 5. Vé lượt tương lai có bản ghi chờ nhưng không có QR trước 00:00 ngày đi. Job bền vững được poll mỗi 15 giây; mỗi lần lỗi đặt `next_attempt_at` cách một phút. Sau 15 phút từ `first_failed_at`, job chuyển `NEEDS_SUPPORT`, không tự yêu cầu trả lại tiền hoặc kéo dài hạn.
@@ -68,7 +68,7 @@ Chỉ một signed QR ACTIVE/vé và version duy nhất. Credential legacy khôn
 
 ## 5. Database và quyền runtime
 
-- Thêm **007–009**, giữ nguyên file/checksum 001–006. Bổ sung `payments.order_version` đóng băng khi tạo payment và FK vào order_versions; nội dung phiên bản đã xác nhận không được sửa tại chỗ.
+- Thêm **010–012**, giữ nguyên file/checksum 001–009. Bổ sung `payments.order_version` đóng băng khi tạo payment và FK vào order_versions; nội dung phiên bản đã xác nhận không được sửa tại chỗ.
 - Thêm credential version/key ID và partial unique indexes; hai bảng `ticket_issuance_jobs`, `ticket_issue_requests`; trạng thái Order `PENDING_ISSUE` cho miễn phí chờ cấp. Vé trả phí chờ cấp vẫn `PAID`.
 - Gỡ yêu cầu legacy “có ga thì bắt buộc planned_trip”; giữ cặp ga đầy đủ, khác nhau và FK cùng operator. Không map hoặc dùng quota/capacity legacy trong BE-09.
 - Vé Day/Week/Month bắt đầu PaidAt bất biến, kết thúc 00:00 sau ngày lịch thứ 1/7/30. Worker chậm không dời hiệu lực.
@@ -82,7 +82,7 @@ psql -X -v ON_ERROR_STOP=1 -f infra/database/deploy.sql
 psql -X -v ON_ERROR_STOP=1 -f infra/database/scripts/09_verify.sql
 ```
 
-Chọn DB và credential qua cấu hình của môi trường, không chép URL chứa mật khẩu vào lệnh hoặc source. Chưa chạy 007–009 trên Neon chung trong lượt triển khai code này. Backup/branch và review migration trước khi áp dụng môi trường dùng chung theo quy trình nhóm.
+Chọn DB và credential qua cấu hình của môi trường, không chép URL chứa mật khẩu vào lệnh hoặc source. Chưa chạy 010–012 trên Neon chung trong lượt triển khai code này. Backup/branch và review migration trước khi áp dụng môi trường dùng chung theo quy trình nhóm.
 
 Nếu runtime khác migration owner, DBA cấp `USAGE ON SCHEMA metro`, SELECT cho các bảng đọc theo service; EXECUTE đúng chữ ký paid/free và helpers cho service tương ứng. Worker cần INSERT/UPDATE trên jobs, credentials, tickets, orders, audit_logs, notifications; adapter free cần INSERT/SELECT ticket_issue_requests. Không cấp DELETE/TRUNCATE hoặc quyền quản lý schema cho runtime. Các quyền cũ chỉ gọi SQL workflow chưa đủ cho worker mới; không chạy app bằng migration owner để né cấu hình quyền.
 
@@ -90,8 +90,8 @@ Nếu runtime khác migration owner, DBA cấp `USAGE ON SCHEMA metro`, SELECT c
 
 Test thực chạy trên PostgreSQL 17 riêng `metro_test_be09_tuyen`, localhost; không dùng Neon chung, EF InMemory hoặc Docker thay PostgreSQL. Dùng harness `backend/tests/Run-PostgresTests.ps1` và biến môi trường test hiện có. Test không cần secret thật; key ngẫu nhiên chỉ dùng trong test host, worker được gọi chủ động để kiểm soát lịch.
 
-Bao phủ: SQL paid/free, một vé/người/đơn, replay và race hai connection/worker, hai đơn overlap và ngày liên tiếp, Journey hết hạn chưa đóng, tuổi tại ngày đi, single-only, guardian/QR tương lai, hash/key/version, PNG ổn định, retry/NeedsSupport không gia hạn, 401/403/404/cross-operator, lịch sử và Swagger. Kết quả thực thi cuối được ghi trong `BE-09-VALIDATION.md` cùng thư mục.
+Bao phủ: SQL paid/free, một vé/người/đơn, replay và race hai connection/worker, hai đơn overlap và ngày liên tiếp, Journey hết hạn chưa đóng, tuổi tại ngày đi, single-only, guardian/QR tương lai, hash/key/version, PNG ổn định, retry/NeedsSupport không gia hạn, 401/403/404/cross-operator, lịch sử và Swagger. Kết quả thực thi hiện hành: [migration review 23/11](BE-09-MIGRATION-REVIEW-2026-11-23.md). Các báo cáo 20–22/11 là bằng chứng lịch sử.
 
-Theo yêu cầu người dùng, toàn bộ thay đổi dùng một nhánh `feature/be09-08-integration-handover` và PR #77 vào dev. Giữ tám commit làm lịch sử review; không dùng các nhánh/PR trung gian nữa. PR tổng không được coi là dưới 400 dòng. Chưa tự merge hoặc ghi thay reviewer đã duyệt. Xem BE-09-FINAL-2026-11-22.md.
+Theo yêu cầu người dùng, toàn bộ thay đổi dùng một nhánh `feature/be09-08-integration-handover` và PR #77 vào dev. Giữ lịch sử commit để review; không dùng các nhánh/PR trung gian nữa. PR tổng không được coi là dưới 400 dòng. Chưa tự merge hoặc ghi thay reviewer đã duyệt. Xem BE-09-FINAL-2026-11-22.md.
 
 Luồng end-to-end mua đơn → MoMo TEST → webhook → phát hành → frontend còn phải ghép code BE-06/07/08/10/14 của các thành viên. Fixture xác nhận được phần BE-09, không thay bằng chứng tích hợp gateway hoặc scan thật. BE-08 phải hiểu integer trả về là số Ticket SQL tạo/đã có, **không đồng nghĩa QR đã sẵn sàng**; đọc Order/job thay vì tự ghi Order ISSUED. Các lỗi thu tiền đã xảy ra nhưng SQL từ chối cấp cần đi vào đối soát/ngoại lệ tài chính của BE-08, không tự đánh dấu đã hoàn.

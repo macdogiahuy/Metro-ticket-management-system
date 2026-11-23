@@ -1,6 +1,8 @@
+> Cập nhật 23/11: số migration BE-09 hiện là 010–012; các kết quả/phiên bản cũ bên dưới là lịch sử trước khi hợp nhất BE-04. Xem BE-09-MIGRATION-REVIEW-2026-11-23.md.
+
 > Cách bàn giao hiện hành: một nhánh `feature/be09-08-integration-handover`, một PR #77 vào dev theo yêu cầu người dùng. Nội dung chia nhiều PR bên dưới là lịch sử đã được thay thế.
 
-> KẾT QUẢ MỚI SAU SỬA: **113/113 pass**, 0 fail/skip; migration hiện hành là 007–009. Xem [bản hoàn thành](BE-09-FINAL-2026-11-22.md). Số liệu 106/106 bên dưới là mốc 20/11.
+> KẾT QUẢ MỚI SAU SỬA: **113/113 pass**, 0 fail/skip; migration hiện hành là 010–012. Xem [bản hoàn thành](BE-09-FINAL-2026-11-22.md). Số liệu 106/106 bên dưới là mốc 20/11.
 
 # Kết quả kiểm chứng BE-09
 

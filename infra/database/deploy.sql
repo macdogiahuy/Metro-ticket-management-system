@@ -3403,15 +3403,160 @@ COMMENT ON TABLE metro.data_quality_days IS
   VALUES (6, '006_srs_v1_2_alignment.sql', '9a0d939a4656a2b3afbbc09b6f71f1249cf93529d48271d232ee09fa5a9e3f2c');
 END $migration_006$;
 
--- 007_ticket_issuance.sql
+-- 007_profile_eligibility_evidence.sql
 DO $migration_007$
 BEGIN
   IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 7) THEN
     IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 7
-                   AND name = '007_ticket_issuance.sql' AND checksum = 'e89b4f3b2a711ea24ee8efba088240fa297e8919e42f1489de71916573484c71') THEN
+                   AND name = '007_profile_eligibility_evidence.sql' AND checksum = 'b294ace07e2cb3862b7fd423103d781fd64a05b027d471cd078649e63a965767') THEN
       RAISE EXCEPTION 'Migration 007 checksum mismatch; add a new migration';
     END IF;
     RAISE NOTICE 'Migration 007 already applied';
+    RETURN;
+  END IF;
+
+-- BE-04: concession evidence requests and private object-storage references.
+-- Keep profile verification requests separate from the ticketing-domain
+-- eligibility_evidence table created by migration 003.
+CREATE TABLE metro.profile_eligibility_requests (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id text NOT NULL REFERENCES public."AspNetUsers" ("Id") ON DELETE RESTRICT,
+    category varchar(40) NOT NULL CHECK (category IN ('STUDENT','ELDERLY','DISABILITY','PRIORITY','OTHER')),
+    status varchar(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','VERIFIED','REJECTED','REVOKED','EXPIRED')),
+    valid_from date,
+    valid_to date,
+    evidence_object_key text,
+    evidence_file_name text,
+    evidence_content_type text,
+    evidence_size bigint CHECK (evidence_size IS NULL OR evidence_size BETWEEN 1 AND 10485760),
+    evidence_sha256 char(64) CHECK (evidence_sha256 IS NULL OR evidence_sha256 ~ '^[0-9a-f]{64}$'),
+    decision_reason text,
+    decided_by_user_id text REFERENCES public."AspNetUsers" ("Id") ON DELETE RESTRICT,
+    decided_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from),
+    CHECK ((evidence_object_key IS NULL AND evidence_file_name IS NULL AND evidence_content_type IS NULL AND evidence_size IS NULL AND evidence_sha256 IS NULL)
+        OR (evidence_object_key IS NOT NULL AND evidence_file_name IS NOT NULL AND evidence_content_type IS NOT NULL AND evidence_size IS NOT NULL AND evidence_sha256 IS NOT NULL)),
+    CHECK ((status = 'PENDING' AND decided_at IS NULL AND decided_by_user_id IS NULL)
+        OR (status <> 'PENDING' AND decided_at IS NOT NULL AND decided_by_user_id IS NOT NULL))
+);
+CREATE INDEX ix_profile_eligibility_requests_user_time ON metro.profile_eligibility_requests (user_id, created_at DESC);
+CREATE INDEX ix_profile_eligibility_requests_status ON metro.profile_eligibility_requests (status, created_at) WHERE status = 'PENDING';
+COMMENT ON COLUMN metro.profile_eligibility_requests.evidence_object_key IS 'Private object storage key; never store document bytes or signed URLs in the database or audit log.';
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (7, '007_profile_eligibility_evidence.sql', 'b294ace07e2cb3862b7fd423103d781fd64a05b027d471cd078649e63a965767');
+END $migration_007$;
+
+-- 008_profile_verification_workflow.sql
+DO $migration_008$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 8) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 8
+                   AND name = '008_profile_verification_workflow.sql' AND checksum = 'a6f4a8c072a6f9a6f0643755eb28ff583c961c6ed1591aaa2b62ac88d38be34e') THEN
+      RAISE EXCEPTION 'Migration 008 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 008 already applied';
+    RETURN;
+  END IF;
+
+-- UC05/UC06: preserve migration 007 and extend its profile-specific workflow.
+ALTER TABLE metro.profile_eligibility_requests ADD COLUMN evidence_hold boolean NOT NULL DEFAULT false;
+
+-- Replace only the state/decision checks; preserve file and date integrity checks.
+DO $checks$
+DECLARE item record;
+BEGIN
+    FOR item IN SELECT conname FROM pg_constraint
+        WHERE conrelid = 'metro.profile_eligibility_requests'::regclass AND contype = 'c'
+          AND pg_get_constraintdef(oid) LIKE '%status%'
+    LOOP
+        EXECUTE format('ALTER TABLE metro.profile_eligibility_requests DROP CONSTRAINT %I', item.conname);
+    END LOOP;
+END $checks$;
+ALTER TABLE metro.profile_eligibility_requests
+    ADD CONSTRAINT ck_profile_eligibility_status CHECK (status IN ('PENDING','NEEDS_INFO','VERIFIED','REJECTED','REVOKED','EXPIRED')),
+    ADD CONSTRAINT ck_profile_eligibility_decision CHECK (
+        (status = 'PENDING' AND decided_at IS NULL AND decided_by_user_id IS NULL)
+        OR (status <> 'PENDING' AND decided_at IS NOT NULL AND decided_by_user_id IS NOT NULL));
+
+CREATE TABLE metro.profile_eligibility_attachments (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id uuid NOT NULL REFERENCES metro.profile_eligibility_requests(id) ON DELETE RESTRICT,
+    slot integer NOT NULL CHECK (slot BETWEEN 1 AND 3),
+    object_key text, file_name text NOT NULL, content_type text NOT NULL,
+    size_bytes bigint NOT NULL CHECK (size_bytes BETWEEN 1 AND 10485760),
+    sha256 char(64) NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'),
+    uploaded_at timestamptz NOT NULL DEFAULT clock_timestamp(), purged_at timestamptz, replaced_at timestamptz,
+    CHECK ((object_key IS NOT NULL AND purged_at IS NULL) OR (object_key IS NULL AND purged_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX ix_profile_eligibility_attachment_slots ON metro.profile_eligibility_attachments(request_id, slot) WHERE replaced_at IS NULL;
+-- Preserve already uploaded 007 documents. New uploads are capped at 5 MiB in the API.
+INSERT INTO metro.profile_eligibility_attachments
+    (request_id, slot, object_key, file_name, content_type, size_bytes, sha256, uploaded_at)
+SELECT id, 1, evidence_object_key, evidence_file_name, evidence_content_type,
+       evidence_size, evidence_sha256, updated_at
+FROM metro.profile_eligibility_requests WHERE evidence_object_key IS NOT NULL;
+
+CREATE TABLE metro.profile_eligibility_decisions (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id uuid NOT NULL REFERENCES metro.profile_eligibility_requests(id) ON DELETE RESTRICT,
+    status varchar(20) NOT NULL, reason text NOT NULL,
+    actor_user_id text REFERENCES public."AspNetUsers"("Id") ON DELETE RESTRICT,
+    occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(), valid_from date, valid_to date
+);
+INSERT INTO metro.profile_eligibility_decisions
+    (request_id, status, reason, actor_user_id, occurred_at, valid_from, valid_to)
+SELECT id, status, coalesce(decision_reason, 'Migrated decision'), decided_by_user_id,
+       decided_at, valid_from, valid_to
+FROM metro.profile_eligibility_requests WHERE decided_at IS NOT NULL;
+CREATE INDEX ix_profile_eligibility_decisions_history ON metro.profile_eligibility_decisions(request_id, occurred_at);
+COMMENT ON TABLE metro.profile_eligibility_decisions IS 'Retain decision metadata for at least 24 months; no document contents.';
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (8, '008_profile_verification_workflow.sql', 'a6f4a8c072a6f9a6f0643755eb28ff583c961c6ed1591aaa2b62ac88d38be34e');
+END $migration_008$;
+
+-- 009_profile_evidence_purge_queue.sql
+DO $migration_009$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 9) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 9
+                   AND name = '009_profile_evidence_purge_queue.sql' AND checksum = 'b50b99c95403d4f324e362e46921335281e367ea9758cb8ff9c6889e92c0f12a') THEN
+      RAISE EXCEPTION 'Migration 009 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 009 already applied';
+    RETURN;
+  END IF;
+
+-- Durable mark-then-purge: detach evidence references and enqueue in one transaction.
+-- Preserve checksums of migrations 001-008, including databases already using 008.
+CREATE TABLE metro.profile_eligibility_purge_queue (
+    request_id uuid CONSTRAINT pk_profile_eligibility_purge_queue PRIMARY KEY,
+    object_keys text[] NOT NULL,
+    queued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT fk_profile_eligibility_purge_request FOREIGN KEY (request_id)
+        REFERENCES metro.profile_eligibility_requests(id) ON DELETE RESTRICT,
+    CONSTRAINT ck_profile_eligibility_purge_keys CHECK (
+        cardinality(object_keys) > 0 AND array_position(object_keys, NULL) IS NULL)
+);
+COMMENT ON TABLE metro.profile_eligibility_purge_queue IS
+    'Private cleanup outbox; delete objects only after enqueue commits. Retry until all deletes succeed; never log object_keys.';
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (9, '009_profile_evidence_purge_queue.sql', 'b50b99c95403d4f324e362e46921335281e367ea9758cb8ff9c6889e92c0f12a');
+END $migration_009$;
+
+-- 010_ticket_issuance.sql
+DO $migration_010$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 10) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 10
+                   AND name = '010_ticket_issuance.sql' AND checksum = 'e89b4f3b2a711ea24ee8efba088240fa297e8919e42f1489de71916573484c71') THEN
+      RAISE EXCEPTION 'Migration 010 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 010 already applied';
     RETURN;
   END IF;
 
@@ -3600,18 +3745,18 @@ $function$;
 REVOKE ALL ON FUNCTION metro.check_issuance_order(uuid,uuid) FROM PUBLIC;
 
   INSERT INTO metro.schema_migrations (version, name, checksum)
-  VALUES (7, '007_ticket_issuance.sql', 'e89b4f3b2a711ea24ee8efba088240fa297e8919e42f1489de71916573484c71');
-END $migration_007$;
+  VALUES (10, '010_ticket_issuance.sql', 'e89b4f3b2a711ea24ee8efba088240fa297e8919e42f1489de71916573484c71');
+END $migration_010$;
 
--- 008_paid_ticket_issuance.sql
-DO $migration_008$
+-- 011_paid_ticket_issuance.sql
+DO $migration_011$
 BEGIN
-  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 8) THEN
-    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 8
-                   AND name = '008_paid_ticket_issuance.sql' AND checksum = 'a36f9ab6a5608b0d561559ef123bfc72d71339826640f72d197d57fb6942c70d') THEN
-      RAISE EXCEPTION 'Migration 008 checksum mismatch; add a new migration';
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 11) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 11
+                   AND name = '011_paid_ticket_issuance.sql' AND checksum = 'a36f9ab6a5608b0d561559ef123bfc72d71339826640f72d197d57fb6942c70d') THEN
+      RAISE EXCEPTION 'Migration 011 checksum mismatch; add a new migration';
     END IF;
-    RAISE NOTICE 'Migration 008 already applied';
+    RAISE NOTICE 'Migration 011 already applied';
     RETURN;
   END IF;
 
@@ -3819,18 +3964,18 @@ $function$;
 REVOKE ALL ON FUNCTION metro.confirm_payment_and_issue_tickets(uuid,uuid,text,varchar,char,bigint,char,boolean) FROM PUBLIC;
 
   INSERT INTO metro.schema_migrations (version, name, checksum)
-  VALUES (8, '008_paid_ticket_issuance.sql', 'a36f9ab6a5608b0d561559ef123bfc72d71339826640f72d197d57fb6942c70d');
-END $migration_008$;
+  VALUES (11, '011_paid_ticket_issuance.sql', 'a36f9ab6a5608b0d561559ef123bfc72d71339826640f72d197d57fb6942c70d');
+END $migration_011$;
 
--- 009_free_child_ticket_issuance.sql
-DO $migration_009$
+-- 012_free_child_ticket_issuance.sql
+DO $migration_012$
 BEGIN
-  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 9) THEN
-    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 9
-                   AND name = '009_free_child_ticket_issuance.sql' AND checksum = 'c9fd06675b97899eef27e033810b8022b3eeeef23414941de29560250a97d114') THEN
-      RAISE EXCEPTION 'Migration 009 checksum mismatch; add a new migration';
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 12) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 12
+                   AND name = '012_free_child_ticket_issuance.sql' AND checksum = 'c9fd06675b97899eef27e033810b8022b3eeeef23414941de29560250a97d114') THEN
+      RAISE EXCEPTION 'Migration 012 checksum mismatch; add a new migration';
     END IF;
-    RAISE NOTICE 'Migration 009 already applied';
+    RAISE NOTICE 'Migration 012 already applied';
     RETURN;
   END IF;
 
@@ -3960,7 +4105,7 @@ REVOKE ALL ON FUNCTION metro.eligible_guardian_ticket(uuid,uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION metro.issue_free_order(uuid,uuid,text,text) FROM PUBLIC;
 
   INSERT INTO metro.schema_migrations (version, name, checksum)
-  VALUES (9, '009_free_child_ticket_issuance.sql', 'c9fd06675b97899eef27e033810b8022b3eeeef23414941de29560250a97d114');
-END $migration_009$;
+  VALUES (12, '012_free_child_ticket_issuance.sql', 'c9fd06675b97899eef27e033810b8022b3eeeef23414941de29560250a97d114');
+END $migration_012$;
 
 COMMIT;

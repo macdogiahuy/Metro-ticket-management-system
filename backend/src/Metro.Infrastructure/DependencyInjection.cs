@@ -85,6 +85,8 @@ public static class DependencyInjection
         services.AddSingleton<IObjectStorage>(_ =>
             new NeonObjectStorage(Options.Create(storageOptions)));
 
+        services.AddProfileEligibilityLifecycle();
+
         // BE-08: MoMo TEST gateway + payment orchestration.
         services.Configure<MoMoOptions>(configuration.GetSection("Payment"));
         services.AddScoped<IPaymentService, PaymentService>();

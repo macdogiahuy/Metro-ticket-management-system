@@ -1,5 +1,6 @@
 using Metro.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.Swagger;
 
 namespace Metro.IntegrationTests.Contracts;
@@ -33,5 +34,27 @@ public sealed class SwaggerContractTests(MetroWebApplicationFactory factory)
         Assert.NotEmpty(free.Security);
         var qr = swagger.Paths["/api/v1/tickets/{id}/qr"].Operations[Microsoft.OpenApi.Models.OperationType.Get];
         Assert.Contains("image/png", qr.Responses["200"].Content.Keys);
+    }
+
+    [PostgreSqlFact]
+    public void OpenApi_exposes_profile_schema_and_private_owner_and_admin_review_routes()
+    {
+        var swagger = factory.Services.GetRequiredService<ISwaggerProvider>().GetSwagger("v1");
+        foreach (var path in new[]
+        {
+            "/api/v1/me", "/api/v1/me/eligibility", "/api/v1/me/eligibility/{id}",
+            "/api/v1/me/eligibility/{id}/evidence", "/api/v1/eligibility",
+            "/api/v1/eligibility/{id}", "/api/v1/eligibility/{id}/evidence",
+            "/api/v1/eligibility/{id}/decision", "/api/v1/eligibility/{id}/hold"
+        }) Assert.Contains(path, swagger.Paths.Keys);
+        var responseSchema = swagger.Paths["/api/v1/me"].Operations[OperationType.Get]
+            .Responses["200"].Content["application/json"].Schema.Reference.Id;
+        var profile = swagger.Components.Schemas[responseSchema];
+        Assert.Contains("fullName", profile.Properties.Keys);
+        Assert.Contains("birthDate", profile.Properties.Keys);
+        Assert.Contains("phoneNumber", profile.Properties.Keys);
+        Assert.Contains("identityFieldsLocked", profile.Properties.Keys);
+        Assert.DoesNotContain("citizenIdCiphertext", profile.Properties.Keys);
+        Assert.DoesNotContain("bankAccountCiphertext", profile.Properties.Keys);
     }
 }

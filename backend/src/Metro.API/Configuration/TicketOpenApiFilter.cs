@@ -12,7 +12,7 @@ public sealed class TicketOpenApiFilter : IOperationFilter
         if (operation.Tags.All(t => t.Name != "Tickets & history")) return;
         operation.Security = new List<OpenApiSecurityRequirement>
         {
-            new() { [new OpenApiSecurityScheme { Reference = new() { Type = ReferenceType.SecurityScheme, Id = "TicketBearer" } }] = Array.Empty<string>() }
+            new() { [new OpenApiSecurityScheme { Reference = new() { Type = ReferenceType.SecurityScheme, Id = "Bearer" } }] = Array.Empty<string>() }
         };
         if (operation.OperationId == "GetMyTicketQr")
             operation.Responses["200"].Content["image/png"] = new OpenApiMediaType

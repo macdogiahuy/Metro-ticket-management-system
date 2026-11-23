@@ -19,9 +19,12 @@ Do not use the application login as the migration owner. Application roles shoul
 4. `migrations/004_support_analytics_automation.sql`
 5. `migrations/005_transactional_capacity_retention.sql`
 6. `migrations/006_srs_v1_2_alignment.sql`
-7. `migrations/007_ticket_issuance.sql`
-8. `migrations/008_paid_ticket_issuance.sql`
-9. `migrations/009_free_child_ticket_issuance.sql`
+7. `migrations/007_profile_eligibility_evidence.sql`
+8. `migrations/008_profile_verification_workflow.sql`
+9. `migrations/009_profile_evidence_purge_queue.sql`
+10. `migrations/010_ticket_issuance.sql`
+11. `migrations/011_paid_ticket_issuance.sql`
+12. `migrations/012_free_child_ticket_issuance.sql`
 
 `build_deploy.py` combines those sources into `deploy.sql`, wraps them in one transaction, verifies migration checksums, and serializes deployments with a PostgreSQL advisory lock. Edit only migration sources; never hand-edit `deploy.sql`.
 
@@ -31,6 +34,8 @@ python infra/database/build_deploy.py --check
 psql -v ON_ERROR_STOP=1 -d metro_ticket -f infra/database/deploy.sql
 psql -v ON_ERROR_STOP=1 -d metro_ticket -f infra/database/scripts/09_verify.sql
 ```
+
+BE-04 owns the already-deployed profile versions 007–009; BE-09 appends 010–012 without changing any 001–009 source/checksum.
 
 The deployment is repeatable. Reapplying an unchanged migration reports it as already applied. A checksum mismatch stops deployment and requires a new migration.
 
@@ -58,9 +63,9 @@ All workflow functions are `SECURITY DEFINER` with a pinned `search_path` and no
 
 ## Validation tests
 
-Current acceptance for migrations 007–009 uses real PostgreSQL through `backend/tests/Run-PostgresTests.ps1`. Deploy `deploy.sql`, run `scripts/09_verify.sql`, then follow [backend test setup](../../backend/tests/README.md). BE-09 tests cover paid/free SQL contracts, locking/races, current QR, eligibility, history and HTTP ownership. Never run fixtures against a shared DB.
+Current acceptance for migrations 010–012 uses real PostgreSQL through `backend/tests/Run-PostgresTests.ps1`. Deploy `deploy.sql`, run `scripts/09_verify.sql`, then follow [backend test setup](../../backend/tests/README.md). BE-09 tests cover paid/free SQL contracts, locking/races, current QR, eligibility, history and HTTP ownership. Never run fixtures against a shared DB.
 
-The standalone SQL files under `tests/` predate 007 and preserve historical migration 005/006 expectations (group capacity issuance and orders immediately ISSUED). They are historical regression assets for those schema revisions, not the acceptance suite for the current Metro issuance contract. Do not run that old ordered fixture chain as validation of 007–009 or interpret its immediate-ISSUED assertions as current requirements.
+The standalone SQL files under `tests/` predate BE-09 migration 010 and preserve historical migration 005/006 expectations (group capacity issuance and orders immediately ISSUED). They are historical regression assets for those schema revisions, not the acceptance suite for the current Metro issuance contract. Do not run that old ordered fixture chain as validation of 010–012 or interpret its immediate-ISSUED assertions as current requirements.
 
 ## Backup and restore
 
