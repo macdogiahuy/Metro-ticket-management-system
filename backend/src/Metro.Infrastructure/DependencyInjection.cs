@@ -37,6 +37,8 @@ public static class DependencyInjection
             .AddEntityFrameworkStores<ApplicationDbContext>();
 
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAdministrationService, AdministrationService>();
+        services.AddScoped<AccountAccess>();
 
         services.Configure<CatalogCacheOptions>(configuration.GetSection("CatalogCache"));
         var redisConnection = new[]

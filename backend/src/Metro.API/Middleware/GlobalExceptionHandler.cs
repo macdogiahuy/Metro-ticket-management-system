@@ -21,6 +21,7 @@ public sealed class GlobalExceptionHandler(
     {
         var (status, title) = exception switch
         {
+            BadHttpRequestException => (StatusCodes.Status400BadRequest, "Invalid request"),
             AuthException auth => (auth.Status, "Authentication failed"),
             PaymentException payment => (payment.Status, payment.Status switch
             {

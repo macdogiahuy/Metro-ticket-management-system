@@ -26,7 +26,7 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
     {
         using var client = factory.CreateClient();
         var (userId, operatorId, orderId) = await SeedAsync();
-        client.DefaultRequestHeaders.Authorization = Bearer(userId);
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(userId);
 
         var created = await client.PostAsJsonAsync("/api/v1/payments", new { orderId, idempotencyKey = "idem-1" });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -70,7 +70,7 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
             {
                 Id = id, UserName = id, Email = $"{id}@example.invalid", EmailConfirmed = true,
             })).Succeeded);
-            client.DefaultRequestHeaders.Authorization = Bearer(id);
+            client.DefaultRequestHeaders.Authorization = await BearerAsync(id);
         }
 
         var noMembership = await client.PostAsJsonAsync("/api/v1/payments", new { orderId = Guid.NewGuid(), idempotencyKey = "idem-x" });
@@ -78,7 +78,7 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
         using var problem = JsonDocument.Parse(await noMembership.Content.ReadAsStringAsync());
         Assert.Equal("OPERATOR_NOT_FOUND", problem.RootElement.GetProperty("code").GetString());
 
-        client.DefaultRequestHeaders.Authorization = Bearer(userId);
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(userId);
         var own = await client.GetAsync("/api/v1/payments/" + Guid.NewGuid());
         Assert.Equal(HttpStatusCode.NotFound, own.StatusCode);
     }
@@ -117,11 +117,22 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
             orderId = "ignored-by-server",
         });
 
-    private static AuthenticationHeaderValue Bearer(string userId)
+    private async Task<AuthenticationHeaderValue> BearerAsync(string userId)
     {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var user = await db.Users.SingleAsync(x => x.Id == userId);
+        var session = new Metro.Domain.Entities.Identity.AuthSession
+        {
+            UserId = userId, RefreshTokenHash = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant(),
+            ExpiresAt = DateTime.UtcNow.AddHours(1),
+        };
+        db.AuthSessions.Add(session);
+        await db.SaveChangesAsync();
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(PaymentTestFactory.SigningKey));
         var token = new JwtSecurityToken("metro-api", "metro-web",
-            new[] { new Claim(JwtRegisteredClaimNames.Sub, userId) },
+            new[] { new Claim(JwtRegisteredClaimNames.Sub, userId), new Claim("security_stamp", user.SecurityStamp!),
+                new Claim("session_id", session.Id.ToString()) },
             Now.UtcDateTime, Now.UtcDateTime.AddHours(1),
             new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
         return new AuthenticationHeaderValue("Bearer", new JwtSecurityTokenHandler().WriteToken(token));
