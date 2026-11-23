@@ -37,6 +37,12 @@ public static class DependencyInjection
             .AddEntityFrameworkStores<ApplicationDbContext>();
 
         services.AddScoped<IAuthService, AuthService>();
+        services.Configure<Metro.Infrastructure.Ticketing.TicketQrOptions>(configuration.GetSection("TicketQr"));
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddSingleton<Metro.Infrastructure.Ticketing.TicketQrCodec>();
+        services.AddScoped<Metro.Application.Abstractions.Ticketing.ITicketService, Metro.Infrastructure.Ticketing.TicketService>();
+        services.AddScoped<Metro.Infrastructure.Ticketing.TicketIssuanceProcessor>();
+        services.AddHostedService<Metro.Infrastructure.Ticketing.TicketIssuanceWorker>();
 
         services.Configure<CatalogCacheOptions>(configuration.GetSection("CatalogCache"));
         var redisConnection = new[]
@@ -78,6 +84,8 @@ public static class DependencyInjection
 
         services.AddSingleton<IObjectStorage>(_ =>
             new NeonObjectStorage(Options.Create(storageOptions)));
+
+        services.AddProfileEligibilityLifecycle();
 
         // BE-08: MoMo TEST gateway + payment orchestration.
         services.Configure<MoMoOptions>(configuration.GetSection("Payment"));

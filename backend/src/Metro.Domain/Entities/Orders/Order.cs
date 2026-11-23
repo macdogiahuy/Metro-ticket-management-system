@@ -17,7 +17,7 @@ public class Order : IOperatorScoped
     public string? PayerNameSnapshot { get; set; }
     public string? PayerEmailSnapshot { get; set; }
     public string? BeneficiaryNameSnapshot { get; set; }
-    public string Status { get; set; } = "DRAFT"; // DRAFT, HELD, PENDING_PAYMENT, PAID, ISSUED, EXPIRED, CANCELLED, REFUND_PENDING, REFUNDED
+    public string Status { get; set; } = "DRAFT"; // DRAFT, HELD, PENDING_PAYMENT, PENDING_ISSUE, PAID, ISSUED, EXPIRED, CANCELLED, REFUND_PENDING, REFUNDED
     public string Currency { get; set; } = "VND";
     public long SubtotalMinor { get; set; }
     public long DiscountMinor { get; set; }
@@ -55,4 +55,3 @@ public class Order : IOperatorScoped
         return utc >= HoldExpiresAt.Value;
     }
 }
-
