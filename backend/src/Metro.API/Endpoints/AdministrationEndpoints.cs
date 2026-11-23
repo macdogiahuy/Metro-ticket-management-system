@@ -38,7 +38,9 @@ public static class AdministrationEndpoints
         group.MapGet("/passengers/{userId}", async (string userId, ClaimsPrincipal principal,
             IAdministrationService service, CancellationToken ct, string? purpose = null) =>
             Results.Ok(await service.GetPassengerAsync(Actor(principal), userId, purpose, ct)))
-            .WithName("GetPassengerAdministration").Produces<PassengerDetails>();
+            .WithName("GetPassengerAdministration")
+            .WithDescription("Purpose must be SUPPORT_CASE, ELIGIBILITY_REVIEW or ACCOUNT_MAINTENANCE. Free text is rejected.")
+            .Produces<PassengerDetails>();
         group.MapPut("/passengers/{userId}", async (string userId, PassengerUpdateRequest request,
             ClaimsPrincipal principal, IAdministrationService service, CancellationToken ct) =>
         {

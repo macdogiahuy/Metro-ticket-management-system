@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Metro.Domain.Entities.Identity;
 using Metro.Infrastructure.Persistence.Context;
@@ -28,7 +29,7 @@ public sealed class AdministrationEndpointsTests(MetroWebApplicationFactory fact
         {
             var account = await CreateAccountAsync(role);
             using var client = Client(account);
-            foreach (var path in new[] { "/accounts", "/roles", "/passengers/another-user?purpose=Support" })
+            foreach (var path in new[] { "/accounts", "/roles", "/passengers/another-user?purpose=SUPPORT_CASE" })
                 Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/admin" + path)).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync($"/api/v1/admin/accounts/{account.Id}/roles",
                 new { roles = new[] { "Admin" }, reason = "Escalate" })).StatusCode);
@@ -36,6 +37,35 @@ public sealed class AdministrationEndpointsTests(MetroWebApplicationFactory fact
             Assert.Equal(4, audits.Length);
             Assert.All(audits, x => Assert.Equal("DENIED", x.Outcome));
         }
+    }
+
+    [PostgreSqlFact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task Denied_access_still_returns_403_and_logs_failure_when_audit_cannot_be_saved()
+    {
+        var target = await CreateAccountAsync("Passenger");
+        using var failing = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            services.AddDbContext<ApplicationDbContext>(options => options.AddInterceptors(new FailDeniedAudit()))));
+        using var client = Client(target, failing);
+        foreach (var path in new[] { "/accounts", "/roles", $"/passengers/{target.Id}?purpose=SUPPORT_CASE" })
+        {
+            var response = await client.GetAsync("/api/v1/admin" + path);
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.DoesNotContain(target.Email, body);
+            Assert.DoesNotContain("Administration Passenger", body);
+        }
+        Assert.Empty(await AuditsAsync(target.Id, "ADMIN_ACCESS_DENIED"));
+        Assert.Contains(factory.TestLogs.Messages, x => x.Contains("Failed to persist ADMIN_ACCESS_DENIED audit"));
+        Assert.DoesNotContain(factory.TestLogs.Messages, x => x.Contains("Synthetic sensitive audit error"));
+    }
+
+    private sealed class FailDeniedAudit : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
+            eventData.Context!.ChangeTracker.Entries<AuditLog>().Any(x => x.Entity.Action == "ADMIN_ACCESS_DENIED")
+                ? throw new InvalidOperationException("Synthetic sensitive audit error") : ValueTask.FromResult(result);
     }
 
     [PostgreSqlFact]
@@ -139,6 +169,40 @@ public sealed class AdministrationEndpointsTests(MetroWebApplicationFactory fact
 
     [PostgreSqlFact]
     [Trait("Category", "PostgreSQL")]
+    public async Task Inactive_accounts_cannot_gain_staff_roles_but_locked_staff_can_be_demoted()
+    {
+        var admin = await CreateAccountAsync("Admin");
+        var target = await CreateAccountAsync("Passenger");
+        using var client = Client(admin);
+        foreach (var status in new[] { "LOCKED", "PENDING", "DISABLED", "CLOSED" })
+        {
+            await using (var scope = factory.Services.CreateAsyncScope())
+                await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().UserProfiles
+                    .Where(x => x.UserId == target.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, status));
+            foreach (var role in new[] { "Admin", "StationStaff" })
+                await ProblemAsync(await client.PutAsJsonAsync($"/api/v1/admin/accounts/{target.Id}/roles",
+                    new { roles = new[] { role }, reason = "Assign duties" }), HttpStatusCode.Conflict, "ACCOUNT_NOT_ACTIVE");
+        }
+        Assert.Empty(await AuditsAsync(admin.Id, "ACCOUNT_ROLES_CHANGED"));
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Assert.Single(await db.UserRoles.Where(x => x.UserId == target.Id).ToArrayAsync());
+            Assert.Single(await db.AuthSessions.Where(x => x.UserId == target.Id && x.RevokedAt == null).ToArrayAsync());
+        }
+        var staff = await CreateAccountAsync("StationStaff");
+        Assert.Equal(HttpStatusCode.NoContent, (await StatusAsync(client, staff.Id, "LOCKED")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PutAsJsonAsync($"/api/v1/admin/accounts/{staff.Id}/roles",
+            new { roles = new[] { "Passenger" }, reason = "Remove duties from locked account" })).StatusCode);
+        await using var check = factory.Services.CreateAsyncScope();
+        var users = check.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+        Assert.Equal(new[] { "Passenger" }, await users.GetRolesAsync((await users.FindByIdAsync(staff.Id))!));
+        Assert.Equal("LOCKED", (await check.ServiceProvider.GetRequiredService<ApplicationDbContext>().UserProfiles
+            .SingleAsync(x => x.UserId == staff.Id)).Status);
+    }
+
+    [PostgreSqlFact]
+    [Trait("Category", "PostgreSQL")]
     public async Task Passenger_access_requires_purpose_masks_pii_and_is_audited_before_returning()
     {
         var admin = await CreateAccountAsync("Admin");
@@ -160,7 +224,7 @@ public sealed class AdministrationEndpointsTests(MetroWebApplicationFactory fact
         }
         using var client = Client(admin);
         await ProblemAsync(await client.GetAsync($"/api/v1/admin/passengers/{target.Id}"), HttpStatusCode.BadRequest, "PURPOSE_REQUIRED");
-        var response = await client.GetAsync($"/api/v1/admin/passengers/{target.Id}?purpose=Resolve%20support%20case");
+        var response = await client.GetAsync($"/api/v1/admin/passengers/{target.Id}?purpose=SUPPORT_CASE");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(response.Headers.CacheControl!.NoStore);
         var json = await response.Content.ReadAsStringAsync();
@@ -171,8 +235,31 @@ public sealed class AdministrationEndpointsTests(MetroWebApplicationFactory fact
         Assert.DoesNotContain("Ciphertext", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("objectKey", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("+84912345678", json);
-        Assert.Single(await AuditsAsync(admin.Id, "PASSENGER_VIEWED"));
+        Assert.Equal("SUPPORT_CASE", Assert.Single(await AuditsAsync(admin.Id, "PASSENGER_VIEWED")).Reason);
         Assert.Equal("DENIED", Assert.Single(await AuditsAsync(admin.Id, "PASSENGER_ACCESS_DENIED")).Outcome);
+    }
+
+    [PostgreSqlFact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task Passenger_view_only_accepts_controlled_purposes_and_never_audits_free_text()
+    {
+        var admin = await CreateAccountAsync("Admin");
+        var target = await CreateAccountAsync("Passenger");
+        using var client = Client(admin);
+        foreach (var purpose in new[] { "support_case", "UNKNOWN", "Contact +84912345678 passenger@example.invalid", "SUPPORT_CASE\nCCCD 012345678901", new string('x', 1001) })
+        {
+            var response = await client.GetAsync($"/api/v1/admin/passengers/{target.Id}?purpose={Uri.EscapeDataString(purpose)}");
+            await ProblemAsync(response, HttpStatusCode.BadRequest, "PURPOSE_INVALID");
+            Assert.DoesNotContain(target.Email, await response.Content.ReadAsStringAsync());
+        }
+        var denied = await AuditsAsync(admin.Id, "PASSENGER_ACCESS_DENIED");
+        Assert.Equal(5, denied.Length);
+        Assert.All(denied, x => Assert.Equal("PURPOSE_INVALID", x.Reason));
+        Assert.Empty(await AuditsAsync(admin.Id, "PASSENGER_VIEWED"));
+        foreach (var purpose in new[] { "SUPPORT_CASE", "ELIGIBILITY_REVIEW", "ACCOUNT_MAINTENANCE" })
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/v1/admin/passengers/{target.Id}?purpose={purpose}")).StatusCode);
+        var allowed = await AuditsAsync(admin.Id, "PASSENGER_VIEWED");
+        Assert.Equal(new[] { "ACCOUNT_MAINTENANCE", "ELIGIBILITY_REVIEW", "SUPPORT_CASE" }, allowed.Select(x => x.Reason).Order());
     }
 
     [PostgreSqlFact]
@@ -183,11 +270,12 @@ public sealed class AdministrationEndpointsTests(MetroWebApplicationFactory fact
         var target = await CreateAccountAsync("Passenger");
         var evidenceId = Guid.NewGuid();
         var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+        var verifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var profile = await db.UserProfiles.SingleAsync(x => x.UserId == target.Id);
-            profile.CitizenIdVerifiedAt = DateTime.UtcNow;
+            profile.CitizenIdVerifiedAt = verifiedAt;
             profile.CitizenIdCiphertext = [1, 2, 3];
             profile.CitizenIdLookupHash = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
             profile.CitizenIdLast4 = "1234";
@@ -217,6 +305,9 @@ public sealed class AdministrationEndpointsTests(MetroWebApplicationFactory fact
         Assert.Contains(evidence.Decisions, x => x.Status == "NEEDS_INFO");
         var audit = Assert.Single(await AuditsAsync(admin.Id, "PASSENGER_UPDATED"));
         Assert.NotEqual(audit.BeforeHash, audit.AfterHash);
+        Assert.Contains("citizen_id_verified_at", audit.ChangedFields);
+        Assert.Equal(AuditHash(new { FullName = "Administration Passenger", BirthDate = new DateOnly(2000, 1, 1), CitizenIdVerifiedAt = (DateTime?)verifiedAt }), audit.BeforeHash);
+        Assert.Equal(AuditHash(new { FullName = request.fullName, BirthDate = new DateOnly(2001, 2, 3), CitizenIdVerifiedAt = (DateTime?)null }), audit.AfterHash);
         Assert.Single(await AuditsAsync(admin.Id, "ELIGIBILITY_REVIEW_REQUIRED"));
         using var passenger = Client(target);
         Assert.Equal(HttpStatusCode.Conflict, (await passenger.PutAsJsonAsync("/api/v1/me",
@@ -290,7 +381,7 @@ public sealed class AdministrationEndpointsTests(MetroWebApplicationFactory fact
         using var failing = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
             services.AddDbContext<ApplicationDbContext>(options => options.AddInterceptors(new FailAccessAudit()))));
         using var client = Client(admin, failing);
-        var response = await client.GetAsync($"/api/v1/admin/passengers/{target.Id}?purpose=Support");
+        var response = await client.GetAsync($"/api/v1/admin/passengers/{target.Id}?purpose=SUPPORT_CASE");
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         Assert.DoesNotContain(target.Email, body);
@@ -404,5 +495,6 @@ public sealed class AdministrationEndpointsTests(MetroWebApplicationFactory fact
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.EmailConfirmed, true));
     }
     private sealed record Tokens(string AccessToken, string RefreshToken);
+    private static string AuditHash<T>(T value) => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value))).ToLowerInvariant();
     private sealed record Account(string Id, string Email, string Password, string AccessToken, string RefreshToken);
 }

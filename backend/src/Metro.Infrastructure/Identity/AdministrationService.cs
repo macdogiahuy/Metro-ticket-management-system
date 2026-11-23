@@ -14,6 +14,7 @@ public sealed class AdministrationService(ApplicationDbContext db, UserManager<I
 {
     private static readonly string[] RoleCodes = ["Passenger", "StationStaff", "Admin"];
     private static readonly string[] StatusCodes = ["PENDING", "ACTIVE", "LOCKED", "DISABLED", "CLOSED"];
+    private static readonly string[] PassengerViewPurposes = ["SUPPORT_CASE", "ELIGIBILITY_REVIEW", "ACCOUNT_MAINTENANCE"];
 
     public async Task<AccountPage> FindAccountsAsync(string actorId, string? search, string? role, string? status,
         int page, int pageSize, CancellationToken ct)
@@ -65,12 +66,15 @@ public sealed class AdministrationService(ApplicationDbContext db, UserManager<I
             if (!user.EmailConfirmed) throw Error("EMAIL_NOT_VERIFIED", 409, "Verify email before assigning roles.");
             var previous = (await users.GetRolesAsync(user)).Order().ToArray();
             if (previous.SequenceEqual(desired)) return;
+            var added = desired.Except(previous).ToArray();
+            if (added.Any(x => x is "Admin" or "StationStaff") &&
+                !await db.UserProfiles.AnyAsync(x => x.UserId == userId && x.Status == "ACTIVE", ct))
+                throw Error("ACCOUNT_NOT_ACTIVE", 409, "Activate the account before granting staff roles.");
             if (previous.Contains("Admin") && !desired.Contains("Admin")) await KeepAdministratorAsync(userId, ct);
             foreach (var role in desired)
                 if (!await roles.RoleExistsAsync(role)) Check(await roles.CreateAsync(new IdentityRole(role)));
             var removed = previous.Except(desired).ToArray();
             if (removed.Length > 0) Check(await users.RemoveFromRolesAsync(user, removed));
-            var added = desired.Except(previous).ToArray();
             if (added.Length > 0) Check(await users.AddToRolesAsync(user, added));
             await RevokeSessionsAsync(user, "ROLES_CHANGED", ct);
             db.AuditLogs.Add(Audit(actorId, "ACCOUNT_ROLES_CHANGED", "AspNetUsers", userId, reason,
@@ -106,18 +110,20 @@ public sealed class AdministrationService(ApplicationDbContext db, UserManager<I
 
     public async Task<PassengerDetails> GetPassengerAsync(string actorId, string userId, string? purpose, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(purpose) || purpose.Trim().Length > 1000)
+        var purposeCode = purpose?.Trim();
+        if (string.IsNullOrEmpty(purposeCode) || !PassengerViewPurposes.Contains(purposeCode))
         {
-            db.AuditLogs.Add(Audit(actorId, "PASSENGER_ACCESS_DENIED", "user_profiles", userId, "PURPOSE_REQUIRED", outcome: "DENIED"));
+            var code = string.IsNullOrEmpty(purposeCode) ? "PURPOSE_REQUIRED" : "PURPOSE_INVALID";
+            db.AuditLogs.Add(Audit(actorId, "PASSENGER_ACCESS_DENIED", "user_profiles", userId, code, outcome: "DENIED"));
             await db.SaveChangesAsync(ct);
-            throw Error("PURPOSE_REQUIRED", 400, "A purpose of at most 1000 characters is required.");
+            throw Error(code, 400, "Use purpose SUPPORT_CASE, ELIGIBILITY_REVIEW or ACCOUNT_MAINTENANCE.");
         }
         var user = await UserAsync(userId, ct);
         var profile = await ProfileAsync(userId, ct);
         var eligibility = await db.EligibilityEvidence.AsNoTracking().Where(x => x.UserId == userId)
             .OrderByDescending(x => x.CreatedAt).Select(x => new PassengerEligibility(x.Id, x.Category, x.Status, x.ValidFrom, x.ValidTo)).ToArrayAsync(ct);
         // Save the access event before any PII can leave the service. No document keys or ciphertext are returned.
-        db.AuditLogs.Add(Audit(actorId, "PASSENGER_VIEWED", "user_profiles", userId, purpose.Trim()));
+        db.AuditLogs.Add(Audit(actorId, "PASSENGER_VIEWED", "user_profiles", userId, purposeCode));
         await db.SaveChangesAsync(ct);
         return new PassengerDetails(userId, user.Email ?? "", profile.FullName, profile.BirthDate,
             Mask(user.PhoneNumber), profile.Status, MaskLast4(profile.CitizenIdLast4), MaskLast4(profile.BankAccountLast4),
@@ -134,7 +140,7 @@ public sealed class AdministrationService(ApplicationDbContext db, UserManager<I
         return InTransactionAsync(actorId, userId, async () =>
         {
             var profile = await ProfileAsync(userId, ct);
-            var before = Hash(new { profile.FullName, profile.BirthDate });
+            var before = Hash(new { profile.FullName, profile.BirthDate, profile.CitizenIdVerifiedAt });
             var fields = new List<string>();
             if (profile.FullName != name)
             {
@@ -168,7 +174,7 @@ public sealed class AdministrationService(ApplicationDbContext db, UserManager<I
                     reason, ["status"], oldHash, Hash(new { item.Status, item.ValidFrom, item.ValidTo })));
             }
             db.AuditLogs.Add(Audit(actorId, "PASSENGER_UPDATED", "user_profiles", userId, reason,
-                fields.ToArray(), before, Hash(new { profile.FullName, profile.BirthDate })));
+                fields.ToArray(), before, Hash(new { profile.FullName, profile.BirthDate, profile.CitizenIdVerifiedAt })));
             await NotifyAsync(userId, "PASSENGER_UPDATED", ct);
         }, ct);
     }

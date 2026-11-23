@@ -17,7 +17,7 @@
     { "name": "Assign inspector role", "request": { "method": "PUT", "url": "{{baseUrl}}/api/v1/admin/accounts/{{userId}}/roles", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"roles\": [\"StationStaff\"],\n  \"reason\": \"Assigned inspection duties in test environment\"\n}" } } },
     { "name": "Lock test account", "request": { "method": "PUT", "url": "{{baseUrl}}/api/v1/admin/accounts/{{userId}}/status", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"LOCKED\",\n  \"reason\": \"Administrative lock test\"\n}" } } },
     { "name": "Unlock test account", "request": { "method": "PUT", "url": "{{baseUrl}}/api/v1/admin/accounts/{{userId}}/status", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"ACTIVE\",\n  \"reason\": \"Administrative unlock test\"\n}" } } },
-    { "name": "View masked passenger data with audit", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/admin/passengers/{{userId}}?purpose=Resolve%20test%20support%20case" } },
+    { "name": "View masked passenger data with audit", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/admin/passengers/{{userId}}?purpose=SUPPORT_CASE" } },
     { "name": "Correct identity and require eligibility review", "request": { "method": "PUT", "url": "{{baseUrl}}/api/v1/admin/passengers/{{userId}}", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"fullName\": \"Synthetic Passenger\",\n  \"birthDate\": \"2000-01-01\",\n  \"reason\": \"Correct identity in test environment\"\n}" } } }
   ]
 }

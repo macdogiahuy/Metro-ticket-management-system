@@ -7,7 +7,8 @@ using Microsoft.AspNetCore.Authorization.Policy;
 namespace Metro.API.Middleware;
 
 /// <summary>Record rejected authenticated attempts to access administrative data.</summary>
-public sealed class AdministrationAuthorizationHandler : IAuthorizationMiddlewareResultHandler
+public sealed class AdministrationAuthorizationHandler(ILogger<AdministrationAuthorizationHandler> logger)
+    : IAuthorizationMiddlewareResultHandler
 {
     private readonly AuthorizationMiddlewareResultHandler _default = new();
 
@@ -16,15 +17,25 @@ public sealed class AdministrationAuthorizationHandler : IAuthorizationMiddlewar
     {
         if (result.Forbidden && context.Request.Path.StartsWithSegments("/api/v1/admin"))
         {
-            var db = context.RequestServices.GetRequiredService<ApplicationDbContext>();
-            db.AuditLogs.Add(new AuditLog
+            try
             {
-                ActorUserId = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.User.FindFirstValue("sub"),
-                Action = "ADMIN_ACCESS_DENIED", EntityType = "administration",
-                EntityId = context.Request.RouteValues["userId"]?.ToString() ?? "accounts",
-                Reason = "ADMIN_REQUIRED", Outcome = "DENIED",
-            });
-            await db.SaveChangesAsync(context.RequestAborted);
+                var db = context.RequestServices.GetRequiredService<ApplicationDbContext>();
+                db.AuditLogs.Add(new AuditLog
+                {
+                    ActorUserId = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.User.FindFirstValue("sub"),
+                    Action = "ADMIN_ACCESS_DENIED", EntityType = "administration",
+                    EntityId = context.Request.RouteValues["userId"]?.ToString() ?? "accounts",
+                    Reason = "ADMIN_REQUIRED", Outcome = "DENIED",
+                });
+                await db.SaveChangesAsync(context.RequestAborted);
+            }
+            catch (Exception exception)
+            {
+                // A failed denial audit must not replace the original 403. Log only the
+                // failure type: database exception details may contain passenger data.
+                logger.LogError("Failed to persist ADMIN_ACCESS_DENIED audit ({FailureType}); preserving 403.",
+                    exception.GetType().Name);
+            }
         }
         await _default.HandleAsync(next, context, policy, result);
     }
