@@ -21,6 +21,9 @@ public sealed class MetroWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:SigningKey", _signingKey);
         builder.UseSetting("Jwt:Issuer", "metro-api");
         builder.UseSetting("Jwt:Audience", "metro-web");
+        builder.UseSetting("TicketQr:WorkerEnabled", "false");
+        builder.UseSetting("TicketQr:ActiveKeyId", "test-v1");
+        builder.UseSetting("TicketQr:Keys:test-v1", _signingKey);
         builder.UseSetting("METRO_TEST_MODE", "1");
         builder.ConfigureLogging(logging => logging.AddProvider(TestLogs));
     }

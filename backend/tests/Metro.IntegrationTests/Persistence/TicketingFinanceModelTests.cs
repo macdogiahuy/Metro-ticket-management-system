@@ -57,7 +57,10 @@ public class TicketingFinanceModelTests
     {
         using var db = CreateContext();
         var payment = db.Model.FindEntityType(typeof(Payment))!;
-        var order = Assert.Single(payment.GetForeignKeys());
+        var order = Assert.Single(payment.GetForeignKeys(), fk => fk.PrincipalEntityType.GetTableName() == "orders");
+        var version = Assert.Single(payment.GetForeignKeys(), fk => fk.PrincipalEntityType.GetTableName() == "order_versions");
+        Assert.Equal(new[] { "OperatorId", "OrderId", "OrderVersion" }, version.Properties.Select(p => p.Name));
+        Assert.Equal(new[] { "OperatorId", "OrderId", "Version" }, version.PrincipalKey.Properties.Select(p => p.Name));
         Assert.Equal(new[] { "OperatorId", "OrderId" }, order.Properties.Select(p => p.Name));
         Assert.Equal(new[] { "OperatorId", "Id" }, order.PrincipalKey.Properties.Select(p => p.Name));
 
@@ -136,7 +139,7 @@ public class TicketingFinanceModelTests
         Assert.All(model.GetEntityTypes().Where(e => e.GetSchema() == "metro")
             .GroupBy(e => e.GetTableName()), group => Assert.Single(group));
         Assert.Equal(typeof(Metro.Domain.Entities.Orders.Order),
-            Assert.Single(model.FindEntityType(typeof(Payment))!.GetForeignKeys()).PrincipalEntityType.ClrType);
+            Assert.Single(model.FindEntityType(typeof(Payment))!.GetForeignKeys(), fk => fk.PrincipalEntityType.GetTableName() == "orders").PrincipalEntityType.ClrType);
         Assert.Equal(typeof(TicketCredential),
             model.FindEntityType(typeof(AfcEvent))!.FindNavigation(nameof(AfcEvent.Credential))!.TargetEntityType.ClrType);
     }
