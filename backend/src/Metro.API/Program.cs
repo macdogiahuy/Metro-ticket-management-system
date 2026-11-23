@@ -132,6 +132,7 @@ app.MapAuthEndpoints();
 app.MapProfileEndpoints();
 app.MapCatalogEndpoints();
 app.MapPaymentEndpoints();
+app.MapTicketEndpoints();
 app.MapHealthEndpoints();
 
 if (app.Environment.IsDevelopment())
