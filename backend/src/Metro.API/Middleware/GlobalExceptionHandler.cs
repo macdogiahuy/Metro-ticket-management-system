@@ -23,9 +23,14 @@ public sealed class GlobalExceptionHandler(
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
         var pg = exception is DbUpdateException dbEx ? dbEx.InnerException as PostgresException : exception as PostgresException;
-        var (status, title, safeDetail, errorCode) = exception switch
+        (int status, string title, string? safeDetail, string? errorCode) = exception switch
         {
-            AuthException auth => (auth.Status, "Authentication failed", auth.Message, (string?)auth.Code),
+            Metro.Application.Abstractions.Ticketing.TicketException ticket => (
+                ticket.Status,
+                "Ticket request failed",
+                ticket.Status < StatusCodes.Status500InternalServerError || environment.IsDevelopment() ? ticket.Message : null,
+                ticket.Code),
+            AuthException auth => (auth.Status, "Authentication failed", auth.Message, auth.Code),
             PaymentException payment => (payment.Status, payment.Status switch
             {
                 StatusCodes.Status401Unauthorized => "Payment authentication failed",
