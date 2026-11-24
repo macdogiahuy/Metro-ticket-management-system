@@ -1,0 +1,133 @@
+name: Bug report
+description: Báo lỗi Metro kèm UC, test case, build và bằng chứng tái hiện.
+title: "[Bug][Module][UCxx] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dùng mẫu này cho lỗi có actual khác expected. Xem docs/qa/BUG-REPORT-TEMPLATE.md để phân loại và retest.
+        Chỉ đính dữ liệu thử đã che; không đưa token, OTP, raw QR, khóa ký, URL giấy tờ riêng hoặc PII thật vào issue.
+  - type: input
+    id: traceability
+    attributes:
+      label: UC và yêu cầu
+      description: UC, FR, AC hoặc BR làm căn cứ cho expected.
+      placeholder: "UC12; FR-12; AC-X13; BR-033"
+    validations:
+      required: true
+  - type: input
+    id: test_run
+    attributes:
+      label: Test case và run
+      description: Ghi ID case, biến thể và run. Nếu phát hiện ngoài ca có sẵn, ghi exploratory cùng run/build.
+      placeholder: "TC-UC12-04/v1; QA-YYYYMMDD-build-01"
+    validations:
+      required: true
+  - type: input
+    id: related_task
+    attributes:
+      label: Task hoặc issue liên quan
+      placeholder: "BE-08; QA-02; #<issue>"
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity đề xuất
+      options:
+        - Chưa triage
+        - S1 Critical — sai tiền, vé, quyền, Journey hoặc lộ dữ liệu
+        - S2 Major — luồng Must chính không hoàn thành
+        - S3 Moderate — ảnh hưởng chức năng, có workaround
+        - S4 Minor — lỗi trình bày nhỏ
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority đề xuất
+      options:
+        - Chưa triage
+        - P0 — chặn ngay, phá bất biến hoặc toàn hệ thống không dùng được
+        - P1 — phải sửa trước nghiệm thu demo
+        - P2 — sửa theo kế hoạch, cần ghi nhận nếu tồn khi bàn giao
+        - P3 — cải thiện nhỏ
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Build và môi trường
+      description: Định danh build, schema, fixture và mode provider; không dán connection string có mật khẩu.
+      value: |
+        - Commit SHA / build:
+        - Schema package / fixture version:
+        - API / FE URL / DB test name / operator alias:
+        - OS / runtime / browser + version / viewport / camera:
+        - Provider (stub hoặc MoMo TEST) / email (mock hoặc dev inbox):
+        - Thời điểm UTC+7 / clock kiểm soát nếu có:
+    validations:
+      required: true
+  - type: textarea
+    id: preconditions
+    attributes:
+      label: Tiền điều kiện và dữ liệu thử
+      description: Role, alias fixture, trạng thái trước lỗi, version/attempt/requestId tổng hợp cần để tái hiện.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Bước tái hiện
+      description: Các bước theo thứ tự; nếu đồng thời, ghi barrier, số client và cách chờ kết quả.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Kết quả mong đợi
+      description: Giá trị, trạng thái hoặc invariant cụ thể và căn cứ SRS/AC.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Kết quả thực tế
+      description: HTTP/error code, giá trị/count trước và sau, trạng thái UI/DB đã quan sát.
+    validations:
+      required: true
+  - type: input
+    id: frequency
+    attributes:
+      label: Tần suất tái hiện
+      placeholder: "2/3 lần trên cùng build; 2 client đồng thời"
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Bằng chứng đã che dữ liệu
+      description: Link ảnh/video, request/response đã che, correlation, TRX hoặc counts DB. Nếu chưa đính được, ghi lý do và cách thu lại.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Ảnh hưởng và workaround
+      description: Luồng/người dùng bị ảnh hưởng, lý do severity/priority và workaround an toàn nếu có.
+    validations:
+      required: true
+  - type: textarea
+    id: retest
+    attributes:
+      label: Fix và retest
+      description: Owner và QA bổ sung khi có bản sửa; để trống lúc tạo nếu chưa có.
+      value: |
+        - Owner / nguyên nhân:
+        - Fix commit / build / PR:
+        - Người retest / thời điểm / môi trường:
+        - Case và biến thể / actual / evidence:
+        - Regression liên quan / kết quả:
+        - Kết luận (Verified/Closed hoặc Reopened):
