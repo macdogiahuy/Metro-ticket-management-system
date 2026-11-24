@@ -1,8 +1,5 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -11,22 +8,20 @@ using Metro.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.IdentityModel.Tokens;
+using static Metro.IntegrationTests.Payments.PaymentScenarioFixture;
 
 namespace Metro.IntegrationTests.Payments;
 
 [Collection(PaymentCollection.Name)]
 public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
 {
-    private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
-
     [PostgreSqlFact]
     [Trait("Category", "PostgreSQL")]
     public async Task Create_webhook_idempotently_issues_exactly_one_ticket_set()
     {
         using var client = factory.CreateClient();
         var (userId, operatorId, orderId) = await SeedAsync();
-        client.DefaultRequestHeaders.Authorization = Bearer(userId);
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, userId);
 
         var created = await client.PostAsJsonAsync("/api/v1/payments", new { orderId, idempotencyKey = "idem-1" });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -74,7 +69,7 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
             {
                 Id = id, UserName = id, Email = $"{id}@example.invalid", EmailConfirmed = true,
             })).Succeeded);
-            client.DefaultRequestHeaders.Authorization = Bearer(id);
+            client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, id);
         }
 
         var noMembership = await client.PostAsJsonAsync("/api/v1/payments", new { orderId = Guid.NewGuid(), idempotencyKey = "idem-x" });
@@ -82,7 +77,7 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
         using var problem = JsonDocument.Parse(await noMembership.Content.ReadAsStringAsync());
         Assert.Equal("ORDER_NOT_FOUND", problem.RootElement.GetProperty("code").GetString());
 
-        client.DefaultRequestHeaders.Authorization = Bearer(userId);
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, userId);
         var own = await client.GetAsync("/api/v1/payments/" + Guid.NewGuid());
         Assert.Equal(HttpStatusCode.NotFound, own.StatusCode);
     }
@@ -120,16 +115,6 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
             currency = "VND",
             orderId = "ignored-by-server",
         });
-
-    private static AuthenticationHeaderValue Bearer(string userId)
-    {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(PaymentTestFactory.SigningKey));
-        var token = new JwtSecurityToken("metro-api", "metro-web",
-            new[] { new Claim(JwtRegisteredClaimNames.Sub, userId) },
-            Now.UtcDateTime, Now.UtcDateTime.AddHours(1),
-            new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
-        return new AuthenticationHeaderValue("Bearer", new JwtSecurityTokenHandler().WriteToken(token));
-    }
 
     private async Task<(string UserId, Guid OperatorId, Guid OrderId)> SeedAsync()
     {
