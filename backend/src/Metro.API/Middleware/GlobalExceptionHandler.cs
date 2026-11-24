@@ -2,9 +2,12 @@ using System.ComponentModel.DataAnnotations;
 using FluentValidation;
 using Metro.Application.Abstractions.Auth;
 using Metro.Application.Abstractions.Catalog;
+using Metro.Application.Abstractions.Fare;
 using Metro.Application.Abstractions.Payment;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Metro.API.Middleware;
 
@@ -19,11 +22,12 @@ public sealed class GlobalExceptionHandler(
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var (status, title) = exception switch
+        var pg = exception is DbUpdateException dbEx ? dbEx.InnerException as PostgresException : exception as PostgresException;
+        (int status, string title, string? safeDetail, string? errorCode) = exception switch
         {
-            BadHttpRequestException => (StatusCodes.Status400BadRequest, "Invalid request"),
-            Metro.Application.Abstractions.Ticketing.TicketException ticket => (ticket.Status, "Ticket request failed"),
-            AuthException auth => (auth.Status, "Authentication failed"),
+            BadHttpRequestException => (StatusCodes.Status400BadRequest, "Invalid request", exception.Message, (string?)null),
+            Metro.Application.Abstractions.Ticketing.TicketException ticket => (ticket.Status, "Ticket request failed", ticket.Message, (string?)null),
+            AuthException auth => (auth.Status, "Authentication failed", auth.Message, (string?)auth.Code),
             PaymentException payment => (payment.Status, payment.Status switch
             {
                 StatusCodes.Status401Unauthorized => "Payment authentication failed",
@@ -31,18 +35,33 @@ public sealed class GlobalExceptionHandler(
                 StatusCodes.Status404NotFound => "Payment resource not found",
                 StatusCodes.Status409Conflict => "Payment state conflict",
                 _ => "Payment provider error",
-            }),
+            }, payment.Message, payment.Code),
             CatalogException catalog => (catalog.Status, catalog.Status switch
             {
                 StatusCodes.Status404NotFound => "Resource not found",
                 StatusCodes.Status422UnprocessableEntity => "Route unavailable",
                 _ => "Invalid catalog request",
-            }),
-            FluentValidation.ValidationException => (StatusCodes.Status400BadRequest, "Validation failed"),
-            UnauthorizedAccessException => (StatusCodes.Status403Forbidden, "Forbidden"),
-            KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found"),
-            InvalidOperationException => (StatusCodes.Status409Conflict, "Invalid operation"),
-            _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred"),
+            }, catalog.Message, catalog.Code),
+            FareException fare => (fare.Status, fare.Status switch
+            {
+                StatusCodes.Status404NotFound => "Fare resource not found",
+                StatusCodes.Status409Conflict => "Fare conflict",
+                StatusCodes.Status422UnprocessableEntity => "Fare rule violation",
+                _ => "Invalid fare request",
+            }, fare.Message, fare.Code),
+            _ when pg is { SqlState: PostgresErrorCodes.UniqueViolation } =>
+                (StatusCodes.Status409Conflict, "Duplicate resource conflict", "A conflicting record with the same unique key already exists.", "DATABASE_UNIQUE_CONFLICT"),
+            _ when pg is { SqlState: PostgresErrorCodes.ExclusionViolation } =>
+                (StatusCodes.Status409Conflict, "Overlapping window conflict", "The requested effective window overlaps an existing active record.", "DATABASE_EXCLUSION_CONFLICT"),
+            _ when pg is { SqlState: PostgresErrorCodes.CheckViolation } =>
+                (StatusCodes.Status400BadRequest, "Constraint validation failed", "The request violates a database validation constraint.", "DATABASE_CHECK_VIOLATION"),
+            _ when pg is { SqlState: PostgresErrorCodes.ForeignKeyViolation } =>
+                (StatusCodes.Status409Conflict, "Reference conflict", "The referenced resource does not exist or cannot be removed.", "DATABASE_REFERENCE_CONFLICT"),
+            FluentValidation.ValidationException => (StatusCodes.Status400BadRequest, "Validation failed", exception.Message, null),
+            UnauthorizedAccessException => (StatusCodes.Status403Forbidden, "Forbidden", exception.Message, null),
+            KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found", exception.Message, null),
+            InvalidOperationException => (StatusCodes.Status409Conflict, "Invalid operation", exception.Message, null),
+            _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred", environment.IsDevelopment() ? exception.Message : null, null),
         };
 
         if (status >= StatusCodes.Status500InternalServerError)
@@ -52,8 +71,8 @@ public sealed class GlobalExceptionHandler(
         }
         else
         {
-            logger.LogWarning("Handled {ExceptionType} on {Method} {Path}: {Message}",
-                exception.GetType().Name, httpContext.Request.Method, httpContext.Request.Path, exception.Message);
+            logger.LogWarning("Handled {ExceptionType} ({ErrorCode}) on {Method} {Path}",
+                exception.GetType().Name, errorCode ?? "NONE", httpContext.Request.Method, httpContext.Request.Path);
         }
 
         httpContext.Response.StatusCode = status;
@@ -62,24 +81,11 @@ public sealed class GlobalExceptionHandler(
         {
             Status = status,
             Title = title,
-            // 5xx không lộ chi tiết exception ra ngoài; môi trường Development vẫn hiện để debug.
-            Detail = status < StatusCodes.Status500InternalServerError || environment.IsDevelopment()
-                ? exception.Message
-                : null,
+            Detail = safeDetail,
         };
-        if (exception is Metro.Application.Abstractions.Ticketing.TicketException ticketError)
-            problem.Extensions["code"] = ticketError.Code;
-        else if (exception is AuthException authError)
+        if (errorCode is not null)
         {
-            problem.Extensions["code"] = authError.Code;
-        }
-        else if (exception is PaymentException paymentError)
-        {
-            problem.Extensions["code"] = paymentError.Code;
-        }
-        else if (exception is CatalogException catalogError)
-        {
-            problem.Extensions["code"] = catalogError.Code;
+            problem.Extensions["code"] = errorCode;
         }
 
         return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
