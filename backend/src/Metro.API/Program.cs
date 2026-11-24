@@ -139,6 +139,7 @@ app.MapAuthEndpoints();
 app.MapProfileEndpoints();
 app.MapAdministrationEndpoints();
 app.MapCatalogEndpoints();
+app.MapFareEndpoints();
 app.MapPaymentEndpoints();
 app.MapTicketEndpoints();
 app.MapHealthEndpoints();

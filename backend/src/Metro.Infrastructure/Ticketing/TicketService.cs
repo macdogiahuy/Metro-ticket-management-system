@@ -44,13 +44,13 @@ public sealed class TicketService(ApplicationDbContext db, IOperatorContext scop
     private async Task<TicketView> ViewAsync(Ticket t, CancellationToken ct)
     {
         var job = await db.Database.SqlQuery<JobView>($"""
-            SELECT j.status AS "Status",v.eligibility_group AS "EligibilityGroup"
+            SELECT j.status AS "Status",v.eligibility_group AS "EligibilityGroup",clock_timestamp() AS "DbNow"
             FROM metro.ticket_issuance_jobs j LEFT JOIN metro.order_versions v
              ON v.operator_id=j.operator_id AND v.order_id=j.order_id AND v.version={t.OrderVersion}
             WHERE j.operator_id={t.OperatorId} AND j.ticket_id={t.Id}
             """).SingleOrDefaultAsync(ct);
         var current = job?.Status ?? "UNAVAILABLE";
-        var now = time.GetUtcNow().UtcDateTime;
+        var now = job?.DbNow ?? time.GetUtcNow().UtcDateTime;
         var exitInProgress = t.Status == "IN_USE" && await db.Journeys.AnyAsync(j => j.TicketId == t.Id && j.Status == Metro.Domain.Entities.Ticketing.JourneyStatus.Open, ct);
         var available = current == "READY" && t.Status is "ACTIVE" or "IN_USE" && (TicketRules.Contains(t.EffectiveFrom, t.ExpiresAt, now) || exitInProgress)
             && await db.TicketCredentials.AnyAsync(c => c.TicketId == t.Id && c.CredentialType == "QR" && c.Status == "ACTIVE" && c.KeyId != null, ct);
@@ -160,5 +160,5 @@ public sealed class TicketService(ApplicationDbContext db, IOperatorContext scop
         var ticketIds = await db.Tickets.AsNoTracking().Where(t => t.OrderId == orderId).Select(t => t.Id).ToListAsync(ct);
         return new(orderId, current.OrderVersion, current.Status, ticketIds);
     }
-    private sealed record JobView(string Status, string? EligibilityGroup);
+    private sealed record JobView(string Status, string? EligibilityGroup, DateTime DbNow);
 }

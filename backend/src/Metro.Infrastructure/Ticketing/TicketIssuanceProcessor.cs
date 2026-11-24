@@ -8,17 +8,28 @@ namespace Metro.Infrastructure.Ticketing;
 /// <summary>Completes SQL-created tickets. Never creates another paid ticket.</summary>
 public sealed class TicketIssuanceProcessor(ApplicationDbContext db, TicketQrCodec codec)
 {
-    public async Task<int> ProcessDueAsync(int limit = 50, CancellationToken ct = default)
+    public async Task<int> ProcessDueAsync(int limit = 50, CancellationToken ct = default, Guid? operatorId = null)
     {
         if (limit is < 1 or > 500) throw new ArgumentOutOfRangeException(nameof(limit));
         await using var connection = new NpgsqlConnection(db.Database.GetConnectionString()); await connection.OpenAsync(ct);
         var jobs = new List<(Guid Id, Guid Operator, string Holder)>();
-        await using (var cmd = TicketSql.Command(connection, null, """
-            SELECT j.ticket_id,j.operator_id,t.holder_user_id FROM metro.ticket_issuance_jobs j
-            JOIN metro.tickets t ON t.operator_id=j.operator_id AND t.id=j.ticket_id
-            WHERE j.status='PENDING' AND j.next_attempt_at<=clock_timestamp()
-            ORDER BY j.next_attempt_at,j.ticket_id LIMIT @limit
-            """, ("limit", limit)))
+        var selectSql = operatorId.HasValue
+            ? """
+              SELECT j.ticket_id,j.operator_id,t.holder_user_id FROM metro.ticket_issuance_jobs j
+              JOIN metro.tickets t ON t.operator_id=j.operator_id AND t.id=j.ticket_id
+              WHERE j.status='PENDING' AND j.next_attempt_at<=clock_timestamp() AND j.operator_id=@op
+              ORDER BY j.next_attempt_at,j.ticket_id LIMIT @limit
+              """
+            : """
+              SELECT j.ticket_id,j.operator_id,t.holder_user_id FROM metro.ticket_issuance_jobs j
+              JOIN metro.tickets t ON t.operator_id=j.operator_id AND t.id=j.ticket_id
+              WHERE j.status='PENDING' AND j.next_attempt_at<=clock_timestamp()
+              ORDER BY j.next_attempt_at,j.ticket_id LIMIT @limit
+              """;
+        var selectParams = operatorId.HasValue
+            ? new (string Name, object Value)[] { ("limit", limit), ("op", operatorId.Value) }
+            : new (string Name, object Value)[] { ("limit", limit) };
+        await using (var cmd = TicketSql.Command(connection, null, selectSql, selectParams))
         await using (var reader = await cmd.ExecuteReaderAsync(ct))
             while (await reader.ReadAsync(ct)) jobs.Add((reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2)));
         var completed = 0;

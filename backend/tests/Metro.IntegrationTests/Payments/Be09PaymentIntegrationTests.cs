@@ -37,7 +37,7 @@ public sealed class Be09PaymentIntegrationTests(PaymentTestFactory factory)
         scope.ServiceProvider.GetRequiredService<IOperatorContext>().CurrentOperatorId = seed.Op;
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Assert.Equal("PAID", (await db.Orders.AsNoTracking().SingleAsync(o => o.Id == seed.Order)).Status);
-        await scope.ServiceProvider.GetRequiredService<TicketIssuanceProcessor>().ProcessDueAsync(500);
+        await scope.ServiceProvider.GetRequiredService<TicketIssuanceProcessor>().ProcessDueAsync(500, operatorId: seed.Op);
         var ticket = Assert.Single(await db.Tickets.AsNoTracking().Where(t => t.OrderId == seed.Order).ToListAsync());
         Assert.Equal("ISSUED", (await db.Orders.AsNoTracking().SingleAsync(o => o.Id == seed.Order)).Status);
         var qr = await client.GetAsync($"/api/v1/tickets/{ticket.Id}/qr?operatorCode={seed.Code}");

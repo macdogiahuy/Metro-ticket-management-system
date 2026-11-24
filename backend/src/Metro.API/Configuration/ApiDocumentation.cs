@@ -86,6 +86,17 @@ public static class ApiDocumentation
             }
             """;
 
+        private const string Conflict409Example =
+            """
+            {
+              "type": "https://tools.ietf.org/html/rfc9110#section-15.5.10",
+              "title": "Fare conflict",
+              "status": 409,
+              "detail": "A fare matrix entry with the same NULL-safe key already exists.",
+              "code": "FARE_MATRIX_DUPLICATE"
+            }
+            """;
+
         private const string Unprocessable422Example =
             """
             {
@@ -120,6 +131,13 @@ public static class ApiDocumentation
                 notFoundMedia.Example is null)
             {
                 notFoundMedia.Example = new OpenApiString(NotFound404Example);
+            }
+
+            if (operation.Responses.TryGetValue("409", out var conflict) &&
+                conflict.Content.TryGetValue("application/problem+json", out var conflictMedia) &&
+                conflictMedia.Example is null)
+            {
+                conflictMedia.Example = new OpenApiString(Conflict409Example);
             }
 
             if (operation.Responses.TryGetValue("422", out var unprocessable) &&

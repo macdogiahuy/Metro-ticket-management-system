@@ -48,7 +48,7 @@ public sealed class PaymentEndpointsTests(PaymentTestFactory factory)
         Assert.Equal("SUCCEEDED", (await db.Payments.IgnoreQueryFilters().AsNoTracking().SingleAsync(p => p.Id == paymentId)).Status.ToString().ToUpperInvariant());
         Assert.Equal("PAID", (await db.Orders.IgnoreQueryFilters().AsNoTracking().SingleAsync(o => o.Id == orderId)).Status);
         scope.ServiceProvider.GetRequiredService<Metro.Application.Abstractions.MultiTenancy.IOperatorContext>().CurrentOperatorId = operatorId;
-        await scope.ServiceProvider.GetRequiredService<Metro.Infrastructure.Ticketing.TicketIssuanceProcessor>().ProcessDueAsync(500);
+        await scope.ServiceProvider.GetRequiredService<Metro.Infrastructure.Ticketing.TicketIssuanceProcessor>().ProcessDueAsync(500, operatorId: operatorId);
         Assert.Equal("ISSUED", (await db.Orders.IgnoreQueryFilters().AsNoTracking().SingleAsync(o => o.Id == orderId)).Status);
         Assert.Equal(1, await db.PaymentEvents.IgnoreQueryFilters().CountAsync(e => e.PaymentId == paymentId));
     }
