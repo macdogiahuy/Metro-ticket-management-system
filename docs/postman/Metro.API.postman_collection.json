@@ -5,27 +5,91 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:5192" },
-    { "key": "email", "value": "" },
-    { "key": "password", "value": "", "type": "secret" },
-    { "key": "verificationCode", "value": "", "type": "secret" },
-    { "key": "accessToken", "value": "", "type": "secret" },
-    { "key": "refreshToken", "value": "", "type": "secret" },
-    { "key": "lineId", "value": "" },
-    { "key": "originStationId", "value": "" },
-    { "key": "destinationStationId", "value": "" },
-    {"key": "operatorCode", "value": ""},
-    {"key": "ticketId", "value": ""},
-    {"key": "orderId", "value": ""},
-    {"key": "orderVersion", "value": "1"},
-    {"key": "ticketIssueKey", "value": ""}
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5192"
+    },
+    {
+      "key": "email",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "verificationCode",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "lineId",
+      "value": ""
+    },
+    {
+      "key": "originStationId",
+      "value": ""
+    },
+    {
+      "key": "destinationStationId",
+      "value": ""
+    },
+    {
+      "key": "operatorCode",
+      "value": ""
+    },
+    {
+      "key": "ticketId",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "orderVersion",
+      "value": "1"
+    },
+    {
+      "key": "ticketIssueKey",
+      "value": ""
+    },
+    {
+      "key": "productCode",
+      "value": "DEMO-SINGLE"
+    },
+    {
+      "key": "adminAccessToken",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "adminProductId",
+      "value": ""
+    }
   ],
   "item": [
     {
       "name": "Health live",
       "request": {
         "method": "GET",
-        "header": [{ "key": "Accept", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": "{{baseUrl}}/health/live"
       }
     },
@@ -52,7 +116,12 @@
       ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"fullName\": \"Postman Smoke Test\",\n  \"birthDate\": \"2000-01-01\"\n}"
@@ -74,7 +143,12 @@
       ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"email\": \"{{email}}\",\n  \"code\": \"{{verificationCode}}\"\n}"
@@ -99,7 +173,12 @@
       ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
@@ -122,7 +201,10 @@
       "request": {
         "method": "GET",
         "header": [
-          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
         ],
         "url": "{{baseUrl}}/api/v1/auth/me"
       }
@@ -141,7 +223,12 @@
       ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
@@ -173,7 +260,12 @@
       ],
       "request": {
         "method": "GET",
-        "header": [{ "key": "Accept", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": "{{baseUrl}}/api/v1/lines"
       }
     },
@@ -192,7 +284,12 @@
       ],
       "request": {
         "method": "GET",
-        "header": [{ "key": "Accept", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": "{{baseUrl}}/api/v1/stations?lineId={{lineId}}"
       }
     },
@@ -211,7 +308,12 @@
       ],
       "request": {
         "method": "GET",
-        "header": [{ "key": "Accept", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": "{{baseUrl}}/api/v1/stations?lineId=00000000-0000-0000-0000-000000000000"
       }
     },
@@ -231,7 +333,12 @@
       ],
       "request": {
         "method": "GET",
-        "header": [{ "key": "Accept", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": "{{baseUrl}}/api/v1/journeys?originStationId={{originStationId}}&destinationStationId={{destinationStationId}}"
       }
     },
@@ -254,7 +361,12 @@
       ],
       "request": {
         "method": "GET",
-        "header": [{ "key": "Accept", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": "{{baseUrl}}/api/v1/service-status?lineId={{lineId}}"
       }
     },
@@ -410,6 +522,101 @@
           }
         }
       ]
+    },
+    {
+      "name": "Fare — Quote single trip (UC09)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('fare quote returns 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('quote contains version and VND total', () => {",
+              "  pm.expect(body.isReferenceQuote).to.eql(true);",
+              "  pm.expect(body.currency).to.eql('VND');",
+              "  pm.expect(body.farePolicy.id).to.be.a('string');",
+              "  pm.expect(body.totalAmountMinor).to.be.a('number');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/fares/quote?productCode={{productCode}}&originStationId={{originStationId}}&destinationStationId={{destinationStationId}}&eligibilityGroup=ORDINARY"
+      }
+    },
+    {
+      "name": "Admin — List ticket products (UC25)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('list products returns 200', () => pm.response.to.have.status(200));",
+              "const items = pm.response.json();",
+              "if (items.length > 0) pm.collectionVariables.set('adminProductId', items[0].id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminAccessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/admin/products"
+      }
+    },
+    {
+      "name": "Admin — Create ticket product (UC25)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('create product returns 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('adminProductId', pm.response.json().id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminAccessToken}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "pm-create-day-{{$timestamp}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"DAY-PASS-{{$timestamp}}\",\n  \"name\": \"Ve ngay\",\n  \"productType\": \"DAY\",\n  \"durationValue\": 1,\n  \"durationUnit\": \"DAY\",\n  \"expiryRule\": \"NEXT_LOCAL_MIDNIGHT\",\n  \"requiresNamedHolder\": false,\n  \"capacityControlled\": false,\n  \"status\": \"ACTIVE\",\n  \"reason\": \"Create demo day pass\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/admin/products"
+      }
     }
   ]
 }
