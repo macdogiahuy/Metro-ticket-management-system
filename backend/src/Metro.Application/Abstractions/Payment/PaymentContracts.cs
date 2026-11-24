@@ -1,11 +1,11 @@
 namespace Metro.Application.Abstractions.Payment;
 
 /// <summary>BE-08 contracts: POST /payments, /payments/{id}/retry, /webhooks/momo.</summary>
-public sealed record CreatePaymentRequest(Guid OrderId, string? IdempotencyKey);
+public sealed record CreatePaymentRequest(Guid OrderId, string? IdempotencyKey, int? OrderVersion = null);
 public sealed record PaymentResponse(
     Guid Id, Guid OrderId, string PaymentCode, string Provider, string Status,
     long AmountMinor, string Currency, string? ProviderPaymentReference, string IdempotencyKey,
-    DateTimeOffset InitiatedAt, string? CheckoutUrl);
+    DateTimeOffset InitiatedAt, string? CheckoutUrl, int? AttemptNumber = null, DateTimeOffset? WaitExpiresAt = null);
 
 public sealed record RetryPaymentResult(PaymentResponse Payment, bool Retried);
 

@@ -85,6 +85,34 @@
     {
       "key": "adminEligibilityPolicyId",
       "value": ""
+    },
+    {
+      "key": "bookingProductId",
+      "value": ""
+    },
+    {
+      "key": "bookingBeneficiaryId",
+      "value": ""
+    },
+    {
+      "key": "bookingServiceDate",
+      "value": ""
+    },
+    {
+      "key": "bookingConsentId",
+      "value": ""
+    },
+    {
+      "key": "bookingExpectedTotal",
+      "value": "5000"
+    },
+    {
+      "key": "bookingRequestKey",
+      "value": ""
+    },
+    {
+      "key": "bookingPaymentKey",
+      "value": ""
     }
   ],
   "item": [
@@ -703,9 +731,18 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" },
-          { "key": "Idempotency-Key", "value": "pm-create-elig-{{$timestamp}}" }
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminAccessToken}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "pm-create-elig-{{$timestamp}}"
+          }
         ],
         "body": {
           "mode": "raw",
@@ -713,6 +750,314 @@
         },
         "url": "{{baseUrl}}/api/v1/admin/eligibility-policies"
       }
+    },
+    {
+      "name": "Booking (BE-07)",
+      "description": "BE-07 / SRS v1.2 UC11, UC36, UC39. Use buyer JWT; switch to recipient JWT for ordinary consent. CHILD_UNDER_6 requires approved guardianship and a paid guardian ticket for that route/date. Suggestions never hold capacity. Empty bookingRequestKey generates a fresh request key; set it explicitly to replay a write.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Create ordinary single trip",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/orders?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{bookingRequestKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticketProductId\": \"{{bookingProductId}}\",\n  \"serviceDate\": \"{{bookingServiceDate}}\",\n  \"originStationId\": \"{{originStationId}}\",\n  \"destinationStationId\": \"{{destinationStationId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create ordinary purchase for another passenger",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/orders?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{bookingRequestKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticketProductId\": \"{{bookingProductId}}\",\n  \"beneficiaryUserId\": \"{{bookingBeneficiaryId}}\",\n  \"serviceDate\": \"{{bookingServiceDate}}\",\n  \"originStationId\": \"{{originStationId}}\",\n  \"destinationStationId\": \"{{destinationStationId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create student pass for another passenger",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/orders?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{bookingRequestKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticketProductId\": \"{{bookingProductId}}\",\n  \"beneficiaryUserId\": \"{{bookingBeneficiaryId}}\",\n  \"eligibilityGroup\": \"STUDENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Set bookingProductId to a periodic pass. Checkout checks the beneficiary's verified student evidence, then reports the discount or fallbackToOrdinary."
+          }
+        },
+        {
+          "name": "Get booking",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}"
+          }
+        },
+        {
+          "name": "Revise booking",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{bookingRequestKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderVersion\": {{orderVersion}},\n  \"selection\": {\n    \"ticketProductId\": \"{{bookingProductId}}\",\n    \"serviceDate\": \"{{bookingServiceDate}}\",\n    \"originStationId\": \"{{originStationId}}\",\n    \"destinationStationId\": \"{{destinationStationId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List my consent invitations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/orders/consents"
+          }
+        },
+        {
+          "name": "Accept invitation as beneficiary",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/consent",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{bookingRequestKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderVersion\": {{orderVersion}},\n  \"consentId\": \"{{bookingConsentId}}\",\n  \"decision\": \"ACCEPT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Confirm order and price as buyer",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/confirm",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{bookingRequestKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderVersion\": {{orderVersion}},\n  \"expectedTotalMinor\": {{bookingExpectedTotal}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Start payment for confirmed booking",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/payments",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"orderVersion\": {{orderVersion}},\n  \"idempotencyKey\": \"{{bookingPaymentKey}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get trip suggestion",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/suggestion"
+          }
+        },
+        {
+          "name": "Cancel unpaid order",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}?orderVersion={{orderVersion}}",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{bookingRequestKey}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Create free child booking (approved guardian)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/orders?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{bookingRequestKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticketProductId\": \"{{bookingProductId}}\",\n  \"beneficiaryUserId\": \"{{bookingBeneficiaryId}}\",\n  \"serviceDate\": \"{{bookingServiceDate}}\",\n  \"originStationId\": \"{{originStationId}}\",\n  \"destinationStationId\": \"{{destinationStationId}}\",\n  \"eligibilityGroup\": \"CHILD_UNDER_6\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Use a SINGLE_TRIP product, child account and guardian token. First buy the guardian ticket. Confirm with expectedTotalMinor=0: free issuance without Payment/PaidAt; future QR waits until service day."
+          }
+        },
+        {
+          "name": "Retry after verified final no-charge outcome",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/{{paymentId}}/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "{{paymentId}}",
+                "retry"
+              ]
+            },
+            "description": "BE-08 must first supply a verified final no-charge outcome. Reconfirm Checkout after content/price changes. At most 3 attempts per order; repeated retry for one prior attempt returns its same successor."
+          }
+        }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get(\"bookingRequestKey\")) pm.variables.set(\"bookingRequestKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+              "if (!pm.collectionVariables.get(\"bookingPaymentKey\")) pm.variables.set(\"bookingPaymentKey\", pm.variables.replaceIn(\"{{$guid}}\"));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code >= 200 && pm.response.code < 300) {",
+              "  const body = pm.response.json();",
+              "  if (body.orderVersion && body.orderCode) {",
+              "    pm.collectionVariables.set(\"orderId\", body.id);",
+              "    pm.collectionVariables.set(\"orderVersion\", body.orderVersion);",
+              "    pm.collectionVariables.set(\"bookingExpectedTotal\", body.totalMinor);",
+              "    if (body.consentId) pm.collectionVariables.set(\"bookingConsentId\", body.consentId);",
+              "  }",
+              "  const payment = body.payment || body;",
+              "  if (payment.paymentCode) pm.collectionVariables.set(\"paymentId\", payment.id);",
+              "}"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

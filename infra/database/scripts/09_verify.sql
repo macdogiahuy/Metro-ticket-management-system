@@ -18,6 +18,15 @@ BEGIN
     IF to_regclass('metro.ticket_issuance_jobs') IS NULL OR to_regclass('metro.ticket_issue_requests') IS NULL THEN
         RAISE EXCEPTION 'Missing BE-09 durable issuance tables';
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 13)
+       OR to_regclass('metro.booking_requests') IS NULL THEN
+        RAISE EXCEPTION 'Missing BE-07 booking migration 013';
+    END IF;
+    IF (SELECT count(*) FROM information_schema.columns WHERE table_schema='metro' AND table_name='payments'
+        AND column_name IN ('attempt_number','checkout_url')) <> 2
+       OR to_regclass('metro.uq_booking_payment_attempt') IS NULL THEN
+        RAISE EXCEPTION 'Missing BE-07 immutable payment attempt metadata';
+    END IF;
 
     SELECT string_agg(name, ', ') INTO v_missing
     FROM (VALUES

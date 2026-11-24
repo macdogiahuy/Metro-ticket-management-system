@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using FluentValidation;
 using Metro.Application.Abstractions.Auth;
+using Metro.Application.Abstractions.Booking;
 using Metro.Application.Abstractions.Catalog;
 using Metro.Application.Abstractions.Fare;
 using Metro.Application.Abstractions.Payment;
@@ -26,7 +27,8 @@ public sealed class GlobalExceptionHandler(
         (int status, string title, string? safeDetail, string? errorCode) = exception switch
         {
             BadHttpRequestException => (StatusCodes.Status400BadRequest, "Invalid request", exception.Message, (string?)null),
-            Metro.Application.Abstractions.Ticketing.TicketException ticket => (ticket.Status, "Ticket request failed", ticket.Message, (string?)null),
+            Metro.Application.Abstractions.Ticketing.TicketException ticket => (ticket.Status, "Ticket request failed", ticket.Message, (string?)ticket.Code),
+            BookingException booking => (booking.Status, "Booking request failed", booking.Code, booking.Code),
             AuthException auth => (auth.Status, "Authentication failed", auth.Message, (string?)auth.Code),
             PaymentException payment => (payment.Status, payment.Status switch
             {
@@ -57,6 +59,14 @@ public sealed class GlobalExceptionHandler(
                 (StatusCodes.Status400BadRequest, "Constraint validation failed", "The request violates a database validation constraint.", "DATABASE_CHECK_VIOLATION"),
             _ when pg is { SqlState: PostgresErrorCodes.ForeignKeyViolation } =>
                 (StatusCodes.Status409Conflict, "Reference conflict", "The referenced resource does not exist or cannot be removed.", "DATABASE_REFERENCE_CONFLICT"),
+            _ when pg is { SqlState: PostgresErrorCodes.NoDataFound } =>
+                (StatusCodes.Status404NotFound, "Resource not found", "The requested resource was not found.", "DATABASE_NOT_FOUND"),
+            _ when pg is { SqlState: PostgresErrorCodes.InvalidParameterValue } =>
+                (StatusCodes.Status422UnprocessableEntity, "Invalid business state", "The request does not satisfy the current business conditions.", "DATABASE_INVALID_STATE"),
+            _ when pg is { SqlState: PostgresErrorCodes.InvalidAuthorizationSpecification } =>
+                (StatusCodes.Status403Forbidden, "Forbidden", "The requested operation is not permitted.", "DATABASE_FORBIDDEN"),
+            _ when pg is { SqlState: PostgresErrorCodes.RaiseException } =>
+                (StatusCodes.Status409Conflict, "Business state conflict", "The operation conflicts with the current resource state.", "DATABASE_STATE_CONFLICT"),
             FluentValidation.ValidationException => (StatusCodes.Status400BadRequest, "Validation failed", exception.Message, null),
             UnauthorizedAccessException => (StatusCodes.Status403Forbidden, "Forbidden", exception.Message, null),
             KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found", exception.Message, null),

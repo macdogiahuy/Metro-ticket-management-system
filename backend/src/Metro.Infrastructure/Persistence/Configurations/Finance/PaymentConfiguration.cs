@@ -28,6 +28,8 @@ public sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(x => x.VerifiedAt).HasColumnName("verified_at").HasColumnType("timestamptz").IsRequired(false);
         builder.Property(x => x.SucceededAt).HasColumnName("succeeded_at").HasColumnType("timestamptz").IsRequired(false);
         builder.Property(x => x.FailureCode).HasColumnName("failure_code").HasColumnType("text").IsRequired(false);
+        builder.Property(x => x.AttemptNumber).HasColumnName("attempt_number").HasColumnType("integer").IsRequired(false);
+        builder.Property(x => x.CheckoutUrl).HasColumnName("checkout_url").HasColumnType("text").IsRequired(false);
         builder.Property(x => x.ReconciliationStatus).HasColumnName("reconciliation_status").HasColumnType("text").IsRequired(true).HasConversion(new UpperSnakeCaseEnumConverter<PaymentReconciliationStatus>()).HasDefaultValueSql("'UNRECONCILED'");
         builder.Property(x => x.CorrelationId).HasColumnName("correlation_id").HasColumnType("uuid").IsRequired(true).HasDefaultValueSql("gen_random_uuid()");
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired(true).HasDefaultValueSql("clock_timestamp()");
