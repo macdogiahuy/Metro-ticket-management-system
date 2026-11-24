@@ -77,6 +77,10 @@
     {
       "key": "adminProductId",
       "value": ""
+    },
+    {
+      "key": "adminFareVersionId",
+      "value": ""
     }
   ],
   "item": [
@@ -616,6 +620,67 @@
           "raw": "{\n  \"code\": \"DAY-PASS-{{$timestamp}}\",\n  \"name\": \"Ve ngay\",\n  \"productType\": \"DAY\",\n  \"durationValue\": 1,\n  \"durationUnit\": \"DAY\",\n  \"expiryRule\": \"NEXT_LOCAL_MIDNIGHT\",\n  \"requiresNamedHolder\": false,\n  \"capacityControlled\": false,\n  \"status\": \"ACTIVE\",\n  \"reason\": \"Create demo day pass\"\n}"
         },
         "url": "{{baseUrl}}/api/v1/admin/products"
+      }
+    },
+    {
+      "name": "Admin — Create fare policy version (UC25)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('create fare version returns 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('adminFareVersionId', pm.response.json().id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminAccessToken}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "pm-create-fare-{{$timestamp}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"FARE-V-{{$timestamp}}\",\n  \"scopeKey\": \"DEMO-NETWORK\",\n  \"effectiveFrom\": \"2027-01-01T00:00:00Z\",\n  \"effectiveTo\": \"2027-12-31T23:59:59Z\",\n  \"reason\": \"Prepare 2027 fare schedule\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/admin/fares"
+      }
+    },
+    {
+      "name": "Admin — Add NULL-safe fare matrix entry (UC25)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminAccessToken}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "pm-add-entry-{{$timestamp}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ticketProductId\": \"{{adminProductId}}\",\n  \"lineId\": null,\n  \"originStationId\": null,\n  \"destinationStationId\": null,\n  \"paymentChannel\": \"ANY\",\n  \"eligibilityGroup\": \"ORDINARY\",\n  \"amountMinor\": 30000,\n  \"sellable\": true,\n  \"reason\": \"Set base day fare\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/admin/fares/{{adminFareVersionId}}/entries"
       }
     }
   ]
