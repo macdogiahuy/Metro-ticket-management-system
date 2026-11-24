@@ -18,7 +18,7 @@ public sealed class PaymentOwnershipTests(PaymentTestFactory factory)
     {
         using var client = factory.CreateClient();
         var seed = await SeedAsync(factory, membership: false);
-        client.DefaultRequestHeaders.Authorization = Bearer(seed.User);
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, seed.User);
         var result = await client.PostAsJsonAsync("/api/v1/payments", new { orderId = seed.Order, idempotencyKey = Guid.NewGuid().ToString() });
         Assert.Equal(HttpStatusCode.Created, result.StatusCode);
     }
@@ -28,7 +28,7 @@ public sealed class PaymentOwnershipTests(PaymentTestFactory factory)
     {
         using var client = factory.CreateClient();
         var seed = await SeedAsync(factory, membership: true);
-        client.DefaultRequestHeaders.Authorization = Bearer(seed.User);
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, seed.User);
         var created = await client.PostAsJsonAsync("/api/v1/payments", new { orderId = seed.Order, idempotencyKey = Guid.NewGuid().ToString() });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var payment = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
@@ -38,7 +38,7 @@ public sealed class PaymentOwnershipTests(PaymentTestFactory factory)
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         db.OperatorAccounts.Add(new OperatorAccount { Id = Guid.NewGuid(), OperatorId = seed.Op, UserId = other, Status = "ACTIVE" });
         await db.SaveChangesAsync();
-        client.DefaultRequestHeaders.Authorization = Bearer(other);
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, other);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/payments/{payment}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsJsonAsync("/api/v1/payments", new { orderId = seed.Order, idempotencyKey = Guid.NewGuid().ToString() })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync($"/api/v1/payments/{payment}/retry", null)).StatusCode);

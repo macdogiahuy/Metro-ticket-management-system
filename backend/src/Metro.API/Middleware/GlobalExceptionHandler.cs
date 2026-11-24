@@ -25,12 +25,9 @@ public sealed class GlobalExceptionHandler(
         var pg = exception is DbUpdateException dbEx ? dbEx.InnerException as PostgresException : exception as PostgresException;
         (int status, string title, string? safeDetail, string? errorCode) = exception switch
         {
-            Metro.Application.Abstractions.Ticketing.TicketException ticket => (
-                ticket.Status,
-                "Ticket request failed",
-                ticket.Status < StatusCodes.Status500InternalServerError || environment.IsDevelopment() ? ticket.Message : null,
-                ticket.Code),
-            AuthException auth => (auth.Status, "Authentication failed", auth.Message, auth.Code),
+            BadHttpRequestException => (StatusCodes.Status400BadRequest, "Invalid request", exception.Message, (string?)null),
+            Metro.Application.Abstractions.Ticketing.TicketException ticket => (ticket.Status, "Ticket request failed", ticket.Message, (string?)null),
+            AuthException auth => (auth.Status, "Authentication failed", auth.Message, (string?)auth.Code),
             PaymentException payment => (payment.Status, payment.Status switch
             {
                 StatusCodes.Status401Unauthorized => "Payment authentication failed",
