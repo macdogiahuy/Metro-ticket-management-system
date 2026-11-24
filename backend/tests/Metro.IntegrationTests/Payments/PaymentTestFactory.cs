@@ -17,6 +17,7 @@ public sealed class PaymentTestFactory : WebApplicationFactory<Program>
     public TestLogSink TestLogs { get; } = new();
 
     public const string SigningKey = "be08-integration-signing-key-0123456789-abcdefghijklmnop";
+    private readonly string _qrKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -27,6 +28,9 @@ public sealed class PaymentTestFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Issuer", "metro-api");
         builder.UseSetting("Jwt:Audience", "metro-web");
         builder.UseSetting("Payment:WebhookSecret", StubPaymentGateway.Secret);
+        builder.UseSetting("TicketQr:WorkerEnabled", "false");
+        builder.UseSetting("TicketQr:ActiveKeyId", "payment-test-v1");
+        builder.UseSetting("TicketQr:Keys:payment-test-v1", _qrKey);
         builder.ConfigureLogging(logging => logging.AddProvider(TestLogs));
         builder.ConfigureTestServices(services =>
         {

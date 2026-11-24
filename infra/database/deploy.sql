@@ -3403,4 +3403,709 @@ COMMENT ON TABLE metro.data_quality_days IS
   VALUES (6, '006_srs_v1_2_alignment.sql', '9a0d939a4656a2b3afbbc09b6f71f1249cf93529d48271d232ee09fa5a9e3f2c');
 END $migration_006$;
 
+-- 007_profile_eligibility_evidence.sql
+DO $migration_007$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 7) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 7
+                   AND name = '007_profile_eligibility_evidence.sql' AND checksum = 'b294ace07e2cb3862b7fd423103d781fd64a05b027d471cd078649e63a965767') THEN
+      RAISE EXCEPTION 'Migration 007 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 007 already applied';
+    RETURN;
+  END IF;
+
+-- BE-04: concession evidence requests and private object-storage references.
+-- Keep profile verification requests separate from the ticketing-domain
+-- eligibility_evidence table created by migration 003.
+CREATE TABLE metro.profile_eligibility_requests (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id text NOT NULL REFERENCES public."AspNetUsers" ("Id") ON DELETE RESTRICT,
+    category varchar(40) NOT NULL CHECK (category IN ('STUDENT','ELDERLY','DISABILITY','PRIORITY','OTHER')),
+    status varchar(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','VERIFIED','REJECTED','REVOKED','EXPIRED')),
+    valid_from date,
+    valid_to date,
+    evidence_object_key text,
+    evidence_file_name text,
+    evidence_content_type text,
+    evidence_size bigint CHECK (evidence_size IS NULL OR evidence_size BETWEEN 1 AND 10485760),
+    evidence_sha256 char(64) CHECK (evidence_sha256 IS NULL OR evidence_sha256 ~ '^[0-9a-f]{64}$'),
+    decision_reason text,
+    decided_by_user_id text REFERENCES public."AspNetUsers" ("Id") ON DELETE RESTRICT,
+    decided_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from),
+    CHECK ((evidence_object_key IS NULL AND evidence_file_name IS NULL AND evidence_content_type IS NULL AND evidence_size IS NULL AND evidence_sha256 IS NULL)
+        OR (evidence_object_key IS NOT NULL AND evidence_file_name IS NOT NULL AND evidence_content_type IS NOT NULL AND evidence_size IS NOT NULL AND evidence_sha256 IS NOT NULL)),
+    CHECK ((status = 'PENDING' AND decided_at IS NULL AND decided_by_user_id IS NULL)
+        OR (status <> 'PENDING' AND decided_at IS NOT NULL AND decided_by_user_id IS NOT NULL))
+);
+CREATE INDEX ix_profile_eligibility_requests_user_time ON metro.profile_eligibility_requests (user_id, created_at DESC);
+CREATE INDEX ix_profile_eligibility_requests_status ON metro.profile_eligibility_requests (status, created_at) WHERE status = 'PENDING';
+COMMENT ON COLUMN metro.profile_eligibility_requests.evidence_object_key IS 'Private object storage key; never store document bytes or signed URLs in the database or audit log.';
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (7, '007_profile_eligibility_evidence.sql', 'b294ace07e2cb3862b7fd423103d781fd64a05b027d471cd078649e63a965767');
+END $migration_007$;
+
+-- 008_profile_verification_workflow.sql
+DO $migration_008$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 8) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 8
+                   AND name = '008_profile_verification_workflow.sql' AND checksum = 'a6f4a8c072a6f9a6f0643755eb28ff583c961c6ed1591aaa2b62ac88d38be34e') THEN
+      RAISE EXCEPTION 'Migration 008 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 008 already applied';
+    RETURN;
+  END IF;
+
+-- UC05/UC06: preserve migration 007 and extend its profile-specific workflow.
+ALTER TABLE metro.profile_eligibility_requests ADD COLUMN evidence_hold boolean NOT NULL DEFAULT false;
+
+-- Replace only the state/decision checks; preserve file and date integrity checks.
+DO $checks$
+DECLARE item record;
+BEGIN
+    FOR item IN SELECT conname FROM pg_constraint
+        WHERE conrelid = 'metro.profile_eligibility_requests'::regclass AND contype = 'c'
+          AND pg_get_constraintdef(oid) LIKE '%status%'
+    LOOP
+        EXECUTE format('ALTER TABLE metro.profile_eligibility_requests DROP CONSTRAINT %I', item.conname);
+    END LOOP;
+END $checks$;
+ALTER TABLE metro.profile_eligibility_requests
+    ADD CONSTRAINT ck_profile_eligibility_status CHECK (status IN ('PENDING','NEEDS_INFO','VERIFIED','REJECTED','REVOKED','EXPIRED')),
+    ADD CONSTRAINT ck_profile_eligibility_decision CHECK (
+        (status = 'PENDING' AND decided_at IS NULL AND decided_by_user_id IS NULL)
+        OR (status <> 'PENDING' AND decided_at IS NOT NULL AND decided_by_user_id IS NOT NULL));
+
+CREATE TABLE metro.profile_eligibility_attachments (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id uuid NOT NULL REFERENCES metro.profile_eligibility_requests(id) ON DELETE RESTRICT,
+    slot integer NOT NULL CHECK (slot BETWEEN 1 AND 3),
+    object_key text, file_name text NOT NULL, content_type text NOT NULL,
+    size_bytes bigint NOT NULL CHECK (size_bytes BETWEEN 1 AND 10485760),
+    sha256 char(64) NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'),
+    uploaded_at timestamptz NOT NULL DEFAULT clock_timestamp(), purged_at timestamptz, replaced_at timestamptz,
+    CHECK ((object_key IS NOT NULL AND purged_at IS NULL) OR (object_key IS NULL AND purged_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX ix_profile_eligibility_attachment_slots ON metro.profile_eligibility_attachments(request_id, slot) WHERE replaced_at IS NULL;
+-- Preserve already uploaded 007 documents. New uploads are capped at 5 MiB in the API.
+INSERT INTO metro.profile_eligibility_attachments
+    (request_id, slot, object_key, file_name, content_type, size_bytes, sha256, uploaded_at)
+SELECT id, 1, evidence_object_key, evidence_file_name, evidence_content_type,
+       evidence_size, evidence_sha256, updated_at
+FROM metro.profile_eligibility_requests WHERE evidence_object_key IS NOT NULL;
+
+CREATE TABLE metro.profile_eligibility_decisions (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id uuid NOT NULL REFERENCES metro.profile_eligibility_requests(id) ON DELETE RESTRICT,
+    status varchar(20) NOT NULL, reason text NOT NULL,
+    actor_user_id text REFERENCES public."AspNetUsers"("Id") ON DELETE RESTRICT,
+    occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(), valid_from date, valid_to date
+);
+INSERT INTO metro.profile_eligibility_decisions
+    (request_id, status, reason, actor_user_id, occurred_at, valid_from, valid_to)
+SELECT id, status, coalesce(decision_reason, 'Migrated decision'), decided_by_user_id,
+       decided_at, valid_from, valid_to
+FROM metro.profile_eligibility_requests WHERE decided_at IS NOT NULL;
+CREATE INDEX ix_profile_eligibility_decisions_history ON metro.profile_eligibility_decisions(request_id, occurred_at);
+COMMENT ON TABLE metro.profile_eligibility_decisions IS 'Retain decision metadata for at least 24 months; no document contents.';
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (8, '008_profile_verification_workflow.sql', 'a6f4a8c072a6f9a6f0643755eb28ff583c961c6ed1591aaa2b62ac88d38be34e');
+END $migration_008$;
+
+-- 009_profile_evidence_purge_queue.sql
+DO $migration_009$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 9) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 9
+                   AND name = '009_profile_evidence_purge_queue.sql' AND checksum = 'b50b99c95403d4f324e362e46921335281e367ea9758cb8ff9c6889e92c0f12a') THEN
+      RAISE EXCEPTION 'Migration 009 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 009 already applied';
+    RETURN;
+  END IF;
+
+-- Durable mark-then-purge: detach evidence references and enqueue in one transaction.
+-- Preserve checksums of migrations 001-008, including databases already using 008.
+CREATE TABLE metro.profile_eligibility_purge_queue (
+    request_id uuid CONSTRAINT pk_profile_eligibility_purge_queue PRIMARY KEY,
+    object_keys text[] NOT NULL,
+    queued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT fk_profile_eligibility_purge_request FOREIGN KEY (request_id)
+        REFERENCES metro.profile_eligibility_requests(id) ON DELETE RESTRICT,
+    CONSTRAINT ck_profile_eligibility_purge_keys CHECK (
+        cardinality(object_keys) > 0 AND array_position(object_keys, NULL) IS NULL)
+);
+COMMENT ON TABLE metro.profile_eligibility_purge_queue IS
+    'Private cleanup outbox; delete objects only after enqueue commits. Retry until all deletes succeed; never log object_keys.';
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (9, '009_profile_evidence_purge_queue.sql', 'b50b99c95403d4f324e362e46921335281e367ea9758cb8ff9c6889e92c0f12a');
+END $migration_009$;
+
+-- 010_ticket_issuance.sql
+DO $migration_010$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 10) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 10
+                   AND name = '010_ticket_issuance.sql' AND checksum = 'e89b4f3b2a711ea24ee8efba088240fa297e8919e42f1489de71916573484c71') THEN
+      RAISE EXCEPTION 'Migration 010 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 010 already applied';
+    RETURN;
+  END IF;
+
+-- BE-09: durable QR readiness; existing paid/free SQL entry points are preserved.
+-- Metro travel rights select stations, not a reserved planned train.
+ALTER TABLE metro.order_items DROP CONSTRAINT order_items_check2;
+ALTER TABLE metro.order_items ADD CONSTRAINT ck_order_item_metro_route CHECK (
+ (planned_trip_id IS NULL AND origin_station_id IS NULL AND destination_station_id IS NULL)
+ OR (origin_station_id IS NOT NULL AND destination_station_id IS NOT NULL AND origin_station_id<>destination_station_id));
+ALTER TABLE metro.payments ADD COLUMN order_version integer;
+UPDATE metro.payments p SET order_version=o.order_version FROM metro.orders o
+WHERE o.operator_id=p.operator_id AND o.id=p.order_id;
+ALTER TABLE metro.payments ADD CONSTRAINT fk_payment_order_version FOREIGN KEY(operator_id,order_id,order_version)
+REFERENCES metro.order_versions(operator_id,order_id,version);
+-- Keep historical callers/inserts compatible while freezing the version at payment creation.
+CREATE FUNCTION metro.fill_payment_version() RETURNS trigger LANGUAGE plpgsql SET search_path=metro,public,pg_catalog AS $f$
+BEGIN
+ IF TG_OP='INSERT' THEN
+  SELECT COALESCE(NEW.order_version,order_version) INTO NEW.order_version FROM metro.orders WHERE operator_id=NEW.operator_id AND id=NEW.order_id;
+ ELSIF NEW.order_version IS DISTINCT FROM OLD.order_version OR NEW.order_id<>OLD.order_id OR NEW.operator_id<>OLD.operator_id THEN
+  RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='PAYMENT_VERSION_IMMUTABLE';
+ END IF;
+ RETURN NEW;
+END $f$;
+CREATE TRIGGER trg_payment_version BEFORE INSERT OR UPDATE ON metro.payments FOR EACH ROW EXECUTE FUNCTION metro.fill_payment_version();
+-- A frozen payment version must never silently acquire different passenger/price data.
+CREATE FUNCTION metro.freeze_confirmed_order_version() RETURNS trigger LANGUAGE plpgsql AS $f$
+BEGIN
+ IF OLD.status IN ('CONFIRMED','SUPERSEDED') AND
+  (to_jsonb(OLD)-ARRAY['status','change_reason']) IS DISTINCT FROM (to_jsonb(NEW)-ARRAY['status','change_reason']) THEN
+  RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='CONFIRMED_VERSION_IMMUTABLE';
+ END IF;
+ RETURN NEW;
+END $f$;
+CREATE TRIGGER trg_freeze_confirmed_order_version BEFORE UPDATE ON metro.order_versions
+FOR EACH ROW EXECUTE FUNCTION metro.freeze_confirmed_order_version();
+ALTER TABLE metro.ticket_credentials ADD COLUMN version integer NOT NULL DEFAULT 1 CHECK(version>0), ADD COLUMN key_id text;
+CREATE UNIQUE INDEX uq_signed_qr_version ON metro.ticket_credentials(operator_id,ticket_id,version) WHERE credential_type='QR' AND key_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_current_signed_qr ON metro.ticket_credentials(operator_id,ticket_id) WHERE credential_type='QR' AND status='ACTIVE' AND key_id IS NOT NULL;
+CREATE TABLE metro.ticket_issuance_jobs (
+ ticket_id uuid PRIMARY KEY, operator_id uuid NOT NULL, order_id uuid NOT NULL,
+ due_at timestamptz NOT NULL, next_attempt_at timestamptz NOT NULL,
+ status text NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','READY','NEEDS_SUPPORT','CANCELLED')),
+ first_failed_at timestamptz, last_error_code text, completed_at timestamptz,
+ FOREIGN KEY(operator_id,ticket_id) REFERENCES metro.tickets(operator_id,id),
+ FOREIGN KEY(operator_id,order_id) REFERENCES metro.orders(operator_id,id)
+);
+CREATE INDEX ix_issuance_due ON metro.ticket_issuance_jobs(next_attempt_at) WHERE status='PENDING';
+CREATE TABLE metro.ticket_issue_requests (
+ operator_id uuid NOT NULL, actor_user_id text NOT NULL, request_key varchar(120) NOT NULL,
+ payload_hash char(64) NOT NULL, order_id uuid NOT NULL, order_version integer NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(operator_id,actor_user_id,request_key),
+ FOREIGN KEY(operator_id,order_id,order_version) REFERENCES metro.order_versions(operator_id,order_id,version)
+);
+ALTER TABLE metro.orders DROP CONSTRAINT orders_status_check;
+ALTER TABLE metro.orders ADD CONSTRAINT orders_status_check CHECK(status IN
+ ('DRAFT','HELD','PENDING_PAYMENT','PENDING_ISSUE','PAID','ISSUED','EXPIRED','CANCELLED','REFUND_PENDING','REFUNDED'));
+
+CREATE FUNCTION metro.issuance_bounds(p_operator uuid,p_order uuid)
+RETURNS TABLE(start_at timestamptz,end_at timestamptz) LANGUAGE sql STABLE SET search_path=metro,public,pg_catalog AS $f$
+ SELECT CASE WHEN tp.product_type='SINGLE_TRIP' THEN o.service_date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh' ELSE COALESCE(o.paid_at,statement_timestamp()) END,
+ CASE WHEN tp.product_type='SINGLE_TRIP' THEN (o.service_date+1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+ ELSE (((COALESCE(o.paid_at,statement_timestamp()) AT TIME ZONE 'Asia/Ho_Chi_Minh')::date+
+  CASE tp.product_type WHEN 'DAY' THEN 1 WHEN 'WEEK' THEN 7 WHEN 'MONTH' THEN 30 END)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh') END
+ FROM metro.orders o JOIN metro.order_items i ON i.operator_id=o.operator_id AND i.order_id=o.id
+ JOIN metro.ticket_products tp ON tp.operator_id=i.operator_id AND tp.id=i.ticket_product_id
+ WHERE o.operator_id=p_operator AND o.id=p_order
+$f$;
+
+CREATE FUNCTION metro.check_issuance_order(p_operator uuid,p_order uuid) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,metro,public AS $f$
+DECLARE o metro.orders%ROWTYPE; b record;
+BEGIN
+ SELECT * INTO STRICT o FROM metro.orders WHERE operator_id=p_operator AND id=p_order;
+ IF o.beneficiary_user_id IS NULL THEN RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='BENEFICIARY_REQUIRED'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM metro.user_profiles p JOIN public."AspNetUsers" a ON a."Id"=p.user_id
+   WHERE p.user_id=o.beneficiary_user_id AND p.status='ACTIVE' AND a."EmailConfirmed") THEN
+  RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='BENEFICIARY_NOT_VERIFIED'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_operator::text||':'||o.beneficiary_user_id,0));
+ PERFORM 1 FROM metro.order_items WHERE operator_id=p_operator AND order_id=p_order ORDER BY id FOR UPDATE;
+ PERFORM 1 FROM metro.order_versions WHERE operator_id=p_operator AND order_id=p_order AND version=o.order_version FOR SHARE;
+ IF (SELECT count(*) FROM metro.order_items WHERE operator_id=p_operator AND order_id=p_order)<>1
+ OR EXISTS(SELECT 1 FROM metro.order_items i JOIN metro.ticket_products p ON p.operator_id=i.operator_id AND p.id=i.ticket_product_id
+ WHERE i.operator_id=p_operator AND i.order_id=p_order AND (i.passenger_count<>1 OR p.capacity_controlled OR p.product_type NOT IN ('SINGLE_TRIP','DAY','WEEK','MONTH'))) THEN
+  RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='ONE_PERSON_ONE_PRODUCT_REQUIRED'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM metro.order_versions v JOIN metro.order_items i ON i.operator_id=v.operator_id AND i.order_id=v.order_id
+ WHERE v.operator_id=p_operator AND v.order_id=p_order AND v.version=o.order_version AND v.status='CONFIRMED'
+ AND v.beneficiary_user_id=o.beneficiary_user_id AND v.ticket_product_id=i.ticket_product_id
+ AND v.service_date IS NOT DISTINCT FROM o.service_date AND v.total_minor=o.total_minor
+ AND v.subtotal_minor=o.subtotal_minor AND v.discount_minor=o.discount_minor AND v.fare_policy_version_id=o.fare_policy_version_id AND v.fare_snapshot=o.fare_snapshot
+ AND v.origin_station_id IS NOT DISTINCT FROM i.origin_station_id AND v.destination_station_id IS NOT DISTINCT FROM i.destination_station_id) THEN
+  RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='ORDER_VERSION_CONFLICT'; END IF;
+ SELECT * INTO b FROM metro.issuance_bounds(p_operator,p_order);
+ IF EXISTS(SELECT 1 FROM metro.order_items i JOIN metro.ticket_products p ON p.operator_id=i.operator_id AND p.id=i.ticket_product_id
+  WHERE i.operator_id=p_operator AND i.order_id=p_order AND p.product_type='SINGLE_TRIP'
+   AND (o.service_date IS NULL OR o.service_date<(o.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+     OR o.service_date>(o.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date+7
+     OR i.origin_station_id IS NULL OR i.destination_station_id IS NULL)) THEN
+  RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='INVALID_TRAVEL_DATE_OR_ROUTE'; END IF;
+ IF b.start_at IS NULL OR b.end_at IS NULL OR b.end_at<=statement_timestamp() THEN
+  RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='INVALID_TRAVEL_DATE'; END IF;
+ IF EXISTS(SELECT 1 FROM metro.tickets t LEFT JOIN metro.journeys j ON j.operator_id=t.operator_id AND j.ticket_id=t.id AND j.status IN ('OPEN','MANUAL_REVIEW')
+ WHERE t.operator_id=p_operator AND t.holder_user_id=o.beneficiary_user_id AND t.order_id IS DISTINCT FROM p_order
+ AND (j.id IS NOT NULL OR (t.status IN ('ISSUED','ACTIVE','IN_USE') AND tstzrange(t.effective_from,t.expires_at,'[)') && tstzrange(b.start_at,b.end_at,'[)'))))
+ OR EXISTS(SELECT 1 FROM metro.orders q CROSS JOIN LATERAL metro.issuance_bounds(q.operator_id,q.id) qb
+ WHERE q.operator_id=p_operator AND q.beneficiary_user_id=o.beneficiary_user_id AND q.id<>o.id
+ AND q.status IN ('PAID','PENDING_ISSUE') AND (q.paid_at IS NOT NULL OR q.free_confirmed_at IS NOT NULL)
+ AND tstzrange(qb.start_at,qb.end_at,'[)') && tstzrange(b.start_at,b.end_at,'[)')) THEN
+  RAISE EXCEPTION USING ERRCODE='23505',MESSAGE='BENEFICIARY_RIGHT_CONFLICT'; END IF;
+END $f$;
+
+CREATE FUNCTION metro.prepare_ticket_issuance() RETURNS trigger LANGUAGE plpgsql SET search_path=metro,public,pg_catalog AS $f$
+DECLARE o metro.orders%ROWTYPE; b record;
+BEGIN
+ SELECT * INTO o FROM metro.orders WHERE operator_id=NEW.operator_id AND id=NEW.order_id;
+ IF NEW.status<>'ISSUED' OR (o.paid_at IS NULL AND o.free_confirmed_at IS NULL) THEN RETURN NEW; END IF;
+ SELECT * INTO b FROM metro.issuance_bounds(NEW.operator_id,NEW.order_id);
+ NEW.effective_from:=b.start_at; NEW.expires_at:=b.end_at;
+ RETURN NEW;
+END $f$;
+CREATE TRIGGER trg_tickets_prepare_issuance BEFORE INSERT ON metro.tickets FOR EACH ROW EXECUTE FUNCTION metro.prepare_ticket_issuance();
+CREATE FUNCTION metro.enqueue_ticket_issuance() RETURNS trigger LANGUAGE plpgsql SET search_path=metro,public,pg_catalog AS $f$
+DECLARE o metro.orders%ROWTYPE;
+BEGIN
+ SELECT * INTO o FROM metro.orders WHERE operator_id=NEW.operator_id AND id=NEW.order_id;
+ IF NEW.status='ISSUED' AND (o.paid_at IS NOT NULL OR o.free_confirmed_at IS NOT NULL) THEN
+  INSERT INTO metro.ticket_issuance_jobs(ticket_id,operator_id,order_id,due_at,next_attempt_at)
+  VALUES(NEW.id,NEW.operator_id,NEW.order_id,NEW.effective_from,GREATEST(NEW.effective_from,statement_timestamp())) ON CONFLICT DO NOTHING;
+ END IF; RETURN NEW;
+END $f$;
+CREATE TRIGGER trg_tickets_queue_issuance AFTER INSERT ON metro.tickets FOR EACH ROW EXECUTE FUNCTION metro.enqueue_ticket_issuance();
+
+CREATE OR REPLACE FUNCTION metro.enforce_workflow_state_transition()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = metro, public, pg_catalog
+AS $function$
+BEGIN
+    IF OLD.status = NEW.status THEN
+        RETURN NEW;
+    END IF;
+
+    IF TG_TABLE_NAME = 'orders' THEN
+        IF NOT (
+            (OLD.status = 'PENDING_ISSUE' AND NEW.status IN ('ISSUED','CANCELLED')) OR
+            (OLD.status = 'DRAFT' AND NEW.status IN ('HELD','PENDING_PAYMENT','EXPIRED','CANCELLED')) OR
+            (OLD.status = 'HELD' AND NEW.status IN ('PENDING_PAYMENT','PAID','EXPIRED','CANCELLED')) OR
+            (OLD.status = 'PENDING_PAYMENT' AND NEW.status IN ('HELD','PAID','EXPIRED','CANCELLED')) OR
+            (OLD.status = 'PAID' AND NEW.status IN ('ISSUED','REFUND_PENDING')) OR
+            (OLD.status = 'ISSUED' AND NEW.status IN ('REFUND_PENDING')) OR
+            (OLD.status = 'REFUND_PENDING' AND NEW.status IN ('REFUNDED','ISSUED')) OR
+            (OLD.status = 'EXPIRED' AND NEW.status = 'CANCELLED')
+        ) THEN
+            -- BR-007: zero-payable free ticket, no payment attempt exists.
+            -- FR-42.05: an un-entered free child ticket may be cancelled.
+            IF NOT (
+                (OLD.status IN ('DRAFT','HELD','PENDING_PAYMENT')
+                 AND NEW.status IN ('PENDING_ISSUE','ISSUED') AND NEW.total_minor = 0
+                 AND NEW.free_confirmed_at IS NOT NULL) OR
+                (OLD.status = 'ISSUED' AND NEW.status = 'CANCELLED'
+                 AND OLD.free_confirmed_at IS NOT NULL)
+            ) THEN
+                RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = format('Invalid order state transition: %s -> %s', OLD.status, NEW.status);
+            END IF;
+        END IF;
+    ELSIF TG_TABLE_NAME = 'payments' AND NOT (
+        (OLD.status = 'PENDING' AND NEW.status IN ('SUCCEEDED','FAILED','EXPIRED','CANCELLED','REVIEW_REQUIRED')) OR
+        (OLD.status = 'SUCCEEDED' AND NEW.status IN ('PARTIALLY_REFUNDED','REFUNDED','REVIEW_REQUIRED')) OR
+        (OLD.status = 'PARTIALLY_REFUNDED' AND NEW.status IN ('REFUNDED','REVIEW_REQUIRED')) OR
+        (OLD.status = 'REVIEW_REQUIRED' AND NEW.status IN ('SUCCEEDED','FAILED','CANCELLED','PARTIALLY_REFUNDED','REFUNDED'))
+    ) THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = format('Invalid payment state transition: %s -> %s', OLD.status, NEW.status);
+    ELSIF TG_TABLE_NAME = 'tickets' AND NOT (
+        (OLD.status = 'ISSUED' AND NEW.status IN ('ACTIVE','EXPIRED','REFUND_PENDING','REVOKED')) OR
+        (OLD.status = 'ACTIVE' AND NEW.status IN ('IN_USE','USED','EXPIRED','REFUND_PENDING','REVOKED')) OR
+        (OLD.status = 'IN_USE' AND NEW.status IN ('USED','REFUND_PENDING','REVOKED')) OR
+        (OLD.status = 'REFUND_PENDING' AND NEW.status IN ('REFUNDED','ISSUED','ACTIVE','REVOKED'))
+    ) THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = format('Invalid ticket state transition: %s -> %s', OLD.status, NEW.status);
+    END IF;
+    RETURN NEW;
+END;
+$function$;
+
+
+REVOKE ALL ON FUNCTION metro.check_issuance_order(uuid,uuid) FROM PUBLIC;
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (10, '010_ticket_issuance.sql', 'e89b4f3b2a711ea24ee8efba088240fa297e8919e42f1489de71916573484c71');
+END $migration_010$;
+
+-- 011_paid_ticket_issuance.sql
+DO $migration_011$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 11) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 11
+                   AND name = '011_paid_ticket_issuance.sql' AND checksum = 'a36f9ab6a5608b0d561559ef123bfc72d71339826640f72d197d57fb6942c70d') THEN
+      RAISE EXCEPTION 'Migration 011 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 011 already applied';
+    RETURN;
+  END IF;
+
+-- BE-09: verified payment creates the pending ticket; QR readiness is completed separately.
+CREATE OR REPLACE FUNCTION metro.confirm_payment_and_issue_tickets(
+    p_operator_id uuid,
+    p_payment_id uuid,
+    p_provider_event_id text,
+    p_event_idempotency_key varchar(120),
+    p_payload_hash char(64),
+    p_received_amount_minor bigint,
+    p_received_currency char(3),
+    p_signature_verified boolean
+) RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, metro, public
+AS $function$
+DECLARE
+    v_locked_user text;
+    v_payment metro.payments%ROWTYPE;
+    v_order metro.orders%ROWTYPE;
+    v_item record;
+    v_hold_id uuid;
+    v_issued_count integer;
+    v_event_id uuid;
+    v_conflict metro.payment_events%ROWTYPE;
+BEGIN
+    IF p_provider_event_id IS NULL OR btrim(p_provider_event_id) = ''
+       OR p_event_idempotency_key IS NULL OR btrim(p_event_idempotency_key) = '' THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Provider event and idempotency keys are required';
+    END IF;
+    IF p_signature_verified IS NOT TRUE THEN
+        RAISE EXCEPTION USING ERRCODE = '28000', MESSAGE = 'Payment event signature was not verified';
+    END IF;
+    IF p_payload_hash IS NULL OR p_payload_hash !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Payment payload hash must be lowercase SHA-256 hex';
+    END IF;
+    IF p_received_amount_minor IS NULL OR p_received_currency IS NULL THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Received amount and currency are required';
+    END IF;
+
+    SELECT o.beneficiary_user_id INTO v_locked_user FROM metro.payments p JOIN metro.orders o ON o.operator_id=p.operator_id AND o.id=p.order_id WHERE p.operator_id=p_operator_id AND p.id=p_payment_id;
+    PERFORM pg_advisory_xact_lock(hashtextextended(p_operator_id::text||':'||COALESCE(v_locked_user,''),0));
+    -- Shared lock hierarchy for all ticketing workflows:
+    -- payment -> order -> order_item -> capacity_hold -> trip_capacity_segments.
+    SELECT * INTO v_payment
+    FROM metro.payments
+    WHERE operator_id = p_operator_id AND id = p_payment_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'Payment not found';
+    END IF;
+
+    SELECT * INTO v_order
+    FROM metro.orders
+    WHERE operator_id = p_operator_id AND id = v_payment.order_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'Order not found';
+    END IF;
+
+    IF p_received_amount_minor IS DISTINCT FROM v_payment.amount_minor
+       OR p_received_amount_minor IS DISTINCT FROM v_order.total_minor
+       OR p_received_currency IS DISTINCT FROM v_payment.currency
+       OR p_received_currency IS DISTINCT FROM v_order.currency THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'Payment amount or currency does not match the order snapshot';
+    END IF;
+
+    -- Atomically claim the provider event before any success transition. A key owned
+    -- by another payment must abort, including the already-succeeded branch where the
+    -- previous ON CONFLICT DO NOTHING silently ignored the ownership clash.
+    INSERT INTO metro.payment_events (
+        operator_id, payment_id, provider_event_id, idempotency_key, event_type,
+        signature_verified, received_amount_minor, received_currency, payload_hash,
+        outcome, processed_at
+    ) VALUES (
+        p_operator_id, p_payment_id, p_provider_event_id, p_event_idempotency_key,
+        'PAYMENT_SUCCEEDED', p_signature_verified, p_received_amount_minor, p_received_currency,
+        p_payload_hash, 'CLAIMED', clock_timestamp()
+    )
+    ON CONFLICT DO NOTHING
+    RETURNING id INTO v_event_id;
+
+    IF v_event_id IS NULL THEN
+        SELECT * INTO v_conflict
+        FROM metro.payment_events
+        WHERE operator_id = p_operator_id AND provider_event_id = p_provider_event_id
+        FOR UPDATE;
+        IF FOUND THEN
+            IF v_conflict.payment_id <> p_payment_id THEN
+                RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'Payment event belongs to another payment';
+            END IF;
+            IF v_conflict.payload_hash IS DISTINCT FROM p_payload_hash THEN
+                RAISE EXCEPTION USING ERRCODE='23505',MESSAGE='PAYMENT_EVENT_PAYLOAD_CONFLICT';
+            END IF;
+            UPDATE metro.payment_events SET outcome = 'DUPLICATE'
+            WHERE operator_id = p_operator_id AND id = v_conflict.id;
+            SELECT count(*) INTO v_issued_count
+            FROM metro.tickets t
+            JOIN metro.order_items oi ON oi.operator_id = t.operator_id AND oi.id = t.order_item_id
+            WHERE oi.operator_id = p_operator_id AND oi.order_id = v_order.id;
+            RETURN v_issued_count;
+        END IF;
+
+        SELECT * INTO v_conflict
+        FROM metro.payment_events
+        WHERE operator_id = p_operator_id AND idempotency_key = p_event_idempotency_key
+        FOR UPDATE;
+        IF FOUND THEN
+            IF v_conflict.payment_id <> p_payment_id THEN
+                RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'Payment event idempotency key belongs to another payment';
+            END IF;
+            RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'Payment event idempotency key is already used by another event';
+        END IF;
+
+        RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'Payment event could not be claimed';
+    END IF;
+
+    IF v_payment.status IN ('SUCCEEDED', 'PARTIALLY_REFUNDED', 'REFUNDED') THEN
+        UPDATE metro.payment_events SET outcome = 'ALREADY_PROCESSED'
+        WHERE operator_id = p_operator_id AND id = v_event_id;
+
+        SELECT count(*) INTO v_issued_count
+        FROM metro.tickets t
+        JOIN metro.order_items oi ON oi.operator_id = t.operator_id AND oi.id = t.order_item_id
+        WHERE oi.operator_id = p_operator_id AND oi.order_id = v_order.id;
+        RETURN v_issued_count;
+    END IF;
+
+    IF v_payment.order_version IS DISTINCT FROM v_order.order_version OR v_order.beneficiary_user_id IS DISTINCT FROM v_locked_user THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='ORDER_VERSION_CONFLICT';
+    END IF;
+    PERFORM metro.check_issuance_order(p_operator_id,v_order.id);
+    IF EXISTS(SELECT 1 FROM metro.user_profiles u WHERE u.user_id=v_order.beneficiary_user_id
+      AND (u.birth_date+interval '6 years')::date>COALESCE(v_order.service_date,(statement_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)) THEN
+      RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='CHILD_REQUIRES_FREE_SINGLE'; END IF;
+    IF v_payment.status <> 'PENDING' OR v_order.status NOT IN ('HELD', 'PENDING_PAYMENT') THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'Payment or order is not in a confirmable state';
+    END IF;
+
+    FOR v_item IN
+        SELECT oi.id, tp.capacity_controlled
+        FROM metro.order_items oi
+        JOIN metro.ticket_products tp
+          ON tp.operator_id = oi.operator_id AND tp.id = oi.ticket_product_id
+        WHERE oi.operator_id = p_operator_id AND oi.order_id = v_order.id
+        ORDER BY oi.id
+        FOR UPDATE OF oi
+    LOOP
+        IF v_item.capacity_controlled THEN
+            SELECT id INTO v_hold_id
+            FROM metro.capacity_holds
+            WHERE operator_id = p_operator_id
+              AND order_item_id = v_item.id
+              AND status IN ('HELD', 'CONFIRMED')
+            FOR UPDATE;
+            IF NOT FOUND THEN
+                RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'Capacity-controlled item has no active hold';
+            END IF;
+            PERFORM metro.confirm_capacity_hold(p_operator_id, v_hold_id);
+        END IF;
+    END LOOP;
+
+    UPDATE metro.payment_events SET outcome = 'ACCEPTED'
+    WHERE operator_id = p_operator_id AND id = v_event_id;
+
+    UPDATE metro.payments
+    SET status = 'SUCCEEDED', verified_at = clock_timestamp(), succeeded_at = clock_timestamp(),
+        reconciliation_status = 'UNRECONCILED', updated_at = clock_timestamp()
+    WHERE operator_id = p_operator_id AND id = p_payment_id;
+
+    UPDATE metro.orders
+    SET status = 'PAID', paid_at = clock_timestamp(), updated_at = clock_timestamp()
+    WHERE operator_id = p_operator_id AND id = v_order.id;
+
+    INSERT INTO metro.tickets (
+        operator_id, ticket_code, order_item_id, ticket_product_id, holder_user_id,
+        sequence_no, status, latest_activation_at, fare_policy_version_id
+    )
+    SELECT oi.operator_id,
+           -- Full order-item UUID plus sequence is unique per ticket and stays under 80 chars.
+           'TKT-' || replace(oi.id::text, '-', '') || '-' || gs::text,
+           oi.id, oi.ticket_product_id, v_order.beneficiary_user_id,
+           gs, 'ISSUED',
+           CASE WHEN tp.latest_activation_interval IS NULL THEN NULL
+                ELSE clock_timestamp() + tp.latest_activation_interval END,
+           v_order.fare_policy_version_id
+    FROM metro.order_items oi
+    JOIN metro.ticket_products tp
+      ON tp.operator_id = oi.operator_id AND tp.id = oi.ticket_product_id
+    CROSS JOIN LATERAL generate_series(1, oi.passenger_count) AS gs
+    WHERE oi.operator_id = p_operator_id AND oi.order_id = v_order.id
+    ON CONFLICT (operator_id, order_item_id, sequence_no) DO NOTHING;
+
+    GET DIAGNOSTICS v_issued_count = ROW_COUNT;
+
+    -- Ticket is durable; the QR worker finalizes orders.ISSUED only when ready.
+
+    RETURN v_issued_count;
+END;
+$function$;
+
+
+REVOKE ALL ON FUNCTION metro.confirm_payment_and_issue_tickets(uuid,uuid,text,varchar,char,bigint,char,boolean) FROM PUBLIC;
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (11, '011_paid_ticket_issuance.sql', 'a36f9ab6a5608b0d561559ef123bfc72d71339826640f72d197d57fb6942c70d');
+END $migration_011$;
+
+-- 012_free_child_ticket_issuance.sql
+DO $migration_012$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 12) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 12
+                   AND name = '012_free_child_ticket_issuance.sql' AND checksum = 'c9fd06675b97899eef27e033810b8022b3eeeef23414941de29560250a97d114') THEN
+      RAISE EXCEPTION 'Migration 012 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 012 already applied';
+    RETURN;
+  END IF;
+
+-- BE-09: confirmed free child order, approved guardian and no fake payment.
+CREATE FUNCTION metro.eligible_guardian_ticket(p_operator uuid,p_order uuid)
+RETURNS TABLE(link_id uuid,ticket_id uuid,guardian_user_id text) LANGUAGE sql STABLE SET search_path=metro,public,pg_catalog AS $f$
+ SELECT g.id,t.id,g.guardian_user_id FROM metro.orders o
+ JOIN metro.order_items i ON i.operator_id=o.operator_id AND i.order_id=o.id
+ JOIN metro.guardian_links g ON g.operator_id=o.operator_id AND g.child_user_id=o.beneficiary_user_id
+ JOIN metro.tickets t ON t.operator_id=g.operator_id AND t.holder_user_id=g.guardian_user_id
+ JOIN metro.ticket_products p ON p.operator_id=t.operator_id AND p.id=t.ticket_product_id
+ WHERE o.operator_id=p_operator AND o.id=p_order AND g.status='ACTIVE' AND g.verification_type='GUARDIANSHIP' AND g.verified_at IS NOT NULL AND g.verified_by_user_id IS NOT NULL
+ AND (g.valid_from IS NULL OR g.valid_from<=o.service_date) AND (g.valid_to IS NULL OR g.valid_to>=o.service_date)
+ AND t.status IN ('ISSUED','ACTIVE','IN_USE') AND EXISTS(SELECT 1 FROM metro.orders paid WHERE paid.operator_id=t.operator_id AND paid.id=t.order_id AND paid.paid_at IS NOT NULL)
+ AND ((p.product_type='SINGLE_TRIP' AND t.service_date=o.service_date AND t.origin_station_id=i.origin_station_id AND t.destination_station_id=i.destination_station_id)
+ OR (p.product_type IN ('DAY','WEEK','MONTH') AND t.effective_from<(o.service_date+1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+ AND t.expires_at>o.service_date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'))
+ ORDER BY g.id,t.id
+$f$;
+CREATE OR REPLACE FUNCTION metro.issue_free_order(
+    p_operator_id uuid,
+    p_order_id uuid,
+    p_actor_user_id text,
+    p_reason text DEFAULT 'Free ticket confirmed'
+) RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, metro, public
+AS $function$
+DECLARE
+    v_order metro.orders%ROWTYPE;
+    v_issued integer;
+    v_locked_user text;
+BEGIN
+    SELECT beneficiary_user_id INTO v_locked_user FROM metro.orders WHERE operator_id=p_operator_id AND id=p_order_id;
+    PERFORM pg_advisory_xact_lock(hashtextextended(p_operator_id::text||':'||COALESCE(v_locked_user,''),0));
+    SELECT * INTO v_order
+    FROM metro.orders
+    WHERE operator_id = p_operator_id AND id = p_order_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'Order not found';
+    END IF;
+
+    IF v_order.beneficiary_user_id IS DISTINCT FROM v_locked_user THEN
+        RAISE EXCEPTION USING ERRCODE='40001',MESSAGE='ORDER_VERSION_CONFLICT';
+    END IF;
+
+    IF v_order.free_confirmed_at IS NOT NULL AND v_order.status IN ('PENDING_ISSUE','ISSUED') THEN
+        RETURN 0;
+    END IF;
+    IF v_order.status NOT IN ('DRAFT','HELD','PENDING_PAYMENT') THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0001',
+            MESSAGE = format('Order %s cannot be issued free from status %s', v_order.id, v_order.status);
+    END IF;
+    PERFORM metro.check_issuance_order(p_operator_id,p_order_id);
+    IF NOT EXISTS(SELECT 1 FROM metro.user_profiles u JOIN public."AspNetUsers" a ON a."Id"=u.user_id
+      JOIN metro.order_items i ON i.operator_id=p_operator_id AND i.order_id=p_order_id
+      JOIN metro.ticket_products p ON p.operator_id=i.operator_id AND p.id=i.ticket_product_id
+      WHERE u.user_id=v_order.beneficiary_user_id AND a."EmailConfirmed" AND u.status NOT IN ('LOCKED','DISABLED','CLOSED')
+      AND p.product_type='SINGLE_TRIP' AND u.birth_date<=v_order.service_date AND (u.birth_date+interval '6 years')::date>v_order.service_date) THEN
+      RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='CHILD_NOT_ELIGIBLE'; END IF;
+    IF NOT EXISTS(SELECT 1 FROM metro.eligible_guardian_ticket(p_operator_id,p_order_id) g
+       WHERE p_actor_user_id=g.guardian_user_id) THEN
+      RAISE EXCEPTION USING ERRCODE='28000',MESSAGE='GUARDIAN_REQUIRED'; END IF;
+    IF EXISTS(SELECT 1 FROM metro.payments WHERE operator_id=p_operator_id AND order_id=p_order_id) THEN
+      RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='FREE_ORDER_HAS_PAYMENT'; END IF;
+    IF v_order.total_minor <> 0
+       OR v_order.discount_minor <> v_order.subtotal_minor
+       OR v_order.subtotal_minor <= 0 THEN
+        RAISE EXCEPTION USING ERRCODE = '22023',
+            MESSAGE = 'Free issuance requires a fully discounted, zero-payable order';
+    END IF;
+    IF v_order.beneficiary_user_id IS NULL THEN
+        RAISE EXCEPTION USING ERRCODE = '23502', MESSAGE = 'Free order requires a beneficiary';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM metro.order_items oi
+        WHERE oi.operator_id = p_operator_id AND oi.order_id = p_order_id
+    ) THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'Free order has no order item';
+    END IF;
+    UPDATE metro.orders
+    SET status = 'PENDING_ISSUE',
+        free_confirmed_at = clock_timestamp(),
+        payment_started_at = NULL,
+        issued_at = NULL,
+        updated_at = clock_timestamp()
+    WHERE operator_id = p_operator_id AND id = p_order_id;
+
+    INSERT INTO metro.tickets (
+        operator_id, ticket_code, order_item_id, ticket_product_id, holder_user_id,
+        sequence_no, status, fare_policy_version_id
+    )
+    SELECT oi.operator_id,
+           'TKT-' || replace(oi.id::text, '-', '') || '-' || gs::text,
+           oi.id,
+           oi.ticket_product_id,
+           v_order.beneficiary_user_id,
+           gs,
+           'ISSUED',
+           v_order.fare_policy_version_id
+    FROM metro.order_items oi
+    CROSS JOIN LATERAL generate_series(1, oi.passenger_count) AS gs
+    WHERE oi.operator_id = p_operator_id AND oi.order_id = p_order_id
+    ON CONFLICT (operator_id, order_item_id, sequence_no) DO NOTHING;
+    GET DIAGNOSTICS v_issued = ROW_COUNT;
+
+    UPDATE metro.tickets t SET related_ticket_id=g.ticket_id,guardian_link_id=g.link_id,guardian_user_id=g.guardian_user_id,relation_type='CHILD_OF_GUARDIAN'
+    FROM (SELECT * FROM metro.eligible_guardian_ticket(p_operator_id,p_order_id)
+      WHERE guardian_user_id=p_actor_user_id ORDER BY link_id,ticket_id LIMIT 1) g
+    WHERE t.operator_id=p_operator_id AND t.order_id=p_order_id;
+    INSERT INTO metro.audit_logs (
+        operator_id, actor_user_id, action, entity_type, entity_id,
+        changed_fields, reason, outcome
+    ) VALUES (
+        p_operator_id, p_actor_user_id, 'ISSUE_FREE_ORDER', 'ORDER', p_order_id::text,
+        ARRAY['status','free_confirmed_at','issued_at'], p_reason, 'SUCCEEDED'
+    );
+
+    RETURN v_issued;
+END;
+$function$;
+
+
+REVOKE ALL ON FUNCTION metro.eligible_guardian_ticket(uuid,uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION metro.issue_free_order(uuid,uuid,text,text) FROM PUBLIC;
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (12, '012_free_child_ticket_issuance.sql', 'c9fd06675b97899eef27e033810b8022b3eeeef23414941de29560250a97d114');
+END $migration_012$;
+
 COMMIT;

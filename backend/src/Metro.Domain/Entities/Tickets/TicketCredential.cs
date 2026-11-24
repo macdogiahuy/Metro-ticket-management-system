@@ -13,6 +13,8 @@ public class TicketCredential : IOperatorScoped
     public string Status { get; set; } = "ACTIVE"; // ACTIVE, SUSPENDED, REVOKED, REPLACED, EXPIRED
     public DateTime IssuedAt { get; set; } = DateTime.UtcNow;
     public DateTime? RevokedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string? KeyId { get; set; }
     public Guid? ReplacedById { get; set; }
 
     public Ticket Ticket { get; set; } = null!;

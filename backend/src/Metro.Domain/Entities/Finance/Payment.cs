@@ -7,6 +7,7 @@ public sealed class Payment : IOperatorScoped
     public Guid Id { get; set; }
     public Guid OperatorId { get; set; }
     public Guid OrderId { get; set; }
+    public int? OrderVersion { get; set; }
     public string PaymentCode { get; set; } = null!;
     public string Provider { get; set; } = null!;
     public string? ProviderPaymentReference { get; set; }
