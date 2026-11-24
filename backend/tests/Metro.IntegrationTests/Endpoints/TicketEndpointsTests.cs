@@ -8,8 +8,10 @@ using Metro.Infrastructure.Persistence.Context;
 using Metro.Infrastructure.Ticketing;
 using Metro.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
@@ -85,12 +87,12 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
     private static Task<object?> Confirm(Network n, Guid payment, string? eventId = null, bool verified = true, string? payloadHash = null) =>
         Sql("SELECT metro.confirm_payment_and_issue_tickets(@op,@payment,@event,@key,@hash,10000::bigint,'VND'::char(3),@verified)",
             ("op", n.Op), ("payment", payment), ("event", eventId ?? payment.ToString()), ("key", payment.ToString()), ("hash", payloadHash ?? new string('a', 64)), ("verified", verified));
-    private async Task ProcessAsync(TicketQrCodec? codec = null)
+    private async Task ProcessAsync(Guid operatorId, TicketQrCodec? codec = null)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var processor = codec is null ? scope.ServiceProvider.GetRequiredService<TicketIssuanceProcessor>() :
             new TicketIssuanceProcessor(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), codec);
-        await processor.ProcessDueAsync(500);
+        await processor.ProcessDueAsync(500, operatorId: operatorId);
     }
     private static async Task<Guid> TicketId(Guid order) => (Guid)(await Sql("SELECT id FROM metro.tickets WHERE order_id=@id", ("id", order)))!;
     private static string Url(Network n, string path) => $"/api/v1/{path}?operatorCode={n.Code}";
@@ -122,7 +124,7 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
         Assert.Equal("PAID", await Sql("SELECT status FROM metro.orders WHERE id=@id", ("id", order)));
         var id = await TicketId(order);
         Assert.Equal(HttpStatusCode.Conflict, (await holder.Client.GetAsync(Url(n, $"tickets/{id}/qr"))).StatusCode);
-        await ProcessAsync();
+        await ProcessAsync(n.Op);
         var first = await holder.Client.GetAsync(Url(n, $"tickets/{id}/qr"));
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         Assert.Equal("image/png", first.Content.Headers.ContentType?.MediaType); Assert.True(first.Headers.CacheControl?.NoStore);
@@ -144,7 +146,7 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
     public async Task Future_single_has_no_QR_before_service_day()
     {
         using var holder = await AccountAsync(); var n = await NetworkAsync();
-        var order = await OrderAsync(n, holder.Id, day: Today.AddDays(1)); await Confirm(n, await PaymentAsync(n, order)); await ProcessAsync();
+        var order = await OrderAsync(n, holder.Id, day: Today.AddDays(1)); await Confirm(n, await PaymentAsync(n, order)); await ProcessAsync(n.Op);
         var id = await TicketId(order);
         Assert.Equal(HttpStatusCode.Conflict, (await holder.Client.GetAsync(Url(n, $"tickets/{id}/qr"))).StatusCode);
         Assert.Equal(0L, await Sql("SELECT count(*) FROM metro.ticket_credentials WHERE ticket_id=@id", ("id", id)));
@@ -154,7 +156,7 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
     public async Task Free_child_requires_guardian_and_no_payment_then_replays_without_duplication()
     {
         using var guardian = await AccountAsync(); using var child = await AccountAsync(Today.AddYears(-5)); using var stranger = await AccountAsync();
-        var n = await NetworkAsync(); var parentOrder = await OrderAsync(n, guardian.Id); await Confirm(n, await PaymentAsync(n, parentOrder)); await ProcessAsync();
+        var n = await NetworkAsync(); var parentOrder = await OrderAsync(n, guardian.Id); await Confirm(n, await PaymentAsync(n, parentOrder)); await ProcessAsync(n.Op);
         await GuardianAsync(n, guardian.Id, child.Id); var order = await OrderAsync(n, child.Id, guardian.Id, true);
         Assert.Equal(HttpStatusCode.Forbidden, (await stranger.Client.SendAsync(FreeRequest(n, order, "forbidden-key"))).StatusCode);
         Assert.Equal(HttpStatusCode.Accepted, (await guardian.Client.SendAsync(FreeRequest(n, order, "free-child-key"))).StatusCode);
@@ -162,7 +164,7 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
         Assert.Equal(0L, await Sql("SELECT count(*) FROM metro.payments WHERE order_id=@id", ("id", order)));
         Assert.Equal(1L, await Sql("SELECT count(*) FROM metro.tickets WHERE order_id=@id", ("id", order)));
         Assert.Equal(DBNull.Value, await Sql("SELECT paid_at FROM metro.orders WHERE id=@id", ("id", order)));
-        await ProcessAsync(); var id = await TicketId(order);
+        await ProcessAsync(n.Op); var id = await TicketId(order);
         Assert.Equal(HttpStatusCode.OK, (await guardian.Client.GetAsync(Url(n, $"tickets/{id}/qr"))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await child.Client.GetAsync(Url(n, $"tickets/{id}/qr"))).StatusCode);
         var other = await OrderAsync(n, child.Id, guardian.Id, true, Today.AddDays(1));
@@ -204,10 +206,10 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
     public async Task Missing_QR_key_retries_and_escalates_without_losing_paid_ticket()
     {
         using var holder = await AccountAsync(); var n = await NetworkAsync(); var order = await OrderAsync(n, holder.Id); await Confirm(n, await PaymentAsync(n, order));
-        var id = await TicketId(order); await ProcessAsync(new TicketQrCodec(Options.Create(new TicketQrOptions())));
+        var id = await TicketId(order); await ProcessAsync(n.Op, new TicketQrCodec(Options.Create(new TicketQrOptions())));
         Assert.Equal("QR_KEY_UNAVAILABLE", await Sql("SELECT last_error_code FROM metro.ticket_issuance_jobs WHERE ticket_id=@id", ("id", id)));
         await Sql("UPDATE metro.ticket_issuance_jobs SET first_failed_at=clock_timestamp()-interval '15 minutes',next_attempt_at=clock_timestamp() WHERE ticket_id=@id", ("id", id));
-        await ProcessAsync(new TicketQrCodec(Options.Create(new TicketQrOptions())));
+        await ProcessAsync(n.Op, new TicketQrCodec(Options.Create(new TicketQrOptions())));
         Assert.Equal("NEEDS_SUPPORT", await Sql("SELECT status FROM metro.ticket_issuance_jobs WHERE ticket_id=@id", ("id", id)));
         Assert.Equal(2L, await Sql("SELECT count(*) FROM metro.notifications WHERE notification_type='TICKET_NEEDS_SUPPORT' AND content_reference->>'ticketId'=@id", ("id", id.ToString())));
         Assert.Equal("PAID", await Sql("SELECT status FROM metro.orders WHERE id=@id", ("id", order)));
@@ -217,7 +219,7 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
     public async Task Consecutive_dates_are_allowed_but_expired_open_journey_blocks_new_right()
     {
         using var holder = await AccountAsync(); var n = await NetworkAsync();
-        var first = await OrderAsync(n, holder.Id); await Confirm(n, await PaymentAsync(n, first)); await ProcessAsync();
+        var first = await OrderAsync(n, holder.Id); await Confirm(n, await PaymentAsync(n, first)); await ProcessAsync(n.Op);
         var future = await OrderAsync(n, holder.Id, day: Today.AddDays(1)); await Confirm(n, await PaymentAsync(n, future));
         var id = await TicketId(first);
         await Sql("""
@@ -236,7 +238,7 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
     {
         using var holder = await AccountAsync(); var n = await NetworkAsync(); var order = await OrderAsync(n, holder.Id); var payment = await PaymentAsync(n, order);
         var results = await Task.WhenAll(Confirm(n, payment), Confirm(n, payment)); Assert.All(results, r => Assert.Equal(1, r));
-        await Task.WhenAll(ProcessAsync(), ProcessAsync()); var id = await TicketId(order);
+        await Task.WhenAll(ProcessAsync(n.Op), ProcessAsync(n.Op)); var id = await TicketId(order);
         Assert.Equal(1L, await Sql("SELECT count(*) FROM metro.tickets WHERE order_id=@id", ("id", order)));
         Assert.Equal(1L, await Sql("SELECT count(*) FROM metro.ticket_credentials WHERE ticket_id=@id AND status='ACTIVE'", ("id", id)));
     }
@@ -244,7 +246,7 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
     public async Task History_pagination_cross_operator_and_invalid_keys_are_protected()
     {
         using var holder = await AccountAsync(); var n = await NetworkAsync(); var other = await NetworkAsync();
-        var order = await OrderAsync(n, holder.Id); await Confirm(n, await PaymentAsync(n, order)); await ProcessAsync(); var id = await TicketId(order);
+        var order = await OrderAsync(n, holder.Id); await Confirm(n, await PaymentAsync(n, order)); await ProcessAsync(n.Op); var id = await TicketId(order);
         Assert.Equal(HttpStatusCode.NotFound, (await holder.Client.GetAsync(Url(other, $"tickets/{id}"))).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await holder.Client.GetAsync(Url(n, "tickets") + "&pageSize=101")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await holder.Client.GetAsync(Url(n, "orders") + "&fromDate=2026-12-02&toDate=2026-11-02")).StatusCode);
@@ -270,7 +272,7 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
         var parent = await OrderAsync(n, guardian.Id, day: Today.AddDays(1)); await Confirm(n, await PaymentAsync(n, parent));
         await GuardianAsync(n, guardian.Id, child.Id); var order = await OrderAsync(n, child.Id, guardian.Id, true, Today.AddDays(1));
         var replies = await Task.WhenAll(guardian.Client.SendAsync(FreeRequest(n, order, "future-child-001")), guardian.Client.SendAsync(FreeRequest(n, order, "future-child-001")));
-        Assert.All(replies, r => Assert.Equal(HttpStatusCode.Accepted, r.StatusCode)); await ProcessAsync();
+        Assert.All(replies, r => Assert.Equal(HttpStatusCode.Accepted, r.StatusCode)); await ProcessAsync(n.Op);
         var id = await TicketId(order);
         Assert.Equal(await TicketId(parent), await Sql("SELECT related_ticket_id FROM metro.tickets WHERE id=@id", ("id", id)));
         Assert.Equal(0L, await Sql("SELECT count(*) FROM metro.ticket_credentials WHERE ticket_id=@id", ("id", id)));
@@ -281,8 +283,8 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
     {
         using var holder = await AccountAsync(); var n = await NetworkAsync("DAY"); var order = await OrderAsync(n, holder.Id); await Confirm(n, await PaymentAsync(n, order));
         var id = await TicketId(order); var end = await Sql("SELECT expires_at FROM metro.tickets WHERE id=@id", ("id", id));
-        await ProcessAsync(new TicketQrCodec(Options.Create(new TicketQrOptions())));
-        await Sql("UPDATE metro.ticket_issuance_jobs SET next_attempt_at=clock_timestamp() WHERE ticket_id=@id", ("id", id)); await ProcessAsync();
+        await ProcessAsync(n.Op, new TicketQrCodec(Options.Create(new TicketQrOptions())));
+        await Sql("UPDATE metro.ticket_issuance_jobs SET next_attempt_at=clock_timestamp() WHERE ticket_id=@id", ("id", id)); await ProcessAsync(n.Op);
         Assert.Equal(end, await Sql("SELECT expires_at FROM metro.tickets WHERE id=@id", ("id", id)));
         Assert.Equal(HttpStatusCode.OK, (await holder.Client.GetAsync(Url(n, $"tickets/{id}/qr"))).StatusCode);
         await Sql("UPDATE metro.ticket_credentials SET token_hash=@hash WHERE ticket_id=@id", ("id", id), ("hash", new string('b', 64)));
@@ -300,7 +302,7 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
             var expected = TicketRules.Validity(product, null, new DateTimeOffset(paid)); var id = await TicketId(order);
             Assert.Equal(expected.Start, await Sql("SELECT effective_from FROM metro.tickets WHERE id=@id", ("id", id)));
             Assert.Equal(expected.EndExclusive, await Sql("SELECT expires_at FROM metro.tickets WHERE id=@id", ("id", id)));
-            await ProcessAsync(); Assert.Equal(HttpStatusCode.OK, (await holder.Client.GetAsync(Url(n, $"tickets/{id}/qr"))).StatusCode);
+            await ProcessAsync(n.Op); Assert.Equal(HttpStatusCode.OK, (await holder.Client.GetAsync(Url(n, $"tickets/{id}/qr"))).StatusCode);
         }
     }
     [PostgreSqlFact, Trait("Category", "PostgreSQL")]
@@ -309,7 +311,7 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
         using var holder = await AccountAsync(); var n = await NetworkAsync(); var order = await OrderAsync(n, holder.Id); var payment = await PaymentAsync(n, order);
         await Confirm(n, payment);
         Assert.Equal("23505", (await Assert.ThrowsAsync<PostgresException>(() => Confirm(n, payment, payloadHash: new string('c', 64)))).SqlState);
-        await ProcessAsync(); var id = await TicketId(order);
+        await ProcessAsync(n.Op); var id = await TicketId(order);
         await Sql("UPDATE metro.tickets SET effective_from=clock_timestamp()-interval '2 days',expires_at=clock_timestamp()-interval '1 day' WHERE id=@id", ("id", id));
         Assert.Equal(HttpStatusCode.Conflict, (await holder.Client.GetAsync(Url(n, $"tickets/{id}/qr"))).StatusCode);
         await Sql("UPDATE metro.tickets SET status='USED' WHERE id=@id", ("id", id));
@@ -319,14 +321,42 @@ public sealed class TicketEndpointsTests(MetroWebApplicationFactory factory)
     public async Task Corrected_child_birth_date_is_rechecked_before_creating_QR()
     {
         using var child = await AccountAsync(Today.AddYears(-5)); using var guardian = await AccountAsync(); var n = await NetworkAsync();
-        var parent = await OrderAsync(n, guardian.Id); await Confirm(n, await PaymentAsync(n, parent)); await ProcessAsync();
+        var parent = await OrderAsync(n, guardian.Id); await Confirm(n, await PaymentAsync(n, parent)); await ProcessAsync(n.Op);
         await GuardianAsync(n, guardian.Id, child.Id); var order = await OrderAsync(n, child.Id, guardian.Id, true);
         Assert.Equal(HttpStatusCode.Accepted, (await guardian.Client.SendAsync(FreeRequest(n, order, "corrected-birth-date"))).StatusCode);
         await Sql("UPDATE metro.user_profiles SET birth_date=@birth WHERE user_id=@user", ("birth", Today.AddYears(-6)), ("user", child.Id));
-        await ProcessAsync(); var id = await TicketId(order);
+        await ProcessAsync(n.Op); var id = await TicketId(order);
         Assert.Equal(0L, await Sql("SELECT count(*) FROM metro.ticket_credentials WHERE ticket_id=@id", ("id", id)));
         Assert.Equal("FREE_PAIR_NOT_READY", await Sql("SELECT last_error_code FROM metro.ticket_issuance_jobs WHERE ticket_id=@id", ("id", id)));
         Assert.Equal(HttpStatusCode.Conflict, (await child.Client.GetAsync(Url(n, $"tickets/{id}/qr"))).StatusCode);
+    }
+    [PostgreSqlFact, Trait("Category", "PostgreSQL")]
+    public async Task Pass_QR_remains_available_when_app_clock_lags_behind_database_clock()
+    {
+        using var laggedFactory = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<TimeProvider>();
+                services.AddSingleton<TimeProvider>(new LaggedTimeProvider(TimeSpan.FromSeconds(10)));
+            }));
+        foreach (var product in new[] { "DAY", "WEEK", "MONTH" })
+        {
+            using var holder = await AccountAsync();
+            using var laggedClient = laggedFactory.CreateClient();
+            laggedClient.DefaultRequestHeaders.Authorization = holder.Client.DefaultRequestHeaders.Authorization;
+            var n = await NetworkAsync(product);
+            var order = await OrderAsync(n, holder.Id);
+            await Confirm(n, await PaymentAsync(n, order));
+            await ProcessAsync(n.Op);
+            var id = await TicketId(order);
+            var response = await laggedClient.GetAsync(Url(n, $"tickets/{id}/qr"));
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("image/png", response.Content.Headers.ContentType?.MediaType);
+        }
+    }
+    private sealed class LaggedTimeProvider(TimeSpan lag) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UtcNow - lag;
     }
     private sealed record Network(Guid Op, string Code, Guid Product, Guid Fare, Guid A, Guid B);
     private sealed record Account(string Id, HttpClient Client) : IDisposable { public void Dispose() => Client.Dispose(); }
