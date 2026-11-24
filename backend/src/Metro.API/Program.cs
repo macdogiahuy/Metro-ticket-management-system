@@ -8,8 +8,10 @@ using Metro.Application;
 using Metro.Application.Abstractions.Auth;
 using Metro.Infrastructure;
 using Metro.Infrastructure.Payments;
+using Metro.Infrastructure.Identity;
 using Metro.Application.Abstractions.Payment;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -58,16 +60,20 @@ var jwtOptions = new JwtOptions
 builder.Services.AddSingleton(Options.Create(jwtOptions));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options => options.TokenValidationParameters = new TokenValidationParameters
+    .AddJwtBearer(options =>
     {
-        ValidateIssuer = true,
-        ValidIssuer = jwtOptions.Issuer,
-        ValidateAudience = true,
-        ValidAudience = jwtOptions.Audience,
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero,
+        options.EventsType = typeof(AccountAccess);
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwtOptions.Issuer,
+            ValidateAudience = true,
+            ValidAudience = jwtOptions.Audience,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero,
+        };
     });
 
 builder.Services.AddAuthorization(options =>
@@ -76,6 +82,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("StationStaff", policy => policy.RequireRole("StationStaff"));
     options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
 });
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AdministrationAuthorizationHandler>();
 
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddHttpClient<IPaymentGateway, MoMoPaymentGateway>(client =>
@@ -130,6 +137,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapAuthEndpoints();
 app.MapProfileEndpoints();
+app.MapAdministrationEndpoints();
 app.MapCatalogEndpoints();
 app.MapPaymentEndpoints();
 app.MapTicketEndpoints();

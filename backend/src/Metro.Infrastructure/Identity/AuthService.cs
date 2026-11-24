@@ -88,33 +88,42 @@ public sealed class AuthService(
 
     public async Task<TokenResult> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
-        var user = await users.FindByEmailAsync(request.Email.Trim().ToLowerInvariant());
-        if (user is null || !await users.CheckPasswordAsync(user, request.Password))
+        var email = request.Email.Trim().ToUpperInvariant();
+        var id = await db.Users.AsNoTracking().Where(x => x.NormalizedEmail == email).Select(x => x.Id).SingleOrDefaultAsync(cancellationToken);
+        if (id is null)
             throw new AuthException("INVALID_CREDENTIALS", StatusCodes.Status401Unauthorized, "Invalid email or password.");
-        if (!user.EmailConfirmed)
-            throw new AuthException("EMAIL_NOT_VERIFIED", StatusCodes.Status403Forbidden, "Email must be verified before login.");
-
-        return await IssueTokensAsync(user, cancellationToken);
+        return await WithAccountLockAsync(id, async () =>
+        {
+            var user = await users.FindByIdAsync(id);
+            if (user is null || !await users.CheckPasswordAsync(user, request.Password))
+                throw new AuthException("INVALID_CREDENTIALS", StatusCodes.Status401Unauthorized, "Invalid email or password.");
+            if (!user.EmailConfirmed)
+                throw new AuthException("EMAIL_NOT_VERIFIED", StatusCodes.Status403Forbidden, "Email must be verified before login.");
+            await RequireActiveAsync(user.Id, cancellationToken);
+            return await IssueTokensAsync(user, cancellationToken);
+        }, cancellationToken);
     }
 
     public async Task<TokenResult> RefreshAsync(RefreshRequest request, CancellationToken cancellationToken)
     {
         var hash = Hash(request.RefreshToken);
-        var now = DateTime.UtcNow;
-        var session = await db.AuthSessions
-            .FirstOrDefaultAsync(x => x.RefreshTokenHash == hash && x.RevokedAt == null && x.ExpiresAt > now, cancellationToken);
-        if (session is null)
+        var id = await db.AuthSessions.AsNoTracking().Where(x => x.RefreshTokenHash == hash)
+            .Select(x => x.UserId).SingleOrDefaultAsync(cancellationToken);
+        if (id is null)
             throw new AuthException("INVALID_REFRESH_TOKEN", StatusCodes.Status401Unauthorized, "Refresh token is invalid or expired.");
-
-        var user = await users.FindByIdAsync(session.UserId);
-        if (user is null)
-            throw new AuthException("INVALID_REFRESH_TOKEN", StatusCodes.Status401Unauthorized, "Refresh token is invalid or expired.");
-
-        session.RevokedAt = now;
-        session.RevocationReason = "ROTATED";
-        await db.SaveChangesAsync(cancellationToken);
-
-        return await IssueTokensAsync(user, cancellationToken);
+        return await WithAccountLockAsync(id, async () =>
+        {
+            var now = DateTime.UtcNow;
+            var session = await db.AuthSessions.SingleOrDefaultAsync(x => x.RefreshTokenHash == hash &&
+                x.RevokedAt == null && x.ExpiresAt > now, cancellationToken);
+            var user = await users.FindByIdAsync(id);
+            if (session is null || user is null || !user.EmailConfirmed)
+                throw new AuthException("INVALID_REFRESH_TOKEN", StatusCodes.Status401Unauthorized, "Refresh token is invalid or expired.");
+            await RequireActiveAsync(id, cancellationToken);
+            session.RevokedAt = now;
+            session.RevocationReason = "ROTATED";
+            return await IssueTokensAsync(user, cancellationToken);
+        }, cancellationToken);
     }
 
     public async Task LogoutAsync(LogoutRequest request, CancellationToken cancellationToken)
@@ -143,13 +152,14 @@ public sealed class AuthService(
         var now = DateTime.UtcNow;
         var refreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
-        db.AuthSessions.Add(new AuthSession
+        var session = new AuthSession
         {
             UserId = user.Id,
             RefreshTokenHash = Hash(refreshToken),
             IssuedAt = now,
             ExpiresAt = now.AddDays(Config.RefreshTokenDays),
-        });
+        };
+        db.AuthSessions.Add(session);
         await db.SaveChangesAsync(cancellationToken);
 
         var expires = now.AddMinutes(Config.AccessTokenMinutes);
@@ -157,6 +167,8 @@ public sealed class AuthService(
         {
             new(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub, user.Id),
             new(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
+            new("security_stamp", user.SecurityStamp ?? string.Empty),
+            new("session_id", session.Id.ToString()),
         };
         claims.AddRange((await users.GetRolesAsync(user)).Select(role => new System.Security.Claims.Claim(
             System.Security.Claims.ClaimTypes.Role, role)));
@@ -174,6 +186,24 @@ public sealed class AuthService(
         if (!await roles.RoleExistsAsync(name))
             await roles.CreateAsync(new IdentityRole(name));
     }
+
+    private async Task RequireActiveAsync(string userId, CancellationToken ct)
+    {
+        if (await db.UserProfiles.AnyAsync(x => x.UserId == userId &&
+            (x.Status == "LOCKED" || x.Status == "DISABLED" || x.Status == "CLOSED"), ct))
+            throw new AuthException("ACCOUNT_LOCKED", StatusCodes.Status403Forbidden, "This account is not active.");
+    }
+
+    private Task<TokenResult> WithAccountLockAsync(string userId, Func<Task<TokenResult>> action, CancellationToken ct)
+        => db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            db.ChangeTracker.Clear();
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({userId}, 4))", ct);
+            var result = await action();
+            await transaction.CommitAsync(ct);
+            return result;
+        });
 
     // SQL check requires ^[0-9a-f]{64}$ for code_hash and refresh_token_hash.
     private static string Hash(string value) =>

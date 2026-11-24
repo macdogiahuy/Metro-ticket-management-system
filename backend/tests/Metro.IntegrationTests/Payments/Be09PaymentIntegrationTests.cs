@@ -20,7 +20,7 @@ public sealed class Be09PaymentIntegrationTests(PaymentTestFactory factory)
     {
         using var client = factory.CreateClient();
         var seed = await SeedAsync(factory, membership: true);
-        client.DefaultRequestHeaders.Authorization = Bearer(seed.User);
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, seed.User);
         var created = await client.PostAsJsonAsync("/api/v1/payments", new { orderId = seed.Order, idempotencyKey = Guid.NewGuid().ToString() });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var payment = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
