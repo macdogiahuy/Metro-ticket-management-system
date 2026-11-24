@@ -82,7 +82,15 @@ public sealed class AuthService(
 
         challenge.ConsumedAt = now;
         user.EmailConfirmed = true;
-        await users.UpdateAsync(user);
+        var profile = await db.UserProfiles.SingleOrDefaultAsync(p => p.UserId == user.Id && p.Status == "PENDING", cancellationToken);
+        if (profile is not null)
+        {
+            profile.Status = "ACTIVE";
+            profile.UpdatedAt = now;
+        }
+        var saved = await users.UpdateAsync(user);
+        if (!saved.Succeeded)
+            throw new AuthException("VERIFICATION_STATE_CONFLICT", StatusCodes.Status409Conflict, "Account verification state changed.");
         await db.SaveChangesAsync(cancellationToken);
     }
 

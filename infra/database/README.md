@@ -25,6 +25,7 @@ Do not use the application login as the migration owner. Application roles shoul
 10. `migrations/010_ticket_issuance.sql`
 11. `migrations/011_paid_ticket_issuance.sql`
 12. `migrations/012_free_child_ticket_issuance.sql`
+13. `migrations/013_booking_requests.sql`
 
 `build_deploy.py` combines those sources into `deploy.sql`, wraps them in one transaction, verifies migration checksums, and serializes deployments with a PostgreSQL advisory lock. Edit only migration sources; never hand-edit `deploy.sql`.
 
@@ -36,6 +37,8 @@ psql -v ON_ERROR_STOP=1 -d metro_ticket -f infra/database/scripts/09_verify.sql
 ```
 
 BE-04 owns the already-deployed profile versions 007–009; BE-09 appends 010–012 without changing any 001–009 source/checksum.
+BE-07 appends 013: transactional booking idempotency, payment attempt numbers (maximum three per order),
+the stored Checkout URL used for replay, and the no-trip suggestion constraint. It preserves migrations 001–012.
 
 The deployment is repeatable. Reapplying an unchanged migration reports it as already applied. A checksum mismatch stops deployment and requires a new migration.
 
@@ -63,7 +66,7 @@ All workflow functions are `SECURITY DEFINER` with a pinned `search_path` and no
 
 ## Validation tests
 
-Current acceptance for migrations 010–012 uses real PostgreSQL through `backend/tests/Run-PostgresTests.ps1`. Deploy `deploy.sql`, run `scripts/09_verify.sql`, then follow [backend test setup](../../backend/tests/README.md). BE-09 tests cover paid/free SQL contracts, locking/races, current QR, eligibility, history and HTTP ownership. Never run fixtures against a shared DB.
+Current acceptance through migration 013 uses real PostgreSQL through `backend/tests/Run-PostgresTests.ps1`. Deploy `deploy.sql`, run `scripts/09_verify.sql`, then follow [backend test setup](../../backend/tests/README.md). BE-09 tests cover paid/free SQL contracts, locking/races, current QR, eligibility, history and HTTP ownership. BE-07 adds Booking/consent, immutable retry attempts, unresolved payment guards, free child Checkout and trip suggestion history. Never run fixtures against a shared DB.
 
 The standalone SQL files under `tests/` predate BE-09 migration 010 and preserve historical migration 005/006 expectations (group capacity issuance and orders immediately ISSUED). They are historical regression assets for those schema revisions, not the acceptance suite for the current Metro issuance contract. Do not run that old ordered fixture chain as validation of 010–012 or interpret its immediate-ISSUED assertions as current requirements.
 

@@ -11,6 +11,11 @@ public static class PaymentEndpoints
     public static IEndpointRouteBuilder MapPaymentEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1").WithTags("Payment");
+        group.AddEndpointFilter(async (context, next) =>
+        {
+            context.HttpContext.Response.Headers.CacheControl = "no-store, private";
+            return await next(context);
+        });
 
         group.MapPost("/payments", CreateAsync)
             .WithName("CreatePayment").RequireAuthorization()

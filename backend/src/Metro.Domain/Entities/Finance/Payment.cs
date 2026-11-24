@@ -20,6 +20,8 @@ public sealed class Payment : IOperatorScoped
     public DateTimeOffset? VerifiedAt { get; set; }
     public DateTimeOffset? SucceededAt { get; set; }
     public string? FailureCode { get; set; }
+    public int? AttemptNumber { get; set; }
+    public string? CheckoutUrl { get; set; }
     public PaymentReconciliationStatus ReconciliationStatus { get; set; } = PaymentReconciliationStatus.Unreconciled;
     public Guid CorrelationId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

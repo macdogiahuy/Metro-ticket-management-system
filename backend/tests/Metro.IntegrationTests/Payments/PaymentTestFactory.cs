@@ -29,6 +29,7 @@ public sealed class PaymentTestFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Audience", "metro-web");
         builder.UseSetting("Payment:WebhookSecret", StubPaymentGateway.Secret);
         builder.UseSetting("TicketQr:WorkerEnabled", "false");
+        builder.UseSetting("Booking:SuggestionsEnabled", "false");
         builder.UseSetting("TicketQr:ActiveKeyId", "payment-test-v1");
         builder.UseSetting("TicketQr:Keys:payment-test-v1", _qrKey);
         builder.ConfigureLogging(logging => logging.AddProvider(TestLogs));
