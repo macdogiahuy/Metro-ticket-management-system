@@ -6,6 +6,12 @@ tests at a shared or production database.
 
 ## Local acceptance run
 
+BE-14 operations coverage is in `OperationsRulesTests` and
+`OperationsEndpointsTests`: auth/operator boundaries, ETA/kg histories,
+idempotency/races, disruption publication/recovery, cache refresh, suggestion
+fallback and audit-failure rollback. The PostgreSQL acceptance schema includes
+migration 014; the runner counts Operations endpoint tests as PostgreSQL evidence.
+
 Create a disposable database whose name starts with `metro_test_`, apply the
 official SQL package, and export an Npgsql connection string:
 

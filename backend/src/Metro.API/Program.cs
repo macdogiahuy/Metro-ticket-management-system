@@ -146,6 +146,7 @@ app.MapAdminEligibilityPolicyEndpoints();
 app.MapPaymentEndpoints();
 app.MapTicketEndpoints();
 app.MapBookingEndpoints();
+app.MapOperationsEndpoints();
 app.MapHealthEndpoints();
 
 if (app.Environment.IsDevelopment())

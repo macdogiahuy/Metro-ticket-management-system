@@ -53,7 +53,7 @@ try {
             $totalPassed += [int]$counter.passed
         }
         foreach ($testResult in $result.GetElementsByTagName('UnitTestResult')) {
-            if ($testResult.testName -match '\.(PostgresLiveIntegrationTests|TicketingFinancePostgresTests|AuthEndpointsTests|CatalogEndpointsTests|ProfileEndpointsTests|BookingEndpointsTests|TicketEndpointsTests|PaymentEndpointsTests|PaymentOwnershipTests|Be09PaymentIntegrationTests|FareMappingPostgresTests|FareQuoteEndpointsTests|AdminProductEndpointsTests|AdminFareEndpointsTests|AdminEligibilityPolicyEndpointsTests)\.' -and
+            if ($testResult.testName -match '\.(PostgresLiveIntegrationTests|TicketingFinancePostgresTests|AuthEndpointsTests|CatalogEndpointsTests|ProfileEndpointsTests|BookingEndpointsTests|OperationsEndpointsTests|TicketEndpointsTests|PaymentEndpointsTests|PaymentOwnershipTests|Be09PaymentIntegrationTests|FareMappingPostgresTests|FareQuoteEndpointsTests|AdminProductEndpointsTests|AdminFareEndpointsTests|AdminEligibilityPolicyEndpointsTests)\.' -and
                 $testResult.outcome -eq 'Passed') {
                 $postgresPassed++
             }

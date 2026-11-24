@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<BookingPricing>();
         services.AddScoped<BookingPaymentGuard>();
         services.AddScoped<BookingService>();
+        services.AddScoped<Metro.Application.Abstractions.Operations.IOperationsService, Metro.Infrastructure.Operations.OperationsService>();
         services.AddScoped<BookingSuggestionProcessor>();
         services.AddHostedService<BookingSuggestionWorker>();
         services.AddSingleton<Metro.Infrastructure.Ticketing.TicketQrCodec>();

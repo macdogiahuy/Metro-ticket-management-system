@@ -73,6 +73,8 @@ public sealed class BookingSuggestionProcessor(ApplicationDbContext db, IOperato
     {
         scope.CurrentOperatorId = entry.OperatorId;
         await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // Share the service-change lock so an old suggestion cannot commit after a published closure.
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({entry.OperatorId.ToString()},14))", ct);
         var order = await bookings.LockAsync(entry.Id, ct);
         if (order.Status is not ("PAID" or "PENDING_ISSUE" or "ISSUED") ||
             (order.PaidAt ?? order.FreeConfirmedAt) is not { } confirmedAt ||
@@ -90,6 +92,7 @@ public sealed class BookingSuggestionProcessor(ApplicationDbContext db, IOperato
         if (version?.OriginStationId is not { } origin || version.DestinationStationId is not { } destination) return;
         var price = JsonSerializer.Deserialize<CheckoutPrice>(version.FareSnapshot);
         if (price?.FirstLineId is not { } line || price.FirstDirection is not { } direction || price.FirstLegEnd is not { } legEnd) return;
+        var routeIsServing = await RouteIsServingAsync(price.Route, ct);
 
         var start = day > today ? TicketRules.Midnight(day) : now.UtcDateTime;
         if (confirmedAt > start) start = confirmedAt;
@@ -120,7 +123,7 @@ public sealed class BookingSuggestionProcessor(ApplicationDbContext db, IOperato
                         WHERE later.operator_id=a.operator_id AND later.actual_trip_id=a.id
                           AND later.sequence_no>actual.sequence_no AND later.actual_arrival_at<={now})) IS TRUE AS current_boarding
             ) boarding
-            WHERE p.operator_id={op} AND p.service_date={day} AND p.line_id={line} AND p.direction={direction}
+            WHERE {routeIsServing} AND p.operator_id={op} AND p.service_date={day} AND p.line_id={line} AND p.direction={direction}
               AND s.status='PUBLISHED' AND s.effective_from<{serviceEnd} AND (s.effective_to IS NULL OR s.effective_to>{start})
               AND cal.status='PUBLISHED' AND cal.effective_from<={day} AND (cal.effective_to IS NULL OR cal.effective_to>={day})
               AND l.status='ACTIVE' AND origin.status='ACTIVE' AND destination.status='ACTIVE'
@@ -130,6 +133,9 @@ public sealed class BookingSuggestionProcessor(ApplicationDbContext db, IOperato
               AND actual.actual_departure_at IS NULL
               AND (p.status<>'DELAYED' AND a.status IS DISTINCT FROM 'DELAYED' OR
                    eta.expected_departure_at IS NOT NULL OR boarding.current_boarding)
+              AND (NOT EXISTS(SELECT 1 FROM metro.service_disruptions d WHERE d.operator_id=p.operator_id
+                   AND d.line_id=p.line_id AND d.status='PUBLISHED' AND d.effect='DELAYED')
+                   OR eta.expected_departure_at IS NOT NULL OR boarding.current_boarding)
               AND (COALESCE(eta.expected_departure_at, stop.planned_departure_at)>={start} OR boarding.current_boarding)
               AND COALESCE(actual.actual_departure_at, eta.expected_departure_at, stop.planned_departure_at)<{serviceEnd}
               AND stop.planned_departure_at>=s.effective_from AND (s.effective_to IS NULL OR stop.planned_departure_at<s.effective_to)
@@ -165,4 +171,24 @@ public sealed class BookingSuggestionProcessor(ApplicationDbContext db, IOperato
 
     private sealed record DueOrder(Guid Id, Guid OperatorId);
     private sealed record TripCandidate(Guid TripId, Guid ScheduleId, string ScheduleCode, DateTimeOffset Departure, bool HasUpdate, bool IsBoarding);
+
+    private async Task<bool> RouteIsServingAsync(string? route, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(route)) return false;
+        var lines = new HashSet<Guid>();
+        var stations = new HashSet<Guid>();
+        foreach (var leg in route.Split('|'))
+        {
+            var parts = leg.Split(':');
+            if (parts.Length != 3 || !Guid.TryParse(parts[0], out var line)) return false;
+            lines.Add(line);
+            foreach (var value in parts[2].Split(','))
+            {
+                if (!Guid.TryParse(value, out var station)) return false;
+                stations.Add(station);
+            }
+        }
+        return await db.Lines.CountAsync(l => lines.Contains(l.Id) && l.Status == "ACTIVE", ct) == lines.Count &&
+               await db.Stations.CountAsync(s => stations.Contains(s.Id) && s.Status == "ACTIVE", ct) == stations.Count;
+    }
 }

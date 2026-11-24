@@ -4,6 +4,8 @@ Production-oriented PostgreSQL 17 schema for the Metro ticket management system.
 
 ## Prerequisites
 
+BE-14 adds migration **014** for atomic service-operation replay records, disruption lifecycle and operator cache revisions. Apply the generated package and run `scripts/09_verify.sql` on a dedicated test database before enabling these API routes. See [BE-14 handover](../../docs/handover/BE-14-SERVICE-OPERATIONS.md) for contracts and deployment notes; migrations 001–013 remain immutable.
+
 - PostgreSQL 17 or later with UTF-8 server encoding.
 - A deployment role that can create the `btree_gist` extension and the `metro` schema.
 - Python 3 to rebuild `deploy.sql`.

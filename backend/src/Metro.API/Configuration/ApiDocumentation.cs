@@ -35,6 +35,7 @@ public static class ApiDocumentation
         options.OperationFilter<EndpointAuthorizationOperationFilter>();
         options.OperationFilter<TicketOpenApiFilter>();
         options.OperationFilter<BookingOpenApiFilter>();
+        options.OperationFilter<OperationsOpenApiFilter>();
 
         var xmlFile = $"{typeof(ApiDocumentation).Assembly.GetName().Name}.xml";
         var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
