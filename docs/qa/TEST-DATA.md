@@ -28,7 +28,20 @@ Email dạng `qa.<run>.<alias>@example.invalid`, mật khẩu hợp lệ 15–64
 | F1 | Giá VND theo BR-017: lượt 5.000 đoạn đầu +1.000 mỗi đoạn thêm; ngày 30.000; tuần 150.000; tháng 500.000; round 0,5 lên đồng |
 | F2 | Bản giá mới có thời điểm hiệu lực khác, dùng để đổi giá giữa Checkout và lần PaymentStart tiếp theo; không sửa snapshot giao dịch đã trả |
 
-Oracle: A→B 1 đoạn = **5.000**; A→B→C→F 3 đoạn = **7.000**, HS/SV **6.300**, cao tuổi đủ điều kiện **5.600**. A→G 4 đoạn = **8.000**, 12 phút chạy +5 phút chuyển = **17 phút**. Ngày/tuần/tháng cao tuổi = **24.000/120.000/400.000**. Cùng đủ hai nhóm chỉ chọn một, không cộng dồn; test round bằng cấu hình giá hợp lệ tạo phần lẻ, ví dụ 5.005 ×90% =4.504,5 → **4.505**.
+Oracle: A→B 1 đoạn = **5.000**; A→B→C→F 3 đoạn = **7.000**, HS/SV **6.300**, cao tuổi đủ điều kiện **5.600**. A→G 4 đoạn = **8.000**, 12 phút chạy +5 phút chuyển = **17 phút**. Ngày/tuần/tháng cao tuổi = **24.000/120.000/400.000**. Cùng đủ hai nhóm chỉ chọn một, không cộng dồn.
+
+BR-017 yêu cầu làm tròn đến đồng với 0,5 lên. Để kiểm regression contract `dev` hiện tại, [FareCalculator](../../backend/src/Metro.Application/Fare/FareCalculator.cs) làm tròn **khoản giảm** trước, rồi trừ khỏi giá gốc: 5.005 giảm 10% → giảm 501, trả **4.504**; 5.555 giảm 10% → giảm 556, trả **4.999**. Không dùng oracle làm tròn trực tiếp giá sau giảm của bản QA trước; hai phép tính có thể lệch 1 đồng. Khi thay đổi quy ước nghiệp vụ phải xác nhận lại contract và oracle, không tự đổi kết quả test.
+
+### Fixture bổ sung cho API từ dev
+
+| Alias | Chuẩn bị và cách đối chiếu |
+| --- | --- |
+| MAKER/CHECKER | A1 tạo DRAFT, A2 duyệt/công bố; cả hai thuộc OP1. Thử A1 tự duyệt và publish trước APPROVED |
+| MATRIX-NULL | Dòng giá cùng product/channel/group, line/origin/destination đều null; thêm lần hai để kiểm khóa trùng NULL-safe; bản sao có OD riêng và `sellable=false` |
+| IDEM | Header `Idempotency-Key` riêng theo run; giữ cùng actor/method/path/body để replay; đổi body với cùng key để kiểm conflict. Test key rỗng, 128 và 129 ký tự độc lập |
+| QUOTE | G dùng báo giá tham khảo; P1 có/không hồ sơ đã duyệt để kiểm `isReferenceQuote`, `verificationRequired`, `fallbackToOrdinary`, `appliedEligibilityGroup` |
+
+Fixture F1 không có OD override để oracle A→B=5.000 giữ nguyên. Với biến thể override, seed bản riêng có OD A→B=9.000 và kiểm `pricingSource=FARE_MATRIX_OD`; không vô tình dùng fixture override cho ca công thức đoạn.
 
 ## 3 Thời gian và vé
 

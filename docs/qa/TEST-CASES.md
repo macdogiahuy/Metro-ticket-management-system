@@ -2,6 +2,8 @@
 
 Baseline: SRS v1.2, ngày soạn 24/11/2026. Mỗi UC dưới đây tham chiếu nhóm **FR-xx** và **AC-UCxx** cùng số trong SRS; các AC-X/N/A bổ sung được ghi ở từng nhóm. Dữ liệu alias và oracle nằm trong [TEST-DATA](TEST-DATA.md), quy tắc nghiệm thu trong [TEST-PLAN](TEST-PLAN.md).
 
+Contract đối chiếu: `origin/dev` **e8243d4**. Các biến thể mới ở mục 8 giữ ID case cha; [AUTOMATION-MAPPING](AUTOMATION-MAPPING.md) chỉ rõ class/method có thể tái sử dụng và phần chưa được thực thi.
+
 ## 1 Quy ước chạy
 
 - Mọi case trong tài liệu có trạng thái ban đầu **Not Run**, chưa có Actual/Evidence. Khi chạy, thêm kết quả vào bảng execution ở mục 7; không đổi expected để hợp thức hóa lỗi.
@@ -140,7 +142,7 @@ FR-09, AC-UC09; BR-002/017/019/071; AC-X04/33.
 | TC-UC09-01 | P1 / + | F1; P1/G | Báo giá 1/3/4 đoạn và ngày/tuần/tháng | 5.000/7.000/8.000 và 30.000/150.000/500.000 VND; giá có nguồn/version; chưa tạo payment/vé |
 | TC-UC09-02 | P1 / B | ST/SR60 VERIFIED; 3 đoạn; từng vé định kỳ | Chọn từng nhóm ưu đãi rồi thử cộng dồn | 6.300 HS/SV hoặc 5.600 cao tuổi; định kỳ 20% là 24.000/120.000/400.000; không cộng dồn |
 | TC-UC09-03 | P1 / − | Thiếu giá/giá hết hiệu lực; loại 3 ngày; hồ sơ hết hạn | Tra và thử sửa giá/discount từ client | Thiếu cấu hình báo rõ; không có vé 3 ngày; backend tính giá, không tin tiền/nhóm giảm trái phép |
-| TC-UC09-04 | P1 / B | F1 bản sao giá 5.005, ST giảm 10% | Báo giá rồi Checkout | 4.504,5 làm lên 4.505 đồng; báo giá và tổng backend thống nhất, không phí/thuế tự phát |
+| TC-UC09-04 | P1 / B | F1 bản sao giá 5.005/5.555, ST giảm 10% | Báo giá rồi Checkout; lưu riêng khoản giảm và tổng | Theo contract FareCalculator hiện hành: giảm 501/556, trả 4.504/4.999; làm tròn khoản giảm 0,5 lên trước khi trừ; API/Checkout thống nhất, không phí/thuế tự phát |
 
 ### UC10 Tình trạng dịch vụ
 
@@ -424,3 +426,21 @@ Thay đổi scope được ghi nhận / người quyết định (nếu có):
 Trạng thái: **Not Run** chưa chạy; **Pass** expected khớp và có evidence; **Fail** actual sai khi điều kiện vào đủ; **Blocked** thiếu điều kiện/fixture/phụ thuộc, ghi owner và lý do. Nếu công cụ có Skipped thì không tính Pass, giải thích scope trước khi tính mẫu số. Với ca có điều kiện, ghi điều kiện áp dụng hay quyết định loại khỏi run; thiếu implementation của Must vẫn Blocked.
 
 Evidence tối thiểu: request/response đã che, expected/actual, ID fixture/correlation và persisted state liên quan; UI có ảnh/video theo ca; race có thời điểm cả hai request và counts trước/sau; NFR có môi trường, phương pháp, số mẫu và số đo. Lỗi liên kết [mẫu bug](BUG-REPORT-TEMPLATE.md), retest ghi build mới và regression liên quan.
+
+## 8 Biến thể API sau đồng bộ dev
+
+Đây là các lượt con của case đã có, không phải các case cha mới. Mỗi hàng cần kết quả riêng; có class test tương ứng không đồng nghĩa biến thể đã Pass. Các ràng buộc lifecycle/idempotency dưới đây lấy từ contract endpoint/filter hiện hành; SRS vẫn quyết định giá và quyền nghiệp vụ.
+
+| Case và biến thể | Endpoint / dữ liệu | Bước chạy | Expected |
+| --- | --- | --- | --- |
+| TC-UC09-01/v-reference | GET `/api/v1/fares/quote`; QUOTE, productCode hoặc ticketProductId, operatorCode | G báo giá thường rồi STUDENT; P1 chưa/đã duyệt báo giá ELDERLY | G được báo giá tham khảo, `isReferenceQuote=true`; ưu đãi tham khảo có `verificationRequired=true`, không cấp quyền giảm tại Checkout; P1 chưa đủ điều kiện fallback thường, đã duyệt đủ tuổi được giảm 20% |
+| TC-UC09-03/v-matrix | GET `/api/v1/fares/quote`; fixture OD riêng và dòng không bán | Tra A→B=9.000 theo OD; thử dòng `sellable=false`, thiếu journey, ga trùng và product lạ | OD ưu tiên đúng fixture, không cộng giảm lần hai; không bán bị chặn. Lỗi tương ứng theo contract: `FARE_NOT_SELLABLE`, `JOURNEY_REQUIRED_FOR_SINGLE_TRIP`, `SAME_STATION`, `PRODUCT_NOT_FOUND`; không gây thu tiền |
+| TC-UC25-01/v-product | GET/POST `/api/v1/admin/products`, PUT `/api/v1/admin/products/{id}` | A1 tạo sản phẩm hợp lệ rồi SUSPENDED; xem history/audit và giao dịch cũ | 201 khi tạo, 200 khi sửa; không xóa vật lý sản phẩm có lịch sử; audit CREATE/UPDATE có hash trước/sau, không PII; sản phẩm ngừng không dùng để mua mới |
+| TC-UC25-01/v-fare-lifecycle | POST `/api/v1/admin/fares`, `/{id}/entries`, `/{id}/approve`, `/{id}/publish`; MAKER/CHECKER | A1 tạo DRAFT và dòng giá; A2 approve rồi publish; đọc list/detail | Version được quản lý theo scope, chuyển DRAFT→APPROVED→PUBLISHED; có actor/time/reason/audit; quote mới chọn version đúng khoảng hiệu lực |
+| TC-UC25-02/v-fare-guards | `/api/v1/admin/fares/{id}` và các mutation liên quan; MATRIX-NULL | A1 tự approve; approve bản rỗng; publish khi chưa duyệt; thêm dòng null trùng; thêm/xóa entries sau approve/publish; publish khoảng chồng | Các thao tác không hợp lệ bị chặn, không đổi bản đã công bố; maker-checker và overlap trả 409 theo contract, approve rỗng 422; không mất lịch sử |
+| TC-UC25-01/v-policy-lifecycle | GET/POST `/api/v1/admin/eligibility-policies`, `/{id}/approve`, `/{id}/publish` | A1 tạo chính sách nhóm hợp lệ, A2 duyệt/công bố; xem metadata/audit | DRAFT→APPROVED→PUBLISHED, có version và audit; mức giảm nghiệm thu theo SRS STUDENT 10%, ELDERLY 20%, không cộng dồn |
+| TC-UC25-02/v-policy-guards | `/api/v1/admin/eligibility-policies`; MAKER/CHECKER | Thử nhóm lạ, phần trăm âm/>100, trẻ gán vé định kỳ; tự approve; publish trước approve | Từ chối validation/chuyển trạng thái sai; không có policy mới hiệu lực. CHILD chỉ FREE/SINGLE_TRIP; thao tác quản trị policy không thay UI mua hộ/giám hộ UC39/40 |
+| TC-UC25-04/v-idempotency | Các POST/PUT/DELETE UC25 có filter; IDEM | Replay cùng key/body; đổi body cùng key; dùng key rỗng/128/129 ký tự; hai client cùng key | Replay cùng nội dung trả cùng status/body, `X-Idempotency-Replayed=true`, không thêm entity/audit; payload khác 409 `IDEMPOTENCY_KEY_CONFLICT`; key rỗng/>128 trả 400 `INVALID_IDEMPOTENCY_KEY`; 128 hợp lệ. Vẫn kiểm quyền và operator cho mỗi request |
+| TC-UC13-04/v-db-clock | GET QR vé DAY/WEEK/MONTH; app clock chậm hơn DB 10 giây | Verified payment và worker dùng thời gian DB; lấy QR bằng app clock chậm | QR đã phát hành trong cửa sổ hiệu lực DB vẫn tải được; không bị 409 chỉ vì lệch app clock; không mở QR tương lai sớm |
+
+Idempotency phải kiểm đủ actor/operator, query và multi-instance nếu triển khai có nhiều instance; test trong một process không chứng minh chống replay/race toàn hệ thống. Ghi phạm vi môi trường thực tế vào run.

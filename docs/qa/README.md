@@ -9,12 +9,15 @@ Ma trận gồm **123 ca theo UC**, **9 ca phi chức năng** và **6 luồng sm
 | [Test plan](TEST-PLAN.md) | Phạm vi, chiến lược, môi trường, lịch, điều kiện vào và ra |
 | [Dữ liệu kiểm thử](TEST-DATA.md) | Tài khoản, mạng tuyến, giá, thời gian và trạng thái cần chuẩn bị |
 | [Ma trận và test case](TEST-CASES.md) | Truy vết từng UC tới ca kiểm thử có bước chạy và kết quả mong đợi |
+| [Ánh xạ automation](AUTOMATION-MAPPING.md) | Đối chiếu case với class/method hiện có, contract API mới từ dev và kết quả kiểm tra đồng bộ |
 | [Mẫu bug report](BUG-REPORT-TEMPLATE.md) | Ghi lỗi, phân loại severity/priority, retest và đóng lỗi |
 | [GitHub issue form](../../.github/ISSUE_TEMPLATE/bug_report.yml) | Form tạo bug trên GitHub sau khi thay đổi được tích hợp |
 
 Task: [QA-01 issue 22](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/22). Owner: **My (M05)**; reviewer chéo: **Tiên (M06)**; duyệt theo quy trình nhóm: **Huy (M01)**. Ngày soạn: **24/11/2026**, múi giờ nghiệp vụ UTC+7.
 
 QA-01 bàn giao **thiết kế kiểm thử**. Các ca bắt đầu ở `Not Run`; tài liệu này không chứng minh phần mềm đã pass. QA-02 triển khai API regression, QA-03 chạy E2E/UAT và thu bằng chứng. Trạng thái task trên board chỉ cập nhật qua Excel nguồn và quy trình review của nhóm, không suy ra Done từ việc có tài liệu.
+
+Đã đồng bộ nhánh QA-01 với `origin/dev` tại **e8243d4** ngày 24/11/2026. Các biến thể API UC09/UC25 được bổ sung theo contract vừa tích hợp; giữ nguyên 123 case cha để kết quả cũ tiếp tục truy vết được.
 
 ## Bắt đầu một lượt chạy
 

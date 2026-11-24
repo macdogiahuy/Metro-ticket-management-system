@@ -13,6 +13,8 @@ QA-01 thiết kế kiểm thử để nhóm xác nhận luồng tài khoản, mu
 | Quy tắc giải quyết khác biệt | SRS v1.2 thắng UC v1.6, demo script và mô tả ngắn trên board; thay đổi phạm vi phải được M01 ghi nhận |
 | Deliverable | Kế hoạch này, TEST-DATA, TEST-CASES, mẫu bug và GitHub issue form |
 
+Bản rà soát ngày 24/11/2026 đã đồng bộ `origin/dev` tại **e8243d4**. API UC09 và quản trị UC25 đã có contract/class test trong repo; xem [ánh xạ automation](AUTOMATION-MAPPING.md). Ma trận giữ 123 case UC và bổ sung các biến thể có route cụ thể; kết quả unit/API/UI được ghi riêng, không quy đổi số unit test thành số case QA đã đạt.
+
 Không dùng tiêu chí quota/hold theo đoạn của SRS v1.1. UC36 có **gợi ý chuyến, không giữ chỗ**; gate kiểm chuyến thực, ga, chiều và tải kg nhập tay. UC18 gồm tra cứu/cấp lại QR; UC19 là hỗ trợ **mua vé**, gồm Administrator thao tác tại quầy có xác nhận khách. Các mô tả rút gọn của BE-11/FE-06 hoặc demo script không thay nghĩa UC này. Notice là UC31; UC29 quản lý lịch và hoạt động tàu.
 
 ## 2 Phạm vi
