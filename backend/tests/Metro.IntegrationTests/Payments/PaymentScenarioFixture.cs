@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Metro.Application.Abstractions.MultiTenancy;
 using Metro.Domain.Entities.Identity;
@@ -8,15 +9,29 @@ using Metro.Domain.Entities.Orders;
 using Metro.Infrastructure.Persistence.Context;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 namespace Metro.IntegrationTests.Payments;
 
 internal static class PaymentScenarioFixture
 {
-    internal static AuthenticationHeaderValue Bearer(string user)
+    internal static async Task<AuthenticationHeaderValue> BearerAsync(WebApplicationFactory<Program> app, string userId)
     {
-        var token = new JwtSecurityToken("metro-api", "metro-web", new[] { new Claim(JwtRegisteredClaimNames.Sub, user) },
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var user = await db.Users.SingleAsync(x => x.Id == userId);
+        var session = new AuthSession
+        {
+            UserId = userId,
+            RefreshTokenHash = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32)),
+            ExpiresAt = DateTime.UtcNow.AddHours(1),
+        };
+        db.AuthSessions.Add(session);
+        await db.SaveChangesAsync();
+        var token = new JwtSecurityToken("metro-api", "metro-web",
+            new[] { new Claim(JwtRegisteredClaimNames.Sub, userId), new Claim("security_stamp", user.SecurityStamp!),
+                new Claim("session_id", session.Id.ToString()) },
             DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddHours(1),
             new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(PaymentTestFactory.SigningKey)), SecurityAlgorithms.HmacSha256));
         return new("Bearer", new JwtSecurityTokenHandler().WriteToken(token));

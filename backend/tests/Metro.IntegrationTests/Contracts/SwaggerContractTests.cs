@@ -68,4 +68,22 @@ public sealed class SwaggerContractTests(MetroWebApplicationFactory factory)
         Assert.DoesNotContain("citizenIdCiphertext", profile.Properties.Keys);
         Assert.DoesNotContain("bankAccountCiphertext", profile.Properties.Keys);
     }
+
+    [PostgreSqlFact]
+    public void OpenApi_exposes_admin_contracts_without_private_document_or_identity_fields()
+    {
+        var swagger = factory.Services.GetRequiredService<ISwaggerProvider>().GetSwagger("v1");
+        foreach (var path in new[] { "/api/v1/admin/accounts", "/api/v1/admin/roles",
+            "/api/v1/admin/accounts/{userId}/roles", "/api/v1/admin/accounts/{userId}/status", "/api/v1/admin/passengers/{userId}" })
+        {
+            Assert.Contains(path, swagger.Paths.Keys);
+            Assert.All(swagger.Paths[path].Operations.Values, operation => Assert.NotEmpty(operation.Security));
+        }
+        var details = swagger.Components.Schemas["PassengerDetails"];
+        Assert.Contains("citizenId", details.Properties.Keys);
+        Assert.DoesNotContain("citizenIdCiphertext", details.Properties.Keys);
+        Assert.DoesNotContain("bankAccountCiphertext", details.Properties.Keys);
+        var eligibility = swagger.Components.Schemas["PassengerEligibility"];
+        Assert.DoesNotContain("evidenceObjectKey", eligibility.Properties.Keys);
+    }
 }

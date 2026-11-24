@@ -39,6 +39,8 @@ public static class DependencyInjection
             .AddEntityFrameworkStores<ApplicationDbContext>();
 
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAdministrationService, AdministrationService>();
+        services.AddScoped<AccountAccess>();
         services.Configure<Metro.Infrastructure.Ticketing.TicketQrOptions>(configuration.GetSection("TicketQr"));
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddSingleton<Metro.Infrastructure.Ticketing.TicketQrCodec>();
