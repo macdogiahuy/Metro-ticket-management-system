@@ -1127,6 +1127,7 @@ third-party dependency licenses.
 
 ## 23. Useful Documentation
 
+-   QA-01 test plan, UC test matrix and bug report template: [docs/qa](docs/qa/README.md).
 -   React: https://react.dev/
 -   TypeScript: https://www.typescriptlang.org/docs/
 -   Vite: https://vite.dev/guide/
