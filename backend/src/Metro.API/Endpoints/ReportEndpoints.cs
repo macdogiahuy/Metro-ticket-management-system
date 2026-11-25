@@ -12,6 +12,7 @@ public static class ReportEndpoints
 
         group.MapGet("/revenue", GetRevenueAsync)
             .WithName("GetRevenueReport")
+            .WithDescription("Admin only; from/to are inclusive Asia/Ho_Chi_Minh dates (maximum 31). Collections use payment succeeded_at and statuses SUCCEEDED, PARTIALLY_REFUNDED, REFUNDED; reconciliation status does not exclude a successful payment. Valid value is min(payment amount, frozen order version total); excess is the positive difference. Successful refunds use refund succeeded_at. Pending refunds are requests created in the date range that currently have an unresolved request status, not an end-of-period historical balance. Net cashflow equals collected minus successful refunds. lineId uses the last suggestion computed at or before payment success; ticketProductId uses the frozen order version. paymentStatus filters collections, not refund events.")
             .Produces<RevenueReportResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status403Forbidden);
@@ -24,6 +25,7 @@ public static class ReportEndpoints
 
         group.MapGet("/revenue/export", ExportRevenueAsync)
             .WithName("ExportRevenueReportCsv")
+            .WithDescription("Exports the same daily revenue rows and filters as the revenue endpoint. A non-sensitive purpose is required for audit. The output is limited to 10,000 grouped rows and date ranges to 31 inclusive days.")
             .Produces(StatusCodes.Status200OK, contentType: "text/csv")
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -33,15 +35,15 @@ public static class ReportEndpoints
     }
 
     /// <summary>Returns revenue from confirmed collection and refund events in UTC+7 business dates.</summary>
-    private static async Task<IResult> GetRevenueAsync(ReportQuery query, IReportService reports, ClaimsPrincipal principal, CancellationToken cancellationToken) =>
+    private static async Task<IResult> GetRevenueAsync([AsParameters] ReportQuery query, IReportService reports, ClaimsPrincipal principal, CancellationToken cancellationToken) =>
         Results.Ok(await reports.GetRevenueAsync(query, UserId(principal), cancellationToken));
 
     /// <summary>Returns ticket issuance status from the durable BE-09 issuance-job queue.</summary>
-    private static async Task<IResult> GetTicketsAsync(ReportQuery query, IReportService reports, ClaimsPrincipal principal, CancellationToken cancellationToken) =>
+    private static async Task<IResult> GetTicketsAsync([AsParameters] ReportQuery query, IReportService reports, ClaimsPrincipal principal, CancellationToken cancellationToken) =>
         Results.Ok(await reports.GetTicketsAsync(query, UserId(principal), cancellationToken));
 
     /// <summary>Exports grouped revenue rows as UTF-8 CSV. A non-sensitive business purpose is required for audit.</summary>
-    private static async Task<IResult> ExportRevenueAsync(ReportQuery query, IReportService reports, ClaimsPrincipal principal, CancellationToken cancellationToken)
+    private static async Task<IResult> ExportRevenueAsync([AsParameters] ReportQuery query, IReportService reports, ClaimsPrincipal principal, CancellationToken cancellationToken)
     {
         var export = await reports.ExportRevenueCsvAsync(query, UserId(principal), cancellationToken);
         return Results.File(export.Content, "text/csv; charset=utf-8", export.FileName);

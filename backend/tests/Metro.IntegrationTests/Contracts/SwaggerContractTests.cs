@@ -9,6 +9,33 @@ namespace Metro.IntegrationTests.Contracts;
 public sealed class SwaggerContractTests(MetroWebApplicationFactory factory)
 {
     [PostgreSqlFact]
+    public void OpenApi_exposes_report_filters_authentication_and_csv_contract()
+    {
+        var swagger = factory.Services.GetRequiredService<ISwaggerProvider>().GetSwagger("v1");
+        foreach (var path in new[] { "/api/v1/reports/revenue", "/api/v1/reports/tickets", "/api/v1/reports/revenue/export" })
+        {
+            var operation = swagger.Paths[path].Operations[OperationType.Get];
+            Assert.NotEmpty(operation.Security);
+            foreach (var code in new[] { "400", "401", "403" }) Assert.Contains(code, operation.Responses.Keys);
+            foreach (var parameter in new[] { "from", "to" })
+                Assert.Contains(operation.Parameters, p => string.Equals(p.Name, parameter, StringComparison.OrdinalIgnoreCase) && p.Required);
+        }
+        var revenue = swagger.Paths["/api/v1/reports/revenue"].Operations[OperationType.Get];
+        foreach (var parameter in new[] { "lineId", "ticketProductId", "paymentStatus" })
+            Assert.Contains(revenue.Parameters, p => string.Equals(p.Name, parameter, StringComparison.OrdinalIgnoreCase));
+        var revenueSchema = swagger.Components.Schemas[revenue.Responses["200"].Content["application/json"].Schema.Reference.Id];
+        foreach (var field in new[] { "from", "to", "timezone", "dataAsOf", "totals", "rows" })
+            Assert.Contains(field, revenueSchema.Properties.Keys);
+        var tickets = swagger.Paths["/api/v1/reports/tickets"].Operations[OperationType.Get];
+        foreach (var parameter in new[] { "lineId", "ticketProductId", "ticketStatus", "issuanceStatus", "page", "pageSize" })
+            Assert.Contains(tickets.Parameters, p => string.Equals(p.Name, parameter, StringComparison.OrdinalIgnoreCase));
+        var export = swagger.Paths["/api/v1/reports/revenue/export"].Operations[OperationType.Get];
+        Assert.Contains(export.Parameters, p => string.Equals(p.Name, "purpose", StringComparison.OrdinalIgnoreCase) && p.Required);
+        Assert.Contains("text/csv", export.Responses["200"].Content.Keys);
+        Assert.Contains("422", export.Responses.Keys);
+    }
+
+    [PostgreSqlFact]
     public void OpenApi_contains_current_health_and_auth_contracts()
     {
         var swagger = factory.Services.GetRequiredService<ISwaggerProvider>().GetSwagger("v1");

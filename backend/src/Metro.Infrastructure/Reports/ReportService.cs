@@ -8,6 +8,7 @@ using Metro.Domain.Entities.Identity;
 using Metro.Infrastructure.Persistence.Context;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Metro.Application.Reports;
 
 namespace Metro.Infrastructure.Reports;
 
@@ -20,7 +21,6 @@ public sealed class ReportService(
     private const string Timezone = "Asia/Ho_Chi_Minh";
     private const int MaxDays = 31;
     private const int MaxPageSize = 100;
-    private const int MaxExportRows = 10_000;
     private static readonly TimeZoneInfo VietnamTimeZone = TimeZoneInfo.FindSystemTimeZoneById(Timezone);
     private static readonly HashSet<string> TicketStatuses = new(StringComparer.Ordinal)
         { "ISSUED", "ACTIVE", "IN_USE", "USED", "EXPIRED", "REFUND_PENDING", "REFUNDED", "REVOKED" };
@@ -31,16 +31,21 @@ public sealed class ReportService(
     {
         var range = Validate(query, export: false);
         await operatorResolver.ResolveAsync(userId, cancellationToken);
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var result = await BuildRevenueAsync(query, range, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return result;
+        });
     }
 
     public async Task<TicketReportResponse> GetTicketsAsync(ReportQuery query, string userId, CancellationToken cancellationToken)
     {
         var range = Validate(query, export: false);
         await operatorResolver.ResolveAsync(userId, cancellationToken);
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
 
         var ticketsQuery = db.Tickets.AsNoTracking()
@@ -57,7 +62,7 @@ public sealed class ReportService(
             .ToListAsync(cancellationToken);
 
         var jobs = await db.Database.SqlQuery<TicketJob>($"""
-            SELECT ticket_id AS \"TicketId\", status AS \"Status\"
+            SELECT ticket_id AS "TicketId", status AS "Status"
             FROM metro.ticket_issuance_jobs
             WHERE operator_id={db.CurrentOperatorId}
             """).ToListAsync(cancellationToken);
@@ -71,7 +76,9 @@ public sealed class ReportService(
             .OrderByDescending(x => x.Source.IssuedAt).ThenBy(x => x.Source.Id)
             .ToList();
 
-        var paged = rows.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize)
+        var page = query.Page ?? 1;
+        var pageSize = query.PageSize ?? 50;
+        var paged = rows.Skip((page - 1) * pageSize).Take(pageSize)
             .Select(x => new TicketReportRow(x.Source.Id, x.Source.Code, AsOffset(x.Source.IssuedAt), x.Source.TicketProductId,
                 x.LineId, x.Source.TicketStatus, x.IssuanceStatus, x.Source.IsFreeOrder)).ToList();
         var totals = new TicketReportTotals(
@@ -82,23 +89,27 @@ public sealed class ReportService(
 
         await transaction.CommitAsync(cancellationToken);
         return new TicketReportResponse(range.From, range.To, Timezone, timeProvider.GetUtcNow(), totals,
-            query.Page, query.PageSize, rows.Count, paged);
+            page, pageSize, rows.Count, paged);
+        });
     }
 
     public async Task<CsvExport> ExportRevenueCsvAsync(ReportQuery query, string userId, CancellationToken cancellationToken)
     {
         var range = Validate(query, export: true);
         await operatorResolver.ResolveAsync(userId, cancellationToken);
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var report = await BuildRevenueAsync(query, range, cancellationToken);
-        if (report.Rows.Count > MaxExportRows)
+        if (RevenueRules.ExceedsExportLimit(report.Rows.Count))
             throw new ReportException("REPORT_EXPORT_LIMIT_EXCEEDED", StatusCodes.Status422UnprocessableEntity,
-                $"The export contains more than {MaxExportRows:N0} rows after grouping.");
+                $"The export contains more than {RevenueRules.MaxExportRows:N0} rows after grouping.");
 
         var content = BuildCsv(report);
         await RecordExportAsync(query, userId, report, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new CsvExport($"revenue-{range.From:yyyyMMdd}-{range.To:yyyyMMdd}.csv", content);
+        });
     }
 
     private async Task<RevenueReportResponse> BuildRevenueAsync(ReportQuery query, DateRange range, CancellationToken cancellationToken)
@@ -136,11 +147,11 @@ public sealed class ReportService(
         {
             var payments = dailyPayments.FirstOrDefault(g => g.Key == day)?.ToList() ?? [];
             var collected = payments.Sum(x => x.AmountMinor);
-            var valid = payments.Sum(x => Math.Min(x.AmountMinor, x.FrozenOrderTotalMinor));
-            var excess = payments.Sum(x => Math.Max(0, x.AmountMinor - x.FrozenOrderTotalMinor));
+            var valid = payments.Sum(x =>RevenueRules.ValidPaidOrderValue(x.AmountMinor,x.FrozenOrderTotalMinor));
+            var excess = payments.Sum(x =>RevenueRules.ExcessCollected( x.AmountMinor, x.FrozenOrderTotalMinor));
             var refunded = dailyRefunds.GetValueOrDefault(day);
             var pending = dailyPending.GetValueOrDefault(day);
-            return new DailyRevenueRow(day, payments.Count, collected, valid, excess, refunded, pending, collected - refunded);
+            return new DailyRevenueRow(day, payments.Count, collected, valid, excess, refunded, pending, RevenueRules.NetCashflow(collected, refunded));
         }).ToList();
 
         var totals = new RevenueTotals(rows.Sum(x => x.ActualCollectedMinor), rows.Sum(x => x.ValidPaidOrderValueMinor),

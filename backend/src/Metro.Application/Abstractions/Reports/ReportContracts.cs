@@ -10,8 +10,8 @@ public sealed class ReportQuery
     public string? PaymentStatus { get; init; }
     public string? TicketStatus { get; init; }
     public string? IssuanceStatus { get; init; }
-    public int Page { get; init; } = 1;
-    public int PageSize { get; init; } = 50;
+    public int? Page { get; init; }
+    public int? PageSize { get; init; }
     public string? Purpose { get; init; }
 }
 
