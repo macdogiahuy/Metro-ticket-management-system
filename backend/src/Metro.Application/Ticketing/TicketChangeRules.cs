@@ -57,4 +57,10 @@ public static class TicketChangeRules
         if (string.IsNullOrWhiteSpace(decisionReason))
             throw new TicketChangeException("DECISION_REASON_REQUIRED", 400, "Decision reason is required when approving a change request.");
     }
+
+    public static bool CanGenerateQrImmediately(DateOnly? newTravelDate, DateOnly currentServiceDate, DateOnly todayUtc7)
+    {
+        var effectiveDate = newTravelDate ?? currentServiceDate;
+        return effectiveDate == todayUtc7;
+    }
 }

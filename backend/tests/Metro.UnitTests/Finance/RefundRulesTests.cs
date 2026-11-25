@@ -99,4 +99,37 @@ public sealed class RefundRulesTests
         Assert.Equal(400, ex.Status);
         Assert.Equal("DECISION_REASON_REQUIRED", ex.Code);
     }
+
+    [Fact]
+    public void Approved_amount_exceeding_remaining_amount_throws_conflict()
+    {
+        var ex = Assert.Throws<RefundException>(() => RefundRules.ValidateApprovalAmount(35000, 35000, 30000));
+        Assert.Equal(409, ex.Status);
+        Assert.Equal("APPROVED_AMOUNT_EXCEEDS_REMAINING", ex.Code);
+    }
+
+    [Fact]
+    public void Successive_partial_refunds_exhaust_remaining_amount()
+    {
+        const long totalAmount = 50000;
+        long refundedSoFar = 0;
+
+        // First partial refund: 20,000
+        RefundRules.ValidateRequestedAmount(20000, totalAmount, refundedSoFar);
+        var app1 = RefundRules.ValidateApprovalAmount(20000, 20000, totalAmount - refundedSoFar);
+        refundedSoFar += app1;
+        Assert.Equal(20000, refundedSoFar);
+
+        // Second partial refund: 30,000
+        RefundRules.ValidateRequestedAmount(30000, totalAmount, refundedSoFar);
+        var app2 = RefundRules.ValidateApprovalAmount(30000, 30000, totalAmount - refundedSoFar);
+        refundedSoFar += app2;
+        Assert.Equal(50000, refundedSoFar);
+
+        // Third refund attempt when fully refunded throws conflict
+        var ex = Assert.Throws<RefundException>(() =>
+            RefundRules.ValidateRequestedAmount(5000, totalAmount, refundedSoFar));
+        Assert.Equal(409, ex.Status);
+        Assert.Equal("REFUND_AMOUNT_EXCEEDS_REMAINING", ex.Code);
+    }
 }

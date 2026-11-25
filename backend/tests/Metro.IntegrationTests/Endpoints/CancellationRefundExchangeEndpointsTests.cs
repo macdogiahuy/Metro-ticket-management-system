@@ -340,4 +340,215 @@ public sealed class CancellationRefundExchangeEndpointsTests(PaymentTestFactory 
         using var conflictProblem = JsonDocument.Parse(await secondChangeRes.Content.ReadAsStringAsync());
         Assert.Equal("TICKET_CHANGE_LIMIT_REACHED", conflictProblem.RootElement.GetProperty("code").GetString());
     }
+
+    [PostgreSqlFact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task Cancel_order_validates_existence_and_version_conflict()
+    {
+        var seed = await SeedAsync(factory, true);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, seed.User);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var json = JsonSerializer.Serialize(new { BookingCheckout = true, Subtotal = 15000L, Discount = 0L, Amount = 15000L, AppliedGroup = "ORDINARY" });
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE metro.orders SET fare_snapshot = {json}::jsonb WHERE id = {seed.Order}");
+        }
+
+        // 1. Non-existent order cancellation returns 404
+        var nonExistentId = Guid.NewGuid();
+        var notFoundReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/orders/{nonExistentId}/cancel")
+        {
+            Content = JsonContent.Create(new CancelOrderRequest(1, "Cancel missing"))
+        };
+        notFoundReq.Headers.Add("Idempotency-Key", "idem-cancel-missing");
+        var notFoundRes = await client.SendAsync(notFoundReq);
+        Assert.Equal(HttpStatusCode.NotFound, notFoundRes.StatusCode);
+
+        // 2. Cancellation with outdated version returns 409 ORDER_VERSION_CONFLICT
+        var conflictReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/orders/{seed.Order}/cancel")
+        {
+            Content = JsonContent.Create(new CancelOrderRequest(999, "Version conflict"))
+        };
+        conflictReq.Headers.Add("Idempotency-Key", "idem-cancel-conflict");
+        var conflictRes = await client.SendAsync(conflictReq);
+        Assert.Equal(HttpStatusCode.Conflict, conflictRes.StatusCode);
+    }
+
+    [PostgreSqlFact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task Refund_partial_approval_and_amount_exceeded_validation()
+    {
+        using var client = factory.CreateClient();
+        var seed = await SeedAsync(factory, true);
+
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, seed.User);
+        var payCreated = await client.PostAsJsonAsync("/api/v1/payments", new { orderId = seed.Order, idempotencyKey = "pay-refund-partial-test" });
+        Assert.Equal(HttpStatusCode.Created, payCreated.StatusCode);
+        using var paymentDoc = JsonDocument.Parse(await payCreated.Content.ReadAsStringAsync());
+        var paymentId = paymentDoc.RootElement.GetProperty("id").GetGuid();
+
+        var webhookPayload = JsonSerializer.Serialize(new
+        {
+            eventId = Guid.NewGuid().ToString(),
+            idempotencyKey = "hook-refund-partial-1",
+            paymentId = paymentId.ToString(),
+            amount = 15000,
+            currency = "VND"
+        });
+        using var webhookMsg = new HttpRequestMessage(HttpMethod.Post, "/api/v1/webhooks/momo")
+        {
+            Content = new StringContent(webhookPayload, Encoding.UTF8, "application/json")
+        };
+        webhookMsg.Headers.Add("X-MoMo-Signature", Convert.ToHexStringLower(HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes(StubPaymentGateway.Secret), Encoding.UTF8.GetBytes(webhookPayload))));
+        await client.SendAsync(webhookMsg);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            scope.ServiceProvider.GetRequiredService<Metro.Application.Abstractions.MultiTenancy.IOperatorContext>().CurrentOperatorId = seed.Op;
+            await scope.ServiceProvider.GetRequiredService<Metro.Infrastructure.Ticketing.TicketIssuanceProcessor>().ProcessDueAsync(500, operatorId: seed.Op);
+        }
+
+        Guid ticketId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            ticketId = await db.Tickets.IgnoreQueryFilters().Where(t => t.OrderId == seed.Order).Select(t => t.Id).FirstAsync();
+        }
+
+        // 1. Exceeding refund amount returns 409 Conflict
+        var exceedReq = new HttpRequestMessage(HttpMethod.Post, "/api/v1/refunds")
+        {
+            Content = JsonContent.Create(new CreateRefundRequest(paymentId, ticketId, "SERVICE_DISRUPTION", 99000))
+        };
+        exceedReq.Headers.Add("Idempotency-Key", "idem-refund-exceed");
+        var exceedRes = await client.SendAsync(exceedReq);
+        Assert.Equal(HttpStatusCode.Conflict, exceedRes.StatusCode);
+
+        // 2. Invalid reason type returns 400 Bad Request
+        var badReasonReq = new HttpRequestMessage(HttpMethod.Post, "/api/v1/refunds")
+        {
+            Content = JsonContent.Create(new CreateRefundRequest(paymentId, ticketId, "INVALID_REASON", 15000))
+        };
+        badReasonReq.Headers.Add("Idempotency-Key", "idem-refund-bad-reason");
+        var badReasonRes = await client.SendAsync(badReasonReq);
+        Assert.Equal(HttpStatusCode.BadRequest, badReasonRes.StatusCode);
+
+        // 3. Create valid partial refund request for 5000
+        var validReq = new HttpRequestMessage(HttpMethod.Post, "/api/v1/refunds")
+        {
+            Content = JsonContent.Create(new CreateRefundRequest(paymentId, ticketId, "SERVICE_DISRUPTION", 10000))
+        };
+        validReq.Headers.Add("Idempotency-Key", "idem-refund-valid-partial");
+        var validRes = await client.SendAsync(validReq);
+        Assert.Equal(HttpStatusCode.Created, validRes.StatusCode);
+        var refundResp = await validRes.Content.ReadFromJsonAsync<RefundResponse>();
+        Assert.NotNull(refundResp);
+
+        // 4. Admin approves partial refund of 5000
+        var adminId = await UserAsync(factory.Services);
+        using var adminClient = factory.CreateClient();
+        adminClient.DefaultRequestHeaders.Authorization = await BearerAsync(factory, adminId, "Admin");
+
+        var approvePartialReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/refunds/{refundResp.Id}/approve")
+        {
+            Content = JsonContent.Create(new ApproveRefundRequest(ApprovedAmountMinor: 5000, DecisionReason: "Approved partial refund"))
+        };
+        approvePartialReq.Headers.Add("Idempotency-Key", "idem-refund-approve-partial");
+        var approvePartialRes = await adminClient.SendAsync(approvePartialReq);
+        Assert.Equal(HttpStatusCode.OK, approvePartialRes.StatusCode);
+        var approvedResp = await approvePartialRes.Content.ReadFromJsonAsync<RefundResponse>();
+        Assert.NotNull(approvedResp);
+        Assert.Equal("COMPLETED", approvedResp.Status);
+        Assert.Equal(5000, approvedResp.ApprovedAmountMinor);
+
+        // Verify DB: payment status is PartiallyRefunded and payment record is NOT deleted
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var payment = await db.Payments.IgnoreQueryFilters().SingleAsync(p => p.Id == paymentId);
+            Assert.Equal(PaymentStatus.PartiallyRefunded, payment.Status);
+        }
+    }
+
+    [PostgreSqlFact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task Ticket_change_validates_stations_and_past_dates()
+    {
+        using var client = factory.CreateClient();
+        var seed = await SeedAsync(factory, true);
+
+        client.DefaultRequestHeaders.Authorization = await BearerAsync(factory, seed.User);
+        var payCreated = await client.PostAsJsonAsync("/api/v1/payments", new { orderId = seed.Order, idempotencyKey = "pay-change-val-test" });
+        Assert.Equal(HttpStatusCode.Created, payCreated.StatusCode);
+        using var paymentDoc = JsonDocument.Parse(await payCreated.Content.ReadAsStringAsync());
+        var paymentId = paymentDoc.RootElement.GetProperty("id").GetGuid();
+
+        var webhookPayload = JsonSerializer.Serialize(new
+        {
+            eventId = Guid.NewGuid().ToString(),
+            idempotencyKey = "hook-change-val-1",
+            paymentId = paymentId.ToString(),
+            amount = 15000,
+            currency = "VND"
+        });
+        using var webhookMsg = new HttpRequestMessage(HttpMethod.Post, "/api/v1/webhooks/momo")
+        {
+            Content = new StringContent(webhookPayload, Encoding.UTF8, "application/json")
+        };
+        webhookMsg.Headers.Add("X-MoMo-Signature", Convert.ToHexStringLower(HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes(StubPaymentGateway.Secret), Encoding.UTF8.GetBytes(webhookPayload))));
+        await client.SendAsync(webhookMsg);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            scope.ServiceProvider.GetRequiredService<Metro.Application.Abstractions.MultiTenancy.IOperatorContext>().CurrentOperatorId = seed.Op;
+            await scope.ServiceProvider.GetRequiredService<Metro.Infrastructure.Ticketing.TicketIssuanceProcessor>().ProcessDueAsync(500, operatorId: seed.Op);
+        }
+
+        Guid ticketId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            ticketId = await db.Tickets.IgnoreQueryFilters().Where(t => t.OrderId == seed.Order).Select(t => t.Id).FirstAsync();
+        }
+
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7)).AddDays(1);
+        var yesterday = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7)).AddDays(-1);
+
+        // 1. Non-existent ticket returns 404
+        var nonExistentTicket = Guid.NewGuid();
+        var notFoundReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/tickets/{nonExistentTicket}/change-requests")
+        {
+            Content = JsonContent.Create(new CreateTicketChangeRequest(tomorrow, ReasonType: "SERVICE_DISRUPTION"))
+        };
+        notFoundReq.Headers.Add("Idempotency-Key", "idem-change-missing-ticket");
+        var notFoundRes = await client.SendAsync(notFoundReq);
+        Assert.Equal(HttpStatusCode.NotFound, notFoundRes.StatusCode);
+
+        // 2. Same origin and destination returns 400 Bad Request
+        var sameStationId = Guid.NewGuid();
+        var sameStationReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/tickets/{ticketId}/change-requests")
+        {
+            Content = JsonContent.Create(new CreateTicketChangeRequest(
+                tomorrow,
+                NewOriginStationId: sameStationId,
+                NewDestinationStationId: sameStationId,
+                ReasonType: "SERVICE_DISRUPTION"))
+        };
+        sameStationReq.Headers.Add("Idempotency-Key", "idem-change-same-station");
+        var sameStationRes = await client.SendAsync(sameStationReq);
+        Assert.Equal(HttpStatusCode.BadRequest, sameStationRes.StatusCode);
+
+        // 3. Travel date in the past returns 400 Bad Request
+        var pastReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/tickets/{ticketId}/change-requests")
+        {
+            Content = JsonContent.Create(new CreateTicketChangeRequest(yesterday, ReasonType: "SERVICE_DISRUPTION"))
+        };
+        pastReq.Headers.Add("Idempotency-Key", "idem-change-past-date");
+        var pastRes = await client.SendAsync(pastReq);
+        Assert.Equal(HttpStatusCode.BadRequest, pastRes.StatusCode);
+    }
 }

@@ -127,4 +127,21 @@ public sealed class TicketChangeRulesTests
         Assert.Equal(400, ex.Status);
         Assert.Equal("DECISION_REASON_REQUIRED", ex.Code);
     }
+
+    [Fact]
+    public void Can_generate_qr_immediately_when_service_date_is_today()
+    {
+        var today = new DateOnly(2026, 12, 5);
+        Assert.True(TicketChangeRules.CanGenerateQrImmediately(today, today, today));
+        Assert.True(TicketChangeRules.CanGenerateQrImmediately(null, today, today));
+    }
+
+    [Fact]
+    public void Cannot_generate_qr_immediately_when_service_date_is_in_the_future()
+    {
+        var today = new DateOnly(2026, 12, 5);
+        var future = today.AddDays(2);
+        Assert.False(TicketChangeRules.CanGenerateQrImmediately(future, today, today));
+        Assert.False(TicketChangeRules.CanGenerateQrImmediately(null, future, today));
+    }
 }
