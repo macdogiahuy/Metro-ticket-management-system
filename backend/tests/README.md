@@ -23,6 +23,14 @@ The runner rejects failed or skipped tests and requires at least one PostgreSQL
 integration test. Without configuration, PostgreSQL facts may be skipped for a
 quick offline unit-test run; that result is not acceptance evidence.
 
+BE-10 adds GateRulesTests, GateQrRulesTests and GateEndpointsTests: scan/replay/races,
+paired entry/exit, evidence/corrections, Pending recovery, verified QR display/replacement,
+shared email quotas, encrypted delivery/retry, administrator support review and audit rollback.
+Apply migrations 014–016 first. The local 100-request/20-client performance smoke includes
+TestServer HTTP/auth overhead and does not replace the full SRS reference-dataset benchmark.
+Email worker is disabled in the factory; tests explicitly process the private queue through
+TestGateEmailSender. No production endpoint exposes OTP. See [BE-10 handover](../../docs/handover/BE-10-GATE-VALIDATION.md).
+
 CI starts PostgreSQL directly on the hosted Ubuntu runner, creates a fresh
 `metro_test_` database, applies the same SQL package and runs the same script.
 Credentials are generated for one run, masked, and never committed.

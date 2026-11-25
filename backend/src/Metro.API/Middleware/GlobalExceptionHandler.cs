@@ -27,6 +27,7 @@ public sealed class GlobalExceptionHandler(
         (int status, string title, string? safeDetail, string? errorCode) = exception switch
         {
             BadHttpRequestException => (StatusCodes.Status400BadRequest, "Invalid request", exception.Message, (string?)null),
+            Metro.Application.Abstractions.Gates.GateException gate => (gate.Status, "Gate request failed", gate.Code, (string?)gate.Code),
             Metro.Application.Abstractions.Ticketing.TicketException ticket => (ticket.Status, "Ticket request failed", ticket.Message, (string?)ticket.Code),
             BookingException booking => (booking.Status, "Booking request failed", booking.Code, booking.Code),
             AuthException auth => (auth.Status, "Authentication failed", auth.Message, (string?)auth.Code),
@@ -51,6 +52,8 @@ public sealed class GlobalExceptionHandler(
                 StatusCodes.Status422UnprocessableEntity => "Fare rule violation",
                 _ => "Invalid fare request",
             }, fare.Message, fare.Code),
+            _ when pg is { SqlState: "P0001", MessageText: "EMAIL_CODE_RATE_LIMIT" } =>
+                (429,"Email verification rate limit","Please wait before requesting another code.","EMAIL_CODE_RATE_LIMIT"),
             _ when pg is { SqlState: PostgresErrorCodes.UniqueViolation } =>
                 (StatusCodes.Status409Conflict, "Duplicate resource conflict", "A conflicting record with the same unique key already exists.", "DATABASE_UNIQUE_CONFLICT"),
             _ when pg is { SqlState: PostgresErrorCodes.ExclusionViolation } =>

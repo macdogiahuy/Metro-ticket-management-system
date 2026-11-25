@@ -145,6 +145,7 @@ app.MapAdminFareEndpoints();
 app.MapAdminEligibilityPolicyEndpoints();
 app.MapPaymentEndpoints();
 app.MapTicketEndpoints();
+app.MapGateEndpoints();
 app.MapBookingEndpoints();
 app.MapHealthEndpoints();
 

@@ -22,6 +22,19 @@ BEGIN
        OR to_regclass('metro.booking_requests') IS NULL THEN
         RAISE EXCEPTION 'Missing BE-07 booking migration 013';
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version=14 AND name='014_gate_validation.sql')
+       OR to_regclass('metro.gate_requests') IS NULL OR to_regclass('metro.gate_changes') IS NULL
+       OR to_regclass('metro.gate_resolutions') IS NULL OR to_regclass('metro.gate_undo_authorizations') IS NULL THEN
+        RAISE EXCEPTION 'Missing BE-10 gate migration 014';
+    END IF;
+    IF NOT EXISTS(SELECT 1 FROM metro.schema_migrations WHERE version=15 AND name='015_gate_qr_support.sql')
+       OR to_regclass('metro.gate_qr_intents') IS NULL OR to_regclass('metro.gate_qr_verifications') IS NULL
+       OR to_regclass('metro.gate_email_outbox') IS NULL THEN
+        RAISE EXCEPTION 'Missing BE-10 QR support migration 015';
+    END IF;
+    IF NOT EXISTS(SELECT 1 FROM metro.schema_migrations WHERE version=16 AND name='016_gate_support_review.sql') THEN
+        RAISE EXCEPTION 'Missing BE-10 support review migration 016';
+    END IF;
     IF (SELECT count(*) FROM information_schema.columns WHERE table_schema='metro' AND table_name='payments'
         AND column_name IN ('attempt_number','checkout_url')) <> 2
        OR to_regclass('metro.uq_booking_payment_attempt') IS NULL THEN

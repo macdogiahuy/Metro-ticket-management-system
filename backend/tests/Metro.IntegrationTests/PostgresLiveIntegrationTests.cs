@@ -58,7 +58,7 @@ public class PostgresLiveIntegrationTests
         ca.AddRange(account, line, station, calendar, product, fare,
             new UserProfile { UserId = user.Id, FullName = "Synthetic passenger", NormalizedFullName = "SYNTHETIC", BirthDate = new DateOnly(2000, 1, 1) },
             new AuthSession { UserId = user.Id, RefreshTokenHash = suffix + suffix, IssuedAt = now, ExpiresAt = now.AddHours(1) },
-            new EmailVerificationChallenge { UserId = user.Id, Purpose = "VERIFY_EMAIL", CodeHash = suffix + suffix, CreatedAt = now, ExpiresAt = now.AddMinutes(10) },
+            new EmailVerificationChallenge { UserId = user.Id, Purpose = "VERIFY_EMAIL", CodeHash = suffix + suffix, CreatedAt = now, ExpiresAt = now.AddMinutes(5) },
             new RolePermission { RoleCode = role.Code, PermissionCode = permission.Code, Version = 2 });
         await ca.SaveChangesAsync();
         cb.Lines.Add(new Line { OperatorId = b, Code = suffix, Name = "Synthetic B line" });

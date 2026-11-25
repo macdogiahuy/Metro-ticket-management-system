@@ -113,6 +113,82 @@
     {
       "key": "bookingPaymentKey",
       "value": ""
+    },
+    {
+      "key": "gateAccessToken",
+      "value": ""
+    },
+    {
+      "key": "gateRequestId",
+      "value": ""
+    },
+    {
+      "key": "gateSourceRequestId",
+      "value": ""
+    },
+    {
+      "key": "gateQrToken",
+      "value": ""
+    },
+    {
+      "key": "gateSecondQrToken",
+      "value": ""
+    },
+    {
+      "key": "gateStationId",
+      "value": ""
+    },
+    {
+      "key": "gateExitStationId",
+      "value": ""
+    },
+    {
+      "key": "gatePlannedTripId",
+      "value": ""
+    },
+    {
+      "key": "gateTicketCode",
+      "value": ""
+    },
+    {
+      "key": "gateEvidenceReference",
+      "value": "staff-case-reference"
+    },
+    {
+      "key": "gateQrOperationId",
+      "value": ""
+    },
+    {
+      "key": "gateQrChallengeRequestId",
+      "value": ""
+    },
+    {
+      "key": "gateQrAccessRequestId",
+      "value": ""
+    },
+    {
+      "key": "gateQrChallengeId",
+      "value": ""
+    },
+    {
+      "key": "gateQrAction",
+      "value": "REPLACE"
+    },
+    {
+      "key": "gatePassengerFullName",
+      "value": "Gate Passenger"
+    },
+    {
+      "key": "gatePassengerBirthDate",
+      "value": "1990-01-01"
+    },
+    {
+      "key": "gateQrEmailCode",
+      "value": ""
+    },
+    {
+      "key": "gateQrSupportReason",
+      "value": "Verified passenger support"
     }
   ],
   "item": [
@@ -1055,6 +1131,418 @@
               "  if (payment.paymentCode) pm.collectionVariables.set(\"paymentId\", payment.id);",
               "}"
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Gate validation (BE-10)",
+      "description": "Active StationStaff/Admin JWT and matching operator membership required. Use current raw BE-09 QR payloads; never save secrets or real passenger QR in the collection. Empty gateRequestId generates a UUID. Keep it fixed with exactly the same body when replaying; clear it before a different action. Copy the source scan UUID into gateSourceRequestId for resolution. Pending (202) grants no passage. PairPresentConfirmed is required for both entry and exit of guardian-child pairs. UC18 verified QR display/replacement is in the QR support subfolder; OTP is never returned in HTTP.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{gateAccessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('gateRequestId')) pm.collectionVariables.set('gateRequestId', pm.variables.replaceIn('{{$guid}}')); "
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Gate returns a documented response', () => pm.expect([200,202,400,401,403,404,409,429,503]).to.include(pm.response.code));",
+              "if ([200,202].includes(pm.response.code) && (pm.response.headers.get('Content-Type') || '').includes('json') && pm.response.json().decision) pm.test('Decision is explicit', () => pm.expect(['Allow','Deny','Pending']).to.include(pm.response.json().decision));"
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "name": "Entry (keep requestId and body unchanged for retry)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/gate/scans?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{gateRequestId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{gateRequestId}}\",\n  \"action\": \"ENTRY\",\n  \"stationId\": \"{{gateStationId}}\",\n  \"plannedTripId\": \"{{gatePlannedTripId}}\",\n  \"direction\": 0,\n  \"qrTokens\": [\n    \"{{gateQrToken}}\"\n  ],\n  \"deviceCode\": \"STAFF_BROWSER\",\n  \"pairPresentConfirmed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Exit (no trip or load required)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/gate/scans?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{gateRequestId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{gateRequestId}}\",\n  \"action\": \"EXIT\",\n  \"stationId\": \"{{gateExitStationId}}\",\n  \"plannedTripId\": null,\n  \"direction\": null,\n  \"qrTokens\": [\n    \"{{gateQrToken}}\"\n  ],\n  \"deviceCode\": \"STAFF_BROWSER\",\n  \"pairPresentConfirmed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Guardian and child entry (both present)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/gate/scans?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{gateRequestId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{gateRequestId}}\",\n  \"action\": \"ENTRY\",\n  \"stationId\": \"{{gateStationId}}\",\n  \"plannedTripId\": \"{{gatePlannedTripId}}\",\n  \"direction\": 0,\n  \"qrTokens\": [\n    \"{{gateQrToken}}\",\n    \"{{gateSecondQrToken}}\"\n  ],\n  \"deviceCode\": \"STAFF_BROWSER\",\n  \"pairPresentConfirmed\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Guardian and child exit",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/gate/scans?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{gateRequestId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{gateRequestId}}\",\n  \"action\": \"EXIT\",\n  \"stationId\": \"{{gateExitStationId}}\",\n  \"plannedTripId\": null,\n  \"direction\": null,\n  \"qrTokens\": [\n    \"{{gateQrToken}}\",\n    \"{{gateSecondQrToken}}\"\n  ],\n  \"deviceCode\": \"STAFF_BROWSER\",\n  \"pairPresentConfirmed\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Recover original scan result",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/gate/scans/{{gateRequestId}}?operatorCode={{operatorCode}}",
+            "header": []
+          }
+        },
+        {
+          "name": "Audited minimal ticket lookup",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/gate/lookup?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticketCode\": \"{{gateTicketCode}}\",\n  \"reason\": \"Passenger support\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Verified exit at actual station",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/gate/resolutions?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{gateRequestId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{gateRequestId}}\",\n  \"sourceRequestId\": \"{{gateSourceRequestId}}\",\n  \"action\": \"CLOSE_JOURNEY\",\n  \"stationId\": \"{{gateExitStationId}}\",\n  \"reason\": \"Verified actual exit\",\n  \"evidenceReference\": \"{{gateEvidenceReference}}\",\n  \"identityVerified\": true,\n  \"pairPresentConfirmed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Correct unused mistaken scan (no passage granted)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/gate/resolutions?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{gateRequestId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{gateRequestId}}\",\n  \"sourceRequestId\": \"{{gateSourceRequestId}}\",\n  \"action\": \"UNDO_SCAN\",\n  \"stationId\": \"{{gateExitStationId}}\",\n  \"reason\": \"Verified actual exit\",\n  \"evidenceReference\": \"{{gateEvidenceReference}}\",\n  \"identityVerified\": true,\n  \"pairPresentConfirmed\": false,\n  \"passengerHasNotTravelled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Escalate without granting passage",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/gate/resolutions?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{gateRequestId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{gateRequestId}}\",\n  \"sourceRequestId\": \"{{gateSourceRequestId}}\",\n  \"action\": \"ESCALATE\",\n  \"stationId\": \"{{gateExitStationId}}\",\n  \"reason\": \"Verified actual exit\",\n  \"evidenceReference\": \"{{gateEvidenceReference}}\",\n  \"identityVerified\": false,\n  \"pairPresentConfirmed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "QR support (UC18)",
+          "description": "Use a StationStaff/Admin JWT. Provide the ticket holder name/date of birth. Separate operationId (pending action) from requestId (one attempt). Keep IDs/body fixed for network retries. For a different OTP attempt or proof method clear gateQrAccessRequestId; keep operationId/action/reason fixed. To start another support action clear all three QR request/operation variables. Enter the code received at the holder email in gateQrEmailCode; it is never auto-read from an API response. For DOCUMENT, verify the illustrative document against the profile and record a private evidence reference. Set gateQrAction=DISPLAY to preserve the credential or REPLACE to retire it atomically. READY is not gate permission. Do not save real secrets/identity data into the shared collection.",
+          "item": [
+            {
+              "name": "Request email verification for this ticket and operation",
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/gate/tickets/{{ticketId}}/qr-challenges?operatorCode={{operatorCode}}",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{gateQrChallengeRequestId}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requestId\": \"{{gateQrChallengeRequestId}}\",\n  \"operationId\": \"{{gateQrOperationId}}\",\n  \"action\": \"{{gateQrAction}}\",\n  \"fullName\": \"{{gatePassengerFullName}}\",\n  \"birthDate\": \"{{gatePassengerBirthDate}}\",\n  \"reason\": \"{{gateQrSupportReason}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Verify emailed code (DISPLAY or REPLACE)",
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/gate/tickets/{{ticketId}}/qr-support?operatorCode={{operatorCode}}",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{gateQrAccessRequestId}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requestId\": \"{{gateQrAccessRequestId}}\",\n  \"operationId\": \"{{gateQrOperationId}}\",\n  \"action\": \"{{gateQrAction}}\",\n  \"fullName\": \"{{gatePassengerFullName}}\",\n  \"birthDate\": \"{{gatePassengerBirthDate}}\",\n  \"reason\": \"{{gateQrSupportReason}}\",\n  \"verificationMethod\": \"EMAIL\",\n  \"challengeId\": \"{{gateQrChallengeId}}\",\n  \"emailCode\": \"{{gateQrEmailCode}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Verify documented identity when email is inaccessible",
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/gate/tickets/{{ticketId}}/qr-support?operatorCode={{operatorCode}}",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{gateQrAccessRequestId}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requestId\": \"{{gateQrAccessRequestId}}\",\n  \"operationId\": \"{{gateQrOperationId}}\",\n  \"action\": \"{{gateQrAction}}\",\n  \"fullName\": \"{{gatePassengerFullName}}\",\n  \"birthDate\": \"{{gatePassengerBirthDate}}\",\n  \"reason\": \"{{gateQrSupportReason}}\",\n  \"verificationMethod\": \"DOCUMENT\",\n  \"noEmailAccess\": true,\n  \"documentMatchesProfile\": true,\n  \"evidenceReference\": \"{{gateEvidenceReference}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Email queue state (Accepted is not inbox delivery)",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/gate/qr-requests/{{gateQrChallengeRequestId}}?operatorCode={{operatorCode}}",
+                "header": []
+              }
+            },
+            {
+              "name": "Recover access result before retrying a replacement",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/gate/qr-requests/{{gateQrAccessRequestId}}?operatorCode={{operatorCode}}",
+                "header": []
+              }
+            },
+            {
+              "name": "Verified private QR PNG (same staff session)",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/gate/qr-requests/{{gateQrAccessRequestId}}/image?operatorCode={{operatorCode}}",
+                "header": []
+              }
+            }
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "for (const key of ['gateQrOperationId','gateQrChallengeRequestId','gateQrAccessRequestId']) if (!pm.collectionVariables.get(key)) pm.collectionVariables.set(key, pm.variables.replaceIn('{{$guid}}')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([200,202].includes(pm.response.code) && !pm.response.headers.get('Content-Type').includes('image/png')) { const result=pm.response.json(); if(result.challengeId) pm.collectionVariables.set('gateQrChallengeId',result.challengeId); pm.test('No OTP or token exposed',()=>{pm.expect(result).not.to.have.property('emailCode');pm.expect(result).not.to.have.property('qrToken');}); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin ? Gate support queue",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/gate/escalations?operatorCode={{operatorCode}}&page=1&status=OPEN",
+            "header": [],
+            "description": "Use an active Admin JWT in gateAccessToken. Staff-only tokens return 403."
+          }
+        },
+        {
+          "name": "Admin ? Close reviewed support case without passage",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/gate/resolutions?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{gateRequestId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{gateRequestId}}\",\n  \"sourceRequestId\": \"{{gateSourceRequestId}}\",\n  \"action\": \"CLOSE_SUPPORT\",\n  \"stationId\": \"{{gateStationId}}\",\n  \"reason\": \"Administrator reviewed the case; no passage authorized\",\n  \"evidenceReference\": \"{{gateEvidenceReference}}\",\n  \"identityVerified\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         }
       ]

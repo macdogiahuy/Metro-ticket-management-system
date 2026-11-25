@@ -19,6 +19,7 @@ using Microsoft.Extensions.Options;
 using Metro.Application.Abstractions.Payment;
 using Metro.Infrastructure.Payments;
 using StackExchange.Redis;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace Metro.Infrastructure;
 
@@ -42,6 +43,16 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAdministrationService, AdministrationService>();
         services.AddScoped<AccountAccess>();
+        services.AddScoped<Metro.Application.Abstractions.Gates.IGateService, Metro.Infrastructure.Gates.GateService>();
+        services.AddScoped<Metro.Application.Abstractions.Gates.IGateQrSupportService, Metro.Infrastructure.Gates.GateQrSupportService>();
+        var dataProtection=services.AddDataProtection().SetApplicationName("Metro.GateEmail");
+        if(configuration["GateEmail:KeyRingPath"] is { Length: >0 } keyRingPath)
+            dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keyRingPath));
+        services.Configure<Metro.Infrastructure.Gates.GateEmailOptions>(configuration.GetSection("GateEmail"));
+        services.AddSingleton<Metro.Infrastructure.Gates.GateEmailProtection>();
+        services.AddScoped<Metro.Application.Abstractions.Gates.IGateEmailSender, Metro.Infrastructure.Gates.SmtpGateEmailSender>();
+        services.AddScoped<Metro.Infrastructure.Gates.GateEmailProcessor>();
+        services.AddHostedService<Metro.Infrastructure.Gates.GateEmailWorker>();
         services.Configure<Metro.Infrastructure.Ticketing.TicketQrOptions>(configuration.GetSection("TicketQr"));
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddScoped<BookingPricing>();

@@ -50,8 +50,8 @@ public sealed class AuthService(
             Purpose = "VERIFY_EMAIL",
             CodeHash = Hash(code),
             CreatedAt = now,
-            // SQL constraint: expires_at = created_at + interval '10 minutes'.
-            ExpiresAt = now.AddMinutes(10),
+            // SRS section 8.2; shared database policy also covers TicketQrSupport.
+            ExpiresAt = now.AddMinutes(5),
         });
         await db.SaveChangesAsync(cancellationToken);
 
@@ -67,7 +67,7 @@ public sealed class AuthService(
         var now = DateTime.UtcNow;
         var challenge = await db.EmailVerificationChallenges
             .Where(x => x.UserId == user.Id && x.Purpose == "VERIFY_EMAIL"
-                     && x.ConsumedAt == null && x.SupersededAt == null && x.ExpiresAt > now)
+                     && x.ConsumedAt == null && x.SupersededAt == null && x.FailedAttempts < 5 && x.ExpiresAt > now)
             .OrderByDescending(x => x.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
         if (challenge is null)
@@ -76,6 +76,7 @@ public sealed class AuthService(
         if (!FixedTimeEquals(challenge.CodeHash, Hash(request.Code.Trim())))
         {
             challenge.FailedAttempts++;
+            if(challenge.FailedAttempts>=5)challenge.SupersededAt=now;
             await db.SaveChangesAsync(cancellationToken);
             throw new AuthException("INVALID_VERIFICATION_CODE", StatusCodes.Status400BadRequest, "Verification code is invalid.");
         }
