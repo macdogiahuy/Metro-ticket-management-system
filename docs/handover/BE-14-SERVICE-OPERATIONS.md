@@ -64,7 +64,7 @@ psql -v ON_ERROR_STOP=1 -f infra/database/deploy.sql
 psql -v ON_ERROR_STOP=1 -f infra/database/scripts/09_verify.sql
 ```
 
-Không dùng EF migrations. Chưa deploy production/thay master data thật. Runtime cần quyền đọc/ghi operations/audit/outbox và bảng mới; không có secret/config mới.
+Không dùng EF migrations. **Migration 014 chưa apply Neon production.** Trước khi deploy, cần authorization riêng, tường minh cho đúng Neon project/production branch và cửa sổ triển khai, cùng backup DB riêng trước deploy đã xác minh khả năng phục hồi, giống 010–013. Ghi lại branch ID/nguồn/thời điểm backup và chạy rehearsal trên branch riêng trước khi apply production. Git branch không thay thế backup DB; kết quả test/review không cấp quyền deploy. Runtime cần quyền đọc/ghi operations/audit/outbox và bảng mới; không có secret/config mới.
 
 [Postman](../postman/Metro.API.postman_collection.json) có folder **Service Operations (BE-14)** với 11 request. Điền operatorCode/adminAccessToken/operationsTripId/operationsStationId. `operationsLoadKg=17999.9`; chọn trip đúng ngày quan sát. ETA/time tự sinh nếu trống; phải cùng ngày phục vụ. Khi replay cố định operationsRequestKey và timestamp/body. Draft lưu operationsDisruptionId cho publish/resolve. Các request module khác giữ nguyên.
 
@@ -83,7 +83,7 @@ Swagger có Bearer, header chống lặp, DTO, ví dụ body và mã lỗi. Các
 | Chậm thiếu ETA, không hồi sinh chuyến hủy | Published_delay_requires_real_ETA_and_trip_recovery_never_resurrects_later_cancellation |
 | Audit lỗi rollback ETA/idem và retry sạch | Audit_failure_rolls_back_ETA_and_replay_record_and_allows_a_clean_retry |
 
-Chạy [backend test harness](../../backend/tests/README.md) trên DB `metro_test_*` đã apply/verify 014. Runner đã nhận diện Operations trong bộ đếm PostgreSQL. Gateway dùng stub; kết quả không thay nghiệm thu gate/email/MoMo thật hoặc phê duyệt reviewer.
+Chạy [backend test harness](../../backend/tests/README.md) trên DB `metro_test_*` riêng hoàn toàn mới cho mỗi run, đã apply/verify 014; không tái sử dụng DB từ run trước hoặc chia sẻ với run khác. Runner đã nhận diện Operations trong bộ đếm PostgreSQL. Gateway dùng stub; kết quả không thay nghiệm thu gate/email/MoMo thật hoặc phê duyệt reviewer.
 
 ## 7 Kết quả tự kiểm ngày 24 tháng 11 năm 2026
 
@@ -93,3 +93,11 @@ Chạy [backend test harness](../../backend/tests/README.md) trên DB `metro_tes
 - `build_deploy.py --check`, deploy/redeploy 001–014 và schema verifier đạt; migration 001–013 không đổi.
 - Postman JSON/body và JavaScript hợp lệ, thêm 11 request BE-14 và giữ nguyên 19 item/folder có trước. Link handover và `git diff --check` đạt.
 - Chỉ chạy DB test riêng; kết quả này không là deploy production, nghiệm thu dịch vụ ngoài hoặc phê duyệt PR. Thay đổi được giữ local, không push.
+
+## 8 Bằng chứng review trên head e9ffbbf
+
+Theo kết quả review được cung cấp: `build_deploy.py --check` khớp source; deploy sạch đến 014 và `09_verify.sql` rc=0; build `--warnaserror` đạt 0 warning/0 error. Unit **116/116** và integration **124/124** trên DB riêng hoàn toàn mới đạt: tổng **240/240, 0 failed, 0 skipped**.
+
+Lần đầu chạy full suite trên DB đã dùng chung có test `Suggestion_uses_published_ETA_preserves_history_and_stops_after_entry` fail; chạy riêng test đạt và chạy lại full suite trên DB sạch đạt. Review không xác định đây là lỗi code, nhưng ghi nhận rủi ro chia sẻ state của test suite. Do đó mỗi acceptance run phải dùng DB mới riêng, kể cả khi chạy lại sau một lần fail.
+
+Review không có phản đối về code/test; chỉ review/comment, chưa approve/merge. **014 chưa apply production** và vẫn cần backup + authorization riêng như mục 5. [Bản PR description](BE-14-PR-DESCRIPTION.md) ghi đầy đủ bằng chứng và các điều kiện phát hành còn chờ; chưa cập nhật GitHub. Lần sửa tài liệu này không chạy lại full suite, không push hoặc deploy.
