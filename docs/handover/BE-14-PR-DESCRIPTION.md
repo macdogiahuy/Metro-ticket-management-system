@@ -36,6 +36,12 @@ Chi tiết: [handover BE-14](BE-14-SERVICE-OPERATIONS.md).
 
 ## Testing
 
+Đã đồng bộ `origin/dev` mới nhất tại thời điểm fetch ngày **25/11/2026**:
+`d19b980` (PR #89) vào nhánh `feature/BE-14-eta-load-disruption`. Merge commit
+local là **`5afd380`**, không có conflict; `origin/dev` là ancestor của HEAD.
+Hai commit mới từ dev chỉ cập nhật board và file Excel kế hoạch, không đổi
+backend hoặc migrations. Migration 001–013 giữ nguyên.
+
 Bằng chứng do review cung cấp trên **head `e9ffbbf`**:
 
 | Kiểm tra | Kết quả |
@@ -55,8 +61,22 @@ phải tạo một DB `metro_test_*` riêng hoàn toàn mới**, deploy/verify 0
 khi chạy; không tái sử dụng DB từ run trước hoặc chạy chung DB với run khác.
 Xem [hướng dẫn test](../../backend/tests/README.md).
 
-Bản cập nhật tài liệu này ghi lại bằng chứng review trên `e9ffbbf`; không đại
-diện cho một lượt chạy lại suite hoặc xác nhận hosted CI trên head khác.
+Bằng chứng local chạy lại ngày **25/11/2026** sau merge dev, source tại
+**`5afd380`**:
+
+- `build_deploy.py --check` đạt; deploy sạch 001–014 và `09_verify.sql` **rc=0**.
+- Release build `--no-restore --warnaserror`: **0 warning, 0 error**.
+- `Run-PostgresTests.ps1 -NoBuild -NoRestore`: **240/240 đạt** gồm **116 unit +
+  124 integration, 0 failed, 0 skipped**, trên PostgreSQL **17.12**, DB mới riêng
+  `metro_test_be14_review_36235b7c542d4d479a14de31d2953385`.
+- Bao gồm 19 lượt unit Operations, 7 integration Operations và test
+  `Suggestion_uses_published_ETA_preserves_history_and_stops_after_entry` đạt.
+  Harness đếm 83 test thuộc danh sách lớp PostgreSQL trong tổng 124 integration.
+- TRX local tại `%TEMP%/metro-be14-review-35a8936e443e48a780099b3f31273369/results/`:
+  `backend_net9.0_20261125151759.trx` và `backend_net9.0_20261125152020.trx`.
+
+Các chỉnh sửa sau lượt test chỉ cập nhật tài liệu này và handover. Chưa xác
+nhận hosted CI cho head merge local; kết quả local không thay trạng thái CI.
 
 ## Production release gate
 
@@ -79,6 +99,7 @@ Không có thay đổi UI.
 ## Checklist
 
 - [x] Bằng chứng 240/240 test được gắn với head `e9ffbbf`.
+- [x] Đồng bộ `origin/dev@d19b980` và chạy lại 240/240 trên source `5afd380`.
 - [x] Ghi nhận lần fail trên DB dùng chung và yêu cầu DB mới cho mỗi run.
 - [x] Ghi rõ trạng thái production và yêu cầu backup/authorization riêng cho 014.
 

@@ -2,7 +2,7 @@
 
 BE-14 bổ sung API quản trị ETA, tải kg, trạng thái chuyến và gián đoạn tuyến/ga/chuyến, nối với catalog và gợi ý chuyến BE-07. Giữ lịch sử; không giữ chỗ, suy tải từ vé bán, sửa Journey hoặc tự hủy/hoàn/gia hạn vé do gián đoạn.
 
-Nguồn: [SRS v1.2](../requirements/Metro_SRS_v1.2.docx), UC30/36, BR-051–059/072, DATA-011/012/020, AC-X18/23/35–37; [TASK-ASSIGNMENT](../planning/TASK-ASSIGNMENT.md) mục 5.1 và [BE-07](BE-07-BOOKING.md). Nền triển khai: `origin/dev` **fe29f9b**, nhánh local `feature/BE-14-service-operations`.
+Nguồn: [SRS v1.2](../requirements/Metro_SRS_v1.2.docx), UC30/36, BR-051–059/072, DATA-011/012/020, AC-X18/23/35–37; [TASK-ASSIGNMENT](../planning/TASK-ASSIGNMENT.md) mục 5.1 và [BE-07](BE-07-BOOKING.md). BE-14 triển khai từ `origin/dev` **fe29f9b** trên nhánh `feature/BE-14-eta-load-disruption`; ngày 25/11/2026 đã merge `origin/dev` mới nhất **d19b980** tại commit local **5afd380**, không có conflict.
 
 ## 1 API và phân quyền
 
@@ -100,4 +100,14 @@ Theo kết quả review được cung cấp: `build_deploy.py --check` khớp so
 
 Lần đầu chạy full suite trên DB đã dùng chung có test `Suggestion_uses_published_ETA_preserves_history_and_stops_after_entry` fail; chạy riêng test đạt và chạy lại full suite trên DB sạch đạt. Review không xác định đây là lỗi code, nhưng ghi nhận rủi ro chia sẻ state của test suite. Do đó mỗi acceptance run phải dùng DB mới riêng, kể cả khi chạy lại sau một lần fail.
 
-Review không có phản đối về code/test; chỉ review/comment, chưa approve/merge. **014 chưa apply production** và vẫn cần backup + authorization riêng như mục 5. [Bản PR description](BE-14-PR-DESCRIPTION.md) ghi đầy đủ bằng chứng và các điều kiện phát hành còn chờ; chưa cập nhật GitHub. Lần sửa tài liệu này không chạy lại full suite, không push hoặc deploy.
+Review không có phản đối về code/test; chỉ review/comment, chưa approve/merge. **014 chưa apply production** và vẫn cần backup + authorization riêng như mục 5. [Bản PR description](BE-14-PR-DESCRIPTION.md) ghi đầy đủ bằng chứng và các điều kiện phát hành còn chờ; chưa cập nhật GitHub. Lượt cập nhật ghi nhận review ban đầu chỉ sửa tài liệu; kết quả chạy lại full suite sau đồng bộ dev được ghi riêng tại mục 9.
+
+## 9 Đồng bộ dev và kiểm chứng lại ngày 25 tháng 11 năm 2026
+
+- Fetch `origin/dev` xác nhận head mới nhất tại thời điểm kiểm tra là **d19b980** (PR #89). Nhánh BE-14 trước đồng bộ ở **b337c70**, thiếu hai commit từ dev chỉ sửa board/file Excel kế hoạch. Đã merge local không conflict tại **5afd380**; `git merge-base --is-ancestor origin/dev HEAD` rc=0. Backend và migrations không đổi so với b337c70; migrations 001–013 tiếp tục giữ nguyên.
+- Đối chiếu SRS v1.2, UC30/36 và BR-051–056/072 với code/test: ghi ETA/tải thủ công có validation và lịch sử; phân quyền Admin/operator; replay và rollback trong transaction; draft/publish/resolve cùng notice/outbox và cache revision; đổi gợi ý khi ETA/tải/gián đoạn thay đổi; giữ một current/history và dừng sau entry. Phần gate thực, đổi vé và dịch vụ ngoài vẫn theo phạm vi các task liên quan.
+- `python -X utf8 infra/database/build_deploy.py --check`: khớp source. Tạo cluster PostgreSQL **17.12** local và DB hoàn toàn mới `metro_test_be14_review_36235b7c542d4d479a14de31d2953385`; deploy sạch **001–014** và `09_verify.sql` đều **rc=0**.
+- `dotnet build backend/Metro.sln --configuration Release --no-restore --warnaserror`: **0 warning, 0 error** (.NET SDK 10.0.301, target net9.0).
+- `Run-PostgresTests.ps1 -NoBuild -NoRestore`: **116/116 unit + 124/124 integration = 240/240 passed, 0 failed, 0 skipped**. Gồm 19 lượt Operations unit, 7 Operations integration; test từng được báo fail trên DB dùng chung cũng đạt trong full suite này. Harness đếm 83 test thuộc danh sách lớp PostgreSQL.
+- Bằng chứng local: `%TEMP%/metro-be14-review-35a8936e443e48a780099b3f31273369/`, gồm `deploy.log`, `verify.log`, `tests.log` và hai TRX trong `results/`: `backend_net9.0_20261125151759.trx`, `backend_net9.0_20261125152020.trx`. Mỗi run vẫn phải dùng DB mới riêng; lượt đạt này không loại bỏ rủi ro chia sẻ state đã ghi ở mục 8.
+- Chỉ sửa tài liệu sau lượt test; chưa push, cập nhật PR GitHub, xác nhận hosted CI, approve/merge PR hoặc deploy production. **Migration 014 chưa apply Neon production**; backup và authorization riêng vẫn còn chờ như mục 5.
