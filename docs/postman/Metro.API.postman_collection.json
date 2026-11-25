@@ -117,6 +117,66 @@
   ],
   "item": [
     {
+      "name": "Reports — Admin (BE-15)",
+      "description": "Set adminAccessToken from a seeded Admin account that has an ACTIVE operator_account. Reports infer the operator from that membership; they deliberately do not accept operatorCode.",
+      "item": [
+        {
+          "name": "Revenue report",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/reports/revenue?from=2026-11-01&to=2026-11-30",
+            "description": "UTC+7 inclusive dates, maximum 31 days. Payment totals use the payment's frozen order version."
+          }
+        },
+        {
+          "name": "Ticket issuance report",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/reports/tickets?from=2026-11-01&to=2026-11-30&page=1&pageSize=50",
+            "description": "Issuance status comes from the BE-09 durable ticket_issuance_jobs queue."
+          }
+        },
+        {
+          "name": "Export revenue CSV",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/reports/revenue/export?from=2026-11-01&to=2026-11-30&purpose=Monthly%20reconciliation",
+            "description": "Returns UTF-8 CSV and records REPORT_EXPORT audit data. purpose is required; never put personal data in it."
+          }
+        }
+      ]
+    },
+    {
       "name": "Health live",
       "request": {
         "method": "GET",

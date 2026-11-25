@@ -36,6 +36,9 @@ public sealed class SwaggerContractTests(MetroWebApplicationFactory factory)
         Assert.Contains("/api/v1/payments", swagger.Paths.Keys);
         Assert.Contains("/api/v1/payments/{id}/retry", swagger.Paths.Keys);
         Assert.Contains("/api/v1/webhooks/momo", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/reports/revenue", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/reports/tickets", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/reports/revenue/export", swagger.Paths.Keys);
         Assert.DoesNotContain("/api/v1/auth/_role-probe", swagger.Paths.Keys);
         foreach (var path in new[] { "/api/v1/tickets", "/api/v1/tickets/{id}", "/api/v1/tickets/{id}/qr", "/api/v1/orders", "/api/v1/payments", "/api/v1/orders/{id}/issue-free" })
             Assert.Contains(path, swagger.Paths.Keys);
@@ -49,6 +52,7 @@ public sealed class SwaggerContractTests(MetroWebApplicationFactory factory)
         Assert.Contains("/api/v1/orders/{id}/confirm", swagger.Paths.Keys);
         Assert.Contains("/api/v1/orders/{id}/consent", swagger.Paths.Keys);
         Assert.Contains("/api/v1/orders/{id}/suggestion", swagger.Paths.Keys);
+        Assert.NotEmpty(swagger.Paths["/api/v1/reports/revenue"].Operations[OperationType.Get].Security);
         var qr = swagger.Paths["/api/v1/tickets/{id}/qr"].Operations[Microsoft.OpenApi.Models.OperationType.Get];
         Assert.Contains("image/png", qr.Responses["200"].Content.Keys);
     }
