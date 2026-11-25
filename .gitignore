@@ -18,6 +18,7 @@ FE/.vite/
 FE/coverage/
 
 # Backend
+.vs/
 backend/.vs/
 backend/**/bin/
 backend/**/obj/

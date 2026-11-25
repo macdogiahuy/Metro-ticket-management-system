@@ -1,4 +1,4 @@
-﻿namespace Metro.Application.Abstractions.Booking;
+namespace Metro.Application.Abstractions.Booking;
 
 public sealed record BookingSelection(Guid TicketProductId, string? BeneficiaryUserId = null,
     DateOnly? ServiceDate = null, Guid? OriginStationId = null, Guid? DestinationStationId = null,
@@ -7,6 +7,7 @@ public sealed record BookingSelection(Guid TicketProductId, string? BeneficiaryU
 public sealed record ReviseBookingRequest(int OrderVersion, BookingSelection Selection);
 public sealed record ConfirmBookingRequest(int OrderVersion, long ExpectedTotalMinor);
 public sealed record BookingConsentRequest(int OrderVersion, Guid ConsentId, string Decision);
+public sealed record CancelOrderRequest(int? OrderVersion = null, string? Reason = null);
 
 public sealed record BookingResponse(Guid Id, string OrderCode, int OrderVersion, string Status,
     Guid TicketProductId, DateOnly? ServiceDate, Guid? OriginStationId, Guid? DestinationStationId,

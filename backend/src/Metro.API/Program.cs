@@ -10,6 +10,8 @@ using Metro.Infrastructure;
 using Metro.Infrastructure.Payments;
 using Metro.Infrastructure.Identity;
 using Metro.Application.Abstractions.Payment;
+using Metro.Application.Abstractions.Ticketing;
+using Metro.Infrastructure.Ticketing;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
@@ -81,10 +83,13 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("Passenger", policy => policy.RequireRole("Passenger"));
     options.AddPolicy("StationStaff", policy => policy.RequireRole("StationStaff"));
     options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
+    options.AddPolicy("StaffOrAdmin", policy => policy.RequireRole("Admin", "StationStaff"));
 });
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AdministrationAuthorizationHandler>();
 
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IRefundService, RefundService>();
+builder.Services.AddScoped<ITicketChangeService, TicketChangeService>();
 builder.Services.AddHttpClient<IPaymentGateway, MoMoPaymentGateway>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(15);
@@ -146,6 +151,8 @@ app.MapAdminEligibilityPolicyEndpoints();
 app.MapPaymentEndpoints();
 app.MapTicketEndpoints();
 app.MapBookingEndpoints();
+app.MapRefundEndpoints();
+app.MapTicketChangeEndpoints();
 app.MapHealthEndpoints();
 
 if (app.Environment.IsDevelopment())

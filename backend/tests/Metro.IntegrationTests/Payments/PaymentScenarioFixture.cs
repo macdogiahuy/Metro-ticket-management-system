@@ -16,7 +16,7 @@ namespace Metro.IntegrationTests.Payments;
 
 internal static class PaymentScenarioFixture
 {
-    internal static async Task<AuthenticationHeaderValue> BearerAsync(WebApplicationFactory<Program> app, string userId)
+    internal static async Task<AuthenticationHeaderValue> BearerAsync(WebApplicationFactory<Program> app, string userId, params string[] roles)
     {
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -29,9 +29,18 @@ internal static class PaymentScenarioFixture
         };
         db.AuthSessions.Add(session);
         await db.SaveChangesAsync();
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, userId),
+            new("security_stamp", user.SecurityStamp!),
+            new("session_id", session.Id.ToString())
+        };
+        if (roles is { Length: > 0 })
+        {
+            claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
+        }
         var token = new JwtSecurityToken("metro-api", "metro-web",
-            new[] { new Claim(JwtRegisteredClaimNames.Sub, userId), new Claim("security_stamp", user.SecurityStamp!),
-                new Claim("session_id", session.Id.ToString()) },
+            claims,
             DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddHours(1),
             new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(PaymentTestFactory.SigningKey)), SecurityAlgorithms.HmacSha256));
         return new("Bearer", new JwtSecurityTokenHandler().WriteToken(token));

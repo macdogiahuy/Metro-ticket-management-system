@@ -113,6 +113,19 @@
     {
       "key": "bookingPaymentKey",
       "value": ""
+    },
+    {
+      "key": "refundId",
+      "value": ""
+    },
+    {
+      "key": "ticketChangeRequestId",
+      "value": ""
+    },
+    {
+      "key": "staffAccessToken",
+      "value": "",
+      "type": "secret"
     }
   ],
   "item": [
@@ -1055,6 +1068,294 @@
               "  if (payment.paymentCode) pm.collectionVariables.set(\"paymentId\", payment.id);",
               "}"
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "BE-16 Cancellation, Refunds and Ticket Exchange (UC42)",
+      "item": [
+        {
+          "name": "Cancel unpaid order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderVersion\": 1,\n  \"reason\": \"Passenger cancelled before payment\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "{{orderId}}",
+                "cancel"
+              ]
+            },
+            "description": "Atomically cancels an unpaid order (DRAFT/PENDING_PAYMENT) via metro.cancel_unpaid_order. Safe for retries."
+          }
+        },
+        {
+          "name": "Request refund for payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentId\": \"{{paymentId}}\",\n  \"amountMinor\": 15000,\n  \"reason\": \"CUSTOMER_REQUEST\",\n  \"description\": \"Cancellation refund request\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/refunds",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "refunds"
+              ]
+            },
+            "description": "Submits a refund request against a successful payment. Preserves the original payment row without deletion."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const res = pm.response.json();",
+                  "  pm.collectionVariables.set(\"refundId\", res.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get refund status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/refunds/{{refundId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "refunds",
+                "{{refundId}}"
+              ]
+            },
+            "description": "Fetches details and status of a submitted refund request."
+          }
+        },
+        {
+          "name": "Approve refund (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true,\n  \"decisionReason\": \"Approved by admin review\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/refunds/{{refundId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "refunds",
+                "{{refundId}}",
+                "approve"
+              ]
+            },
+            "description": "Requires Admin role. Creates refund transaction, marks payment REFUNDED, and revokes unused tickets."
+          }
+        },
+        {
+          "name": "Request ticket change for disruption",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newOriginStationId\": \"{{originStationId}}\",\n  \"newDestinationStationId\": \"{{destinationStationId}}\",\n  \"newTravelDate\": \"2026-12-10\",\n  \"reason\": \"SERVICE_DISRUPTION\",\n  \"notes\": \"Train cancelled\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tickets/{{ticketId}}/change-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tickets",
+                "{{ticketId}}",
+                "change-requests"
+              ]
+            },
+            "description": "Requests a route/date change for an UNUSED ticket due to disruption. Allowed at most 1 time per ticket."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const res = pm.response.json();",
+                  "  pm.collectionVariables.set(\"ticketChangeRequestId\", res.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get ticket change request",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ticket-change-requests/{{ticketChangeRequestId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ticket-change-requests",
+                "{{ticketChangeRequestId}}"
+              ]
+            },
+            "description": "Fetches details of a ticket disruption change request."
+          }
+        },
+        {
+          "name": "Approve ticket change (Staff/Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true,\n  \"reason\": \"Staff verified station disruption\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ticket-change-requests/{{ticketChangeRequestId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ticket-change-requests",
+                "{{ticketChangeRequestId}}",
+                "approve"
+              ]
+            },
+            "description": "Requires Staff or Admin role. Applies ticket change, increments change_count, revokes old QR credential, issues new QR if travel date is today."
           }
         }
       ]

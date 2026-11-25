@@ -7,6 +7,7 @@
     <!-- XML comments dùng cho Swagger (DoD BE-01). 1591: bỏ warning thiếu comment. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
   </PropertyGroup>
 
   <ItemGroup>
