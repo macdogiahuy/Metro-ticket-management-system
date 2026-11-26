@@ -28,6 +28,12 @@ BEGIN
         RAISE EXCEPTION 'Missing BE-07 immutable payment attempt metadata';
     END IF;
 
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 14)
+       OR to_regclass('metro.operations_requests') IS NULL OR to_regclass('metro.operation_revisions') IS NULL
+       OR to_regclass('metro.service_disruptions') IS NULL THEN
+        RAISE EXCEPTION 'Missing BE-14 service operations migration 014';
+    END IF;
+
     SELECT string_agg(name, ', ') INTO v_missing
     FROM (VALUES
         ('hold_trip_capacity'), ('confirm_capacity_hold'), ('release_capacity_hold'),

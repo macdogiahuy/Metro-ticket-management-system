@@ -119,6 +119,34 @@
     {
       "key": "bookingPaymentKey",
       "value": ""
+    },
+    {
+      "key": "operationsTripId",
+      "value": ""
+    },
+    {
+      "key": "operationsStationId",
+      "value": ""
+    },
+    {
+      "key": "operationsDisruptionId",
+      "value": ""
+    },
+    {
+      "key": "operationsRequestKey",
+      "value": ""
+    },
+    {
+      "key": "operationsEtaAt",
+      "value": ""
+    },
+    {
+      "key": "operationsObservedAt",
+      "value": ""
+    },
+    {
+      "key": "operationsLoadKg",
+      "value": "17999.9"
     }
   ],
   "item": [
@@ -1202,6 +1230,528 @@
               "  if (payment.paymentCode) pm.collectionVariables.set(\"paymentId\", payment.id);",
               "}"
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Service Operations (BE-14)",
+      "description": "BE-14 requires an active operator membership and Admin JWT for mutations/history. Fill current trip/station/operator variables. ETA/load dates must match the trip service date. For replay keep both operationsRequestKey and all body values (including observed time) fixed. Suggestions use the 15-second BE-07 worker; no holds or automatic refunds. EMAIL_MOCK is an outbox only.",
+      "item": [
+        {
+          "name": "Record manual ETA",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const fixedKey = pm.collectionVariables.get('operationsRequestKey');",
+                  "pm.variables.set('operationsKey', fixedKey || pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('operationsEta', pm.collectionVariables.get('operationsEtaAt') || new Date(Date.now() + 5 * 60000).toISOString());",
+                  "pm.variables.set('operationsObserved', pm.collectionVariables.get('operationsObservedAt') || new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ETA saved', () => pm.expect(pm.response.json().status).to.eql('RECORDED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{operationsKey}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/trips/{{operationsTripId}}/eta?operatorCode={{operatorCode}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stationId\": \"{{operationsStationId}}\",\n  \"expectedArrivalAt\": null,\n  \"expectedDepartureAt\": \"{{operationsEta}}\",\n  \"reason\": \"?? x?c minh ETA nh?p tay\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Record current kg (allows overload)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const fixedKey = pm.collectionVariables.get('operationsRequestKey');",
+                  "pm.variables.set('operationsKey', fixedKey || pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('operationsEta', pm.collectionVariables.get('operationsEtaAt') || new Date(Date.now() + 5 * 60000).toISOString());",
+                  "pm.variables.set('operationsObserved', pm.collectionVariables.get('operationsObservedAt') || new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Load saved', () => pm.expect(pm.response.json().status).to.eql('RECORDED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{operationsKey}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/trips/{{operationsTripId}}/load?operatorCode={{operatorCode}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observedLoadKg\": {{operationsLoadKg}},\n  \"observedAt\": \"{{operationsObserved}}\",\n  \"reason\": \"Quan s?t t?i nh?p tay\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Public latest trip load",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const fixedKey = pm.collectionVariables.get('operationsRequestKey');",
+                  "pm.variables.set('operationsKey', fixedKey || pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('operationsEta', pm.collectionVariables.get('operationsEtaAt') || new Date(Date.now() + 5 * 60000).toISOString());",
+                  "pm.variables.set('operationsObserved', pm.collectionVariables.get('operationsObservedAt') || new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const load = pm.response.json();",
+                  "pm.test('No capacity hold', () => pm.expect(load.holdsCapacity).to.eql(false));",
+                  "pm.test('Known load state', () => pm.expect(['NO_DATA','NO_LIMIT','AVAILABLE','FULL']).to.include(load.loadStatus));",
+                  "if (load.loadStatus !== 'AVAILABLE') pm.test('Load does not permit entry', () => pm.expect(load.entryLoadAllowed).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/trips/{{operationsTripId}}/load?operatorCode={{operatorCode}}"
+          }
+        },
+        {
+          "name": "Mark trip delayed",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const fixedKey = pm.collectionVariables.get('operationsRequestKey');",
+                  "pm.variables.set('operationsKey', fixedKey || pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('operationsEta', pm.collectionVariables.get('operationsEtaAt') || new Date(Date.now() + 5 * 60000).toISOString());",
+                  "pm.variables.set('operationsObserved', pm.collectionVariables.get('operationsObservedAt') || new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Delayed', () => pm.expect(pm.response.json().status).to.eql('DELAYED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{operationsKey}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/trips/{{operationsTripId}}/status?operatorCode={{operatorCode}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"DELAYED\",\n  \"reason\": \"?? x?c minh chuy?n ch?m\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Read paginated operations history",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const fixedKey = pm.collectionVariables.get('operationsRequestKey');",
+                  "pm.variables.set('operationsKey', fixedKey || pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('operationsEta', pm.collectionVariables.get('operationsEtaAt') || new Date(Date.now() + 5 * 60000).toISOString());",
+                  "pm.variables.set('operationsObserved', pm.collectionVariables.get('operationsObservedAt') || new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const h=pm.response.json();",
+                  "pm.test('History collections', () => { pm.expect(h.etaUpdates).to.be.an('array'); pm.expect(h.loadObservations).to.be.an('array'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/trips/{{operationsTripId}}/operations?page=1&operatorCode={{operatorCode}}"
+          }
+        },
+        {
+          "name": "Create draft station closure",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const fixedKey = pm.collectionVariables.get('operationsRequestKey');",
+                  "pm.variables.set('operationsKey', fixedKey || pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('operationsEta', pm.collectionVariables.get('operationsEtaAt') || new Date(Date.now() + 5 * 60000).toISOString());",
+                  "pm.variables.set('operationsObserved', pm.collectionVariables.get('operationsObservedAt') || new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Draft only', () => pm.expect(pm.response.json().status).to.eql('DRAFT'));",
+                  "if (pm.response.code === 200) pm.collectionVariables.set('operationsDisruptionId',pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{operationsKey}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/disruptions?operatorCode={{operatorCode}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"T?m ??ng ga\",\n  \"description\": \"S? c? ?? ghi nh?n, ch? x?c minh c?ng b?\",\n  \"effect\": \"CLOSED\",\n  \"occurredAt\": \"{{operationsObserved}}\",\n  \"stationId\": \"{{operationsStationId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List admin disruptions",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const fixedKey = pm.collectionVariables.get('operationsRequestKey');",
+                  "pm.variables.set('operationsKey', fixedKey || pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('operationsEta', pm.collectionVariables.get('operationsEtaAt') || new Date(Date.now() + 5 * 60000).toISOString());",
+                  "pm.variables.set('operationsObserved', pm.collectionVariables.get('operationsObservedAt') || new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('List', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/disruptions?page=1&operatorCode={{operatorCode}}"
+          }
+        },
+        {
+          "name": "Publish verified disruption",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const fixedKey = pm.collectionVariables.get('operationsRequestKey');",
+                  "pm.variables.set('operationsKey', fixedKey || pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('operationsEta', pm.collectionVariables.get('operationsEtaAt') || new Date(Date.now() + 5 * 60000).toISOString());",
+                  "pm.variables.set('operationsObserved', pm.collectionVariables.get('operationsObservedAt') || new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Published', () => pm.expect(pm.response.json().status).to.eql('PUBLISHED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{operationsKey}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/disruptions/{{operationsDisruptionId}}/publish?operatorCode={{operatorCode}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirmed\": true,\n  \"reason\": \"Administrator ?? x?c minh ph?m vi gi?n ?o?n\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Read public service status",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const fixedKey = pm.collectionVariables.get('operationsRequestKey');",
+                  "pm.variables.set('operationsKey', fixedKey || pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('operationsEta', pm.collectionVariables.get('operationsEtaAt') || new Date(Date.now() + 5 * 60000).toISOString());",
+                  "pm.variables.set('operationsObserved', pm.collectionVariables.get('operationsObservedAt') || new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Public notices', () => pm.expect(pm.response.json().notices).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/service-status?operatorCode={{operatorCode}}"
+          }
+        },
+        {
+          "name": "Resolve published disruption",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const fixedKey = pm.collectionVariables.get('operationsRequestKey');",
+                  "pm.variables.set('operationsKey', fixedKey || pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('operationsEta', pm.collectionVariables.get('operationsEtaAt') || new Date(Date.now() + 5 * 60000).toISOString());",
+                  "pm.variables.set('operationsObserved', pm.collectionVariables.get('operationsObservedAt') || new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Resolved', () => pm.expect(pm.response.json().status).to.eql('RESOLVED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{operationsKey}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/disruptions/{{operationsDisruptionId}}/resolve?operatorCode={{operatorCode}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirmed\": true,\n  \"reason\": \"?? x?c nh?n d?ch v? ???c kh?i ph?c\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Reject missing Admin authorization",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const fixedKey = pm.collectionVariables.get('operationsRequestKey');",
+                  "pm.variables.set('operationsKey', fixedKey || pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('operationsEta', pm.collectionVariables.get('operationsEtaAt') || new Date(Date.now() + 5 * 60000).toISOString());",
+                  "pm.variables.set('operationsObserved', pm.collectionVariables.get('operationsObservedAt') || new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{operationsKey}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/trips/{{operationsTripId}}/eta?operatorCode={{operatorCode}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stationId\": \"{{operationsStationId}}\",\n  \"expectedDepartureAt\": \"{{operationsEta}}\",\n  \"reason\": \"Auth check\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         }
       ]

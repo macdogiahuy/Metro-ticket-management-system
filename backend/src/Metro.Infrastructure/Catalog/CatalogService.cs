@@ -27,7 +27,8 @@ public sealed class CatalogService(
         var op = await ResolveActiveOperatorAsync(operatorCode, cancellationToken);
         if (op is null) return new LineCatalogResponse(string.Empty, DateTime.UtcNow, []);
 
-        return await cache.GetOrCreateAsync($"lines:{op.Id:N}:status={normalizedStatus ?? "all"}", LinesAndStationsTtl, async ct =>
+        var revision = await ServiceRevisionAsync(op.Id, cancellationToken);
+        return await cache.GetOrCreateAsync($"lines:{op.Id:N}:rev={revision}:status={normalizedStatus ?? "all"}", LinesAndStationsTtl, async ct =>
         {
             var linesQuery = db.Lines.AsNoTracking();
             if (normalizedStatus is not null) linesQuery = linesQuery.Where(l => l.Status == normalizedStatus);
@@ -104,7 +105,8 @@ public sealed class CatalogService(
 
         if (normalizedSearch is { Length: > MaxCacheableSearchLength }) return await LoadAsync(cancellationToken);
         var searchKey = normalizedSearch is null ? "none" : Uri.EscapeDataString(normalizedSearch.ToLowerInvariant());
-        var key = $"stations:{op.Id:N}:line={lineId?.ToString("N") ?? "all"}:status={normalizedStatus ?? "all"}:q={searchKey}";
+        var revision = await ServiceRevisionAsync(op.Id, cancellationToken);
+        var key = $"stations:{op.Id:N}:rev={revision}:line={lineId?.ToString("N") ?? "all"}:status={normalizedStatus ?? "all"}:q={searchKey}";
         return await cache.GetOrCreateAsync(key, LinesAndStationsTtl, LoadAsync, cancellationToken);
     }
 
@@ -119,7 +121,8 @@ public sealed class CatalogService(
         var op = await ResolveActiveOperatorAsync(operatorCode, cancellationToken)
             ?? throw new CatalogException("STATION_NOT_FOUND", StatusCodes.Status404NotFound, "Origin or destination station was not found.");
 
-        return await cache.GetOrCreateAsync($"journeys:{op.Id:N}:{originStationId:N}:{destinationStationId:N}", JourneysTtl, async ct =>
+        var revision = await ServiceRevisionAsync(op.Id, cancellationToken);
+        return await cache.GetOrCreateAsync($"journeys:{op.Id:N}:rev={revision}:{originStationId:N}:{destinationStationId:N}", JourneysTtl, async ct =>
         {
             var stations = await db.Stations.AsNoTracking().Select(s => new GraphStation(s.Id, s.Code, s.Name, s.Status, s.MinTransferSeconds)).ToListAsync(ct);
             var (origin, dest) = (stations.FirstOrDefault(s => s.Id == originStationId), stations.FirstOrDefault(s => s.Id == destinationStationId));
@@ -151,7 +154,8 @@ public sealed class CatalogService(
             return new ServiceStatusResponse(string.Empty, "NORMAL", DateTime.UtcNow, false, [], [], [], [], []);
         }
 
-        var key = $"service-status:{op.Id:N}:line={lineId?.ToString("N") ?? "all"}:station={stationId?.ToString("N") ?? "all"}";
+        var revision = await ServiceRevisionAsync(op.Id, cancellationToken);
+        var key = $"service-status:{op.Id:N}:rev={revision}:line={lineId?.ToString("N") ?? "all"}:station={stationId?.ToString("N") ?? "all"}";
         return await cache.GetOrCreateAsync(key, ServiceStatusTtl, async ct =>
         {
             var now = DateTime.UtcNow;
@@ -190,7 +194,9 @@ public sealed class CatalogService(
             var lineItems = allLines.Where(l => lineIds.Contains(l.Id)).Select(l =>
             {
                 var c = incidents.Count(i => i.LineId == l.Id);
-                return new LineStatusItem(l.Id, l.Code, l.Name, l.Status, CatalogStatusRules.ComputeEntityOperationalState(l.Status, c), c, l.UpdatedAt);
+                var operational = l.Status == "ACTIVE" && incidents.Any(i => i.LineId == l.Id && i.IncidentType == "SERVICE_DELAY")
+                    ? "DELAYED" : CatalogStatusRules.ComputeEntityOperationalState(l.Status, c);
+                return new LineStatusItem(l.Id, l.Code, l.Name, l.Status, operational, c, l.UpdatedAt);
             }).ToArray();
             var stationItems = allStations.Where(s => stationIds.Contains(s.Id)).Select(s =>
             {
@@ -225,6 +231,10 @@ public sealed class CatalogService(
         if (defaultOp is not null) operatorContext.CurrentOperatorId = defaultOp.Id;
         return defaultOp;
     }
+
+    private Task<long> ServiceRevisionAsync(Guid op, CancellationToken ct) => db.Database.SqlQuery<long>($"""
+        SELECT COALESCE((SELECT revision FROM metro.operation_revisions WHERE operator_id={op}),0) AS "Value"
+        """).SingleAsync(ct);
 
     private Task<List<ServiceIncidentItem>> LoadActiveIncidentsAsync(Guid operatorId, CancellationToken ct) =>
         db.Database.SqlQuery<ServiceIncidentItem>($"""
