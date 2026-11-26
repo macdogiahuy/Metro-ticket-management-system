@@ -29,6 +29,8 @@ public sealed class GlobalExceptionHandler(
         {
             BadHttpRequestException => (StatusCodes.Status400BadRequest, "Invalid request", exception.Message, (string?)null),
             Metro.Application.Abstractions.Ticketing.TicketException ticket => (ticket.Status, "Ticket request failed", ticket.Message, (string?)ticket.Code),
+            Metro.Application.Abstractions.Ticketing.TicketChangeException change => (change.Status, "Ticket change request failed", change.Message, change.Code),
+            RefundException refund => (refund.Status, "Refund request failed", refund.Message, refund.Code),
             BookingException booking => (booking.Status, "Booking request failed", booking.Code, booking.Code),
             Metro.Application.Abstractions.Operations.OperationsException operations =>
                 (operations.Status, "Service operations request failed", operations.Code, operations.Code),

@@ -31,6 +31,7 @@ public sealed class BookingOpenApiFilter : IOperationFilter
             "ConfirmBooking" => new OpenApiObject { ["orderVersion"] = new OpenApiInteger(1), ["expectedTotalMinor"] = new OpenApiLong(30000) },
             "RespondToBookingConsent" => new OpenApiObject { ["orderVersion"] = new OpenApiInteger(1),
                 ["consentId"] = new OpenApiString("22222222-2222-4222-8222-222222222222"), ["decision"] = new OpenApiString("ACCEPT") },
+            "CancelOrder" => new OpenApiObject { ["orderVersion"] = new OpenApiInteger(1), ["reason"] = new OpenApiString("BUYER_CANCELLED") },
             _ => null
         };
         if (example is not null && operation.RequestBody is not null)
