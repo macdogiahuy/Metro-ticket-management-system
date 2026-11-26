@@ -78,6 +78,14 @@ public sealed class SwaggerContractTests(MetroWebApplicationFactory factory)
         Assert.Contains("/api/v1/admin/trip-load", swagger.Paths.Keys);
         Assert.Contains("/api/v1/admin/trip-load/observations", swagger.Paths.Keys);
         Assert.Contains("/api/v1/admin/trip-load/eta", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/notices", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/notices/{id}", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/notices/{id}/approve", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/notices/{id}/publish", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/notices/{id}/cancel", swagger.Paths.Keys);
+        var createNoticeOp = swagger.Paths["/api/v1/admin/notices"].Operations[OperationType.Post];
+        Assert.Contains(createNoticeOp.Parameters, p => p.Name == "Idempotency-Key");
+        Assert.NotEmpty(createNoticeOp.Security);
         Assert.Contains("/api/v1/service-status", swagger.Paths.Keys);
         Assert.Contains("/api/v1/payments", swagger.Paths.Keys);
         Assert.Contains("/api/v1/payments/{id}/retry", swagger.Paths.Keys);
