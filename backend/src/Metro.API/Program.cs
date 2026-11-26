@@ -147,6 +147,7 @@ app.MapPaymentEndpoints();
 app.MapTicketEndpoints();
 app.MapGateEndpoints();
 app.MapBookingEndpoints();
+app.MapOperationsEndpoints();
 app.MapReportEndpoints();
 app.MapHealthEndpoints();
 

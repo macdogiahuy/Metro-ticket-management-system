@@ -4,6 +4,19 @@ Production-oriented PostgreSQL 17 schema for the Metro ticket management system.
 
 ## Prerequisites
 
+BE-14 adds migration **014** for atomic service-operation replay records, disruption lifecycle and operator cache revisions. Apply the generated package and run `scripts/09_verify.sql` on a dedicated test database before enabling these API routes. See [BE-14 handover](../../docs/handover/BE-14-SERVICE-OPERATIONS.md) for contracts and deployment notes; migrations 001–013 remain immutable.
+
+**Migration 014 has not been applied to Neon production.** As with 010–013,
+production deployment requires separate explicit authorization for the named
+Neon project/production branch and release window, plus a separate pre-deploy
+database backup with verified recovery. Record its branch ID, source and time;
+rehearse on a separate branch before production deployment. A Git branch is not
+a database backup; passing tests or review comments do not authorize deployment.
+Follow the [014 production release gate](documentation/DEPLOYMENT_GUIDE.md#be-14-migration-014-production-release-gate)
+and complete the [release evidence record](../../docs/handover/BE-14-PRODUCTION-RELEASE.md)
+before applying production SQL. Missing backup/recovery or authorization
+evidence keeps the release blocked.
+
 - PostgreSQL 17 or later with UTF-8 server encoding.
 - A deployment role that can create the `btree_gist` extension and the `metro` schema.
 - Python 3 to rebuild `deploy.sql`.
@@ -26,6 +39,7 @@ Do not use the application login as the migration owner. Application roles shoul
 11. `migrations/011_paid_ticket_issuance.sql`
 12. `migrations/012_free_child_ticket_issuance.sql`
 13. `migrations/013_booking_requests.sql`
+14. `migrations/014_service_operations.sql`
 
 `build_deploy.py` combines those sources into `deploy.sql`, wraps them in one transaction, verifies migration checksums, and serializes deployments with a PostgreSQL advisory lock. Edit only migration sources; never hand-edit `deploy.sql`.
 
@@ -73,7 +87,7 @@ All workflow functions are `SECURITY DEFINER` with a pinned `search_path` and no
 
 ## Validation tests
 
-Current local acceptance through migration 017 uses real PostgreSQL through `backend/tests/Run-PostgresTests.ps1`. Deploy `deploy.sql`, run `scripts/09_verify.sql`, then follow [backend test setup](../../backend/tests/README.md). BE-09 tests cover paid/free SQL contracts, locking/races, current QR, eligibility, history and HTTP ownership. BE-07 adds Booking/consent, immutable retry attempts, unresolved payment guards, free child Checkout and trip suggestion history. BE-10 adds gate decisions/journeys, verified QR replacement, shared email-code policy, encrypted delivery and administrator support review. Never run fixtures against a shared DB.
+Current acceptance through migration 017 uses real PostgreSQL through `backend/tests/Run-PostgresTests.ps1`. Create a fresh dedicated test database for every run, deploy `deploy.sql`, run `scripts/09_verify.sql`, then follow [backend test setup](../../backend/tests/README.md). BE-09 tests cover paid/free SQL contracts, locking/races, current QR, eligibility, history and HTTP ownership. BE-07 adds Booking/consent, immutable retry attempts, unresolved payment guards, free child Checkout and trip suggestion history. BE-10 adds gate decisions/journeys, verified QR replacement, shared email-code policy, encrypted delivery and administrator support review. BE-14 adds ETA/kg histories, idempotent operations, disruption publication/recovery, cache revisions and suggestion refresh. Never run fixtures against a shared DB or reuse a database from an earlier acceptance run.
 
 The standalone SQL files under `tests/` predate BE-09 migration 010 and preserve historical migration 005/006 expectations (group capacity issuance and orders immediately ISSUED). They are historical regression assets for those schema revisions, not the acceptance suite for the current Metro issuance contract. Do not run that old ordered fixture chain as validation of 010–012 or interpret its immediate-ISSUED assertions as current requirements.
 

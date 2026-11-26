@@ -19,7 +19,7 @@ Ngày 26/11/2026 (UTC+7). Dữ liệu từ `git fetch origin --prune`, toàn b�
 
 Các nhánh ancestor đã nằm trong dev; không lấy lại các bản code cũ. Nhánh BE-15 đã bị xóa sau merge #88, code đã có trong dev. Không có nhánh FE-05 được push; frontend không thay đổi trong bản sửa BE-10.
 
-## PR chưa merge
+## PR chưa merge tại lần kiểm tra đầu
 
 | PR | Head đã kiểm tra | Trạng thái / ảnh hưởng BE-10 |
 | --- | --- | --- |
@@ -37,8 +37,12 @@ GitHub API báo backend/frontend checks success trên các head nêu trên; đó
 4. Kiểm deploy sạch, re-deploy, upgrade từ chuỗi BE-14 qua 014. DB test có gate 014–016 cũ không được dùng để giả kiểm upgrade chuẩn bằng cách sửa schema_migrations.
 5. Cùng file 014 cho phép hợp nhất hai PR theo cả hai thứ tự; người tích hợp vẫn phải giữ deployment/verifier mới nhất và kiểm thử sau merge. Nếu schema 014 của BE-14 thay đổi trước merge thì phải so lại checksum và kiểm lại dependency, không ghi đè lịch sử đã triển khai.
 
+## Cập nhật trong phiên kiểm tra
+
+Trong lúc chạy suite lần đầu, maintainer đã merge #87 vào dev `eba772f` và xóa nhánh BE-14. Đã fetch lại toàn bộ remote: còn 11 heads, PR mở còn #90 và #91. Bản cuối cập nhật dev này, giải quyết conflict OpenAPI/test runner/README/Postman/deploy và giữ đủ Gate + Operations + Reports. Migration 014 khớp dev chính thức, không còn là dependency chưa merge. Không nhập runtime #91 và không tự merge PR nào trên GitHub. Kết quả 283 test bên dưới là bước trước BE-14; bằng chứng suite cuối sau BE-14 được ghi riêng trong bàn giao.
+
 ## Hiệu năng
 
 Giữ fail Neon pooled P95 khoảng 1495 ms trong mô tả. Giữ ngưỡng smoke 1000 ms, 100 request/20 client. Log mới phân biệt loopback/non-loopback và ghi probe DB riêng; không che fail, không trừ độ trễ DB khỏi P95, không suy đoán chắc chắn nguyên nhân chỉ là mạng. Kết quả trên fixture local không thay NFR-002 đầy đủ.
 
-Kết quả kiểm lại của bản tích hợp: 283 test pass (130 unit + 153 integration), 0 fail/skip; P95 smoke local 338,30 ms, build 0 warning/error. Deploy sạch/re-deploy/upgrade từ BE-14 014 đến 017 đạt; chuỗi gate 014–016 cũ bị chặn đúng bằng checksum. Chi tiết trong [bàn giao BE-10](BE-10-GATE-VALIDATION.md).
+Trước khi BE-14 vào dev: 283 test pass (130 unit + 153 integration), P95 local 338,30 ms. Sau khi cập nhật dev `eba772f` và kiểm trên DB mới hoàn toàn: **309 pass (149 unit + 160 integration), 0 fail/skip; P95 local 288,06 ms, build 0 warning/error**. Deploy sạch/re-deploy/upgrade từ BE-14 014 đến 017 đạt; chuỗi gate 014–016 cũ bị chặn đúng bằng checksum. Chi tiết trong [bàn giao BE-10](BE-10-GATE-VALIDATION.md).

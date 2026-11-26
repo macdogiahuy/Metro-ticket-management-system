@@ -36,6 +36,7 @@ public static class ApiDocumentation
         options.OperationFilter<TicketOpenApiFilter>();
         options.OperationFilter<BookingOpenApiFilter>();
         options.OperationFilter<GateOpenApiFilter>();
+        options.OperationFilter<OperationsOpenApiFilter>();
         options.OperationFilter<ReportOpenApiFilter>();
 
         var xmlFile = $"{typeof(ApiDocumentation).Assembly.GetName().Name}.xml";

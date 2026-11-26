@@ -31,6 +31,8 @@ public sealed class GlobalExceptionHandler(
             Metro.Application.Abstractions.Gates.GateException gate => (gate.Status, "Gate request failed", gate.Code, (string?)gate.Code),
             Metro.Application.Abstractions.Ticketing.TicketException ticket => (ticket.Status, "Ticket request failed", ticket.Message, (string?)ticket.Code),
             BookingException booking => (booking.Status, "Booking request failed", booking.Code, booking.Code),
+            Metro.Application.Abstractions.Operations.OperationsException operations =>
+                (operations.Status, "Service operations request failed", operations.Code, operations.Code),
             AuthException auth => (auth.Status, "Authentication failed", auth.Message, (string?)auth.Code),
             PaymentException payment => (payment.Status, payment.Status switch
             {

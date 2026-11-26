@@ -43,6 +43,6 @@ Phạm vi: backend UC16–UC18 trên nhánh local `feature/BE-10-gate-validation
 
 - Kết quả thực chạy và tổng số test nằm trong [bàn giao](BE-10-GATE-VALIDATION.md). Tên test trong bảng là truy vết, không thay log/TRX thực chạy.
 - Đây là bằng chứng backend local. Không tự xác nhận các AC giao diện camera/upload/in ảnh, SMTP inbox thực, HTTPS triển khai, benchmark tham chiếu đầy đủ, backup/restore hoặc phê duyệt người dùng đã đạt.
-- BE-13/14 chưa hợp nhất: dùng lịch/actual boarding fixture để kiểm quy tắc BE-10. Không lấy ETA làm actual arrival hoặc giả các API quản trị đó đã có.
-- Chuỗi chuẩn: 014 schema BE-14 nguyên văn từ PR #87 (`7cff576`), 015–017 gate/QR/support của BE-10. Không nhập runtime BE-14. Verifier/deploy đồng bộ, kiểm deploy sạch/upgrade từ BE-14 014; không sửa checksum DB chung đã áp dụng chuỗi gate 014–016 cũ.
+- BE-14 đã vào dev `eba772f` và được cập nhật trong bản cuối. BE-13 chưa hợp nhất; test gate dùng lịch/actual boarding fixture, không lấy ETA làm actual arrival hoặc giả API quản trị BE-13 đã có.
+- Chuỗi chuẩn: 014 BE-14 đã có trong dev `eba772f` (nội dung khớp `7cff576`), 015–017 gate/QR/support. Runtime BE-14/BE-15 được cập nhật từ dev; PR #91 vẫn chưa nhập. Verifier/deploy đồng bộ; không sửa checksum DB chung đã áp dụng chuỗi gate 014–016 cũ.
 - Reviewer báo smoke Neon pooled P95 khoảng 1495 ms trên `5b30cdf` (145/146 integration pass). Đó là fail hiệu năng trong môi trường đó; chưa có bằng chứng tách nguyên nhân DB/network/gate. Xem phản hồi review trong bàn giao, không dùng kết quả local trước đó để thay kết quả Neon.

@@ -1,6 +1,6 @@
 # BE-10 — Soát vé tại cổng
 
-Nền ban đầu `origin/dev` `fe29f9b`, đã tích hợp dev `e66f058` (BE-15), nhánh local `feature/BE-10-gate-validation`. Bản phản hồi review dành cho PR #90; chỉ push nhánh BE-10, không merge PR. Nguồn: SRS v1.2 FR-16/17/18, BR-027/041–049/052/055/072; DATA-009; IF-002/008; chính sách mã email mục 8.2; AC-X19–22/37 và AC-A03/04. [Ma trận truy vết](BE-10-SRS-TRACEABILITY.md) ghi phạm vi backend và giới hạn nghiệm thu.
+Nền ban đầu `origin/dev` `fe29f9b`, đã tích hợp dev `eba772f` (BE-14 và BE-15), nhánh local `feature/BE-10-gate-validation`. Bản phản hồi review dành cho PR #90; chỉ push nhánh BE-10, không merge PR. Nguồn: SRS v1.2 FR-16/17/18, BR-027/041–049/052/055/072; DATA-009; IF-002/008; chính sách mã email mục 8.2; AC-X19–22/37 và AC-A03/04. [Ma trận truy vết](BE-10-SRS-TRACEABILITY.md) ghi phạm vi backend và giới hạn nghiệm thu.
 
 ## Contract và quyền
 
@@ -75,9 +75,9 @@ SQL tham số hóa qua Npgsql, không dùng EF migrations. Thứ tự khóa: kh�
 
 `016_gate_qr_support.sql` thêm intent/challenge/receipt/verification, encrypted email outbox/attempts và chính sách mã email chung. `017_gate_support_review.sql` bổ sung CLOSE_SUPPORT vào lịch sử xử lý. Migrations 001–013 và nội dung SQL ba migration gate giữ nguyên; không ghi đè lịch sử DB đã triển khai.
 
-**Tích hợp BE-14:** giữ `014_service_operations.sql` nguyên văn từ PR #87, head `7cff576`, làm schema phụ thuộc để gói BE-10 deploy độc lập ngay khi BE-14 chưa vào dev. Không nhập API/runtime của PR #87. Nội dung và checksum 014 phải khớp nhánh BE-14; BE-14 vẫn sở hữu migration này. Gate chuyển thành `015_gate_validation.sql`, `016_gate_qr_support.sql`, `017_gate_support_review.sql`; nội dung ba migration gate giữ nguyên, chỉ đổi version/name của wrapper trong deploy. Verifier kiểm đúng tên/version 014–017. Vì cùng file 014 được giữ nguyên, BE-14 có thể vào trước hoặc sau mà không cần cấp thêm version 014. Khi nhánh BE-14 cập nhật dev sau đó, vẫn phải hợp nhất deploy/verifier và runtime bằng review của PR đó; không tự merge PR nào. Không sửa checksum trên DB chung đã áp dụng chuỗi gate 014–016 cũ: dùng DB test mới để kiểm chuỗi chuẩn, lập kế hoạch riêng cho DB chung nếu đã có chuỗi cũ.
+**Tích hợp BE-14:** PR #87 đã được merge vào dev `eba772f` trong lúc kiểm thử ngày 26/11. Bản cuối cập nhật cả runtime BE-14 và BE-15 từ dev, giữ `014_service_operations.sql` đúng nội dung/checksum đã có trên dev. Gate dùng `015_gate_validation.sql`, `016_gate_qr_support.sql`, `017_gate_support_review.sql`; nội dung SQL ba migration gate giữ nguyên, chỉ đổi tên/version wrapper trong deploy. Verifier kiểm đúng tên/version 014–017. Không có hai migration dùng cùng version hoặc khoảng trống 014. Không sửa checksum DB chung đã áp dụng gate 014–016 cũ; dùng DB test mới để kiểm chuỗi chuẩn và lập kế hoạch riêng cho môi trường đã dùng chuỗi cũ. Không tự merge PR #90/#91.
 
-Runtime cần SELECT/INSERT các bảng gate/QR history, SELECT/INSERT AFC, SELECT/UPDATE Journey/ticket/credential/email challenges/outbox và INSERT notification/attempt/audit. Chưa thay quyền production hoặc deploy DB thật. BE-13 cung cấp lịch/actual boarding; BE-14 cung cấp cập nhật tải/vận hành. Test dùng fixture riêng, không giả các API đó đã merge.
+Runtime cần SELECT/INSERT các bảng gate/QR history, SELECT/INSERT AFC, SELECT/UPDATE Journey/ticket/credential/email challenges/outbox và INSERT notification/attempt/audit. Chưa thay quyền production hoặc deploy DB thật. BE-13 cung cấp lịch/actual boarding; BE-14 đã có trên dev và cung cấp cập nhật tải/vận hành. Test gate vẫn dùng fixture riêng, không giả API BE-13 đã merge.
 
 ## Kiểm thử và công cụ
 
@@ -115,10 +115,10 @@ Subfolder `QR support (UC18)` có quy trình challenge → verify EMAIL/DOCUMENT
 - Reviewer báo trên head `5b30cdf`: unit 112/112, integration 145/146; smoke P95 khoảng 1495 ms với DB Neon pooled. Đây là kết quả reviewer cung cấp, không phải lần tự chạy lại trên Neon. Không gọi kết quả này là “toàn bộ test xanh” và chưa đủ bằng chứng để khẳng định nguyên nhân chỉ là mạng.
 - Smoke dùng TestServer cho HTTP nhưng vẫn truy cập PostgreSQL thật; stopwatch bao gồm DB execution, chờ pool và độ trễ đường API–DB. Dòng log cũ “excludes external network” không chính xác khi DB ở xa. Đã sửa mô tả, thêm phân loại loopback/non-loopback và probe `SELECT 1` ngoài mẫu scan. Không in endpoint/secret; không trừ probe khỏi P95, không nâng ngưỡng 1000 ms, không skip theo môi trường.
 - Kết quả local ngày 25/11 và kết quả Neon là hai môi trường khác nhau. Cần chạy lại cùng môi trường/dataset SRS để kết luận NFR-002; test chức năng không thay cho nghiệm thu hiệu năng.
-- Đã giải quyết trùng số 014 trong gói BE-10 bằng schema prerequisite 014 nguyên văn của BE-14 và gate 015–017. Xem mục Transaction và migration; không nhập API/runtime của PR #87.
+- Đã giải quyết trùng số 014 bằng cách giữ migration BE-14 trên dev và gate 015–017. PR #87 được merge bởi maintainer trong phiên; bản cuối cập nhật dev đó, không tự merge PR nào trên GitHub.
 - Kiểm lại bản sửa local ngày 26/11: Release `--warnaserror` đạt 0 warning/0 error; `build_deploy.py --check` đạt. Chạy đúng smoke bị review báo fail trên PostgreSQL 17 local (`metro_test_be10_complete`): **1 pass, 0 fail, 0 skip**, 100 request/20 client, **P95 320,94 ms, max 358,79 ms**. Probe DB 5 mẫu: min 0,10 / median 0,16 / max 2,67 ms. TRX ở `%TEMP%/metro-be10-local/review-20261126/gate-performance-review.trx`. Không chạy lại toàn bộ suite và chưa chạy lại Neon; số 258 ở trên là bằng chứng ngày 25/11. Các sửa phản hồi review chưa commit/push hoặc cập nhật PR trên GitHub.
 
-## Kết quả tích hợp PR #90 ngày 26/11/2026
+## Kết quả tích hợp PR #90 bước đầu, trước khi BE-14 vào dev
 
 - Đã cập nhật dev `e66f058` gồm BE-15; giữ OpenAPI gate và reports, không nhập runtime BE-14/BE-16. [Khảo sát tất cả nhánh và PR mở](BE-10-INTEGRATION-REVIEW.md) ghi snapshot trước cập nhật.
 - Schema chuẩn 001–017: 014 BE-14 nguyên văn từ `7cff576`, SHA256 `737729ad30cd60376aef07427cd212eeb170c3a8b986ed86c891e365e0335a9b`; 015–017 gate/QR/support. So sánh tự động xác nhận migrations 001–013 giống dev và nội dung/checksum ba gate migrations không đổi khi đổi tên.
@@ -128,3 +128,14 @@ Subfolder `QR support (UC18)` có quy trình challenge → verify EMAIL/DOCUMENT
 - Smoke 100 request/20 client trong suite đầy đủ: **P95 338,30 ms, max 357,67 ms**. Probe DB 5 mẫu min 0,08 / median 0,14 / max 0,54 ms. Ngưỡng giữ 1000 ms; kết quả Neon 1495 ms trong review vẫn được ghi nhận, chưa chạy lại Neon và chưa nghiệm thu NFR-002 đầy đủ.
 - `build_deploy.py --check`, Postman JSON và liên kết tài liệu đạt; toàn bộ folder/request/variable Postman có sẵn trên dev (gồm Reports BE-15) được giữ nguyên, folder gate vẫn có. Frontend không thay đổi.
 - Log deploy/upgrade/TRX: `%TEMP%/metro-be10-local/pr90-review-20261126`. Các kết quả ở phần tự kiểm 25/11 và lần smoke riêng đầu 26/11 là lịch sử trước lần tích hợp này.
+
+## Kết quả cuối sau khi BE-14 đã vào dev
+
+Trong phiên kiểm tra, maintainer merge #87 vào dev `eba772f` và xóa nhánh BE-14. Đã fetch lại và cập nhật dev này vào nhánh BE-10; không tự merge PR nào trên GitHub. Còn PR #90 và #91 mở; runtime BE-16 chưa nhập.
+
+- Giải quyết conflict OpenAPI bằng cách giữ đủ Gate/Operations/Reports; test runner giữ cả GateEndpointsTests và OperationsEndpointsTests; Postman giữ nguyên mọi request/variable của dev và chỉ thêm 488 dòng gate, không format lại dữ liệu có sẵn.
+- 014 khớp chính xác dev `eba772f` và hash đã ghi ở trên; chuỗi SQL/verifier không đổi so với bộ đã kiểm deploy sạch/redeploy/upgrade/legacy-guard trước đó. Migrations 001–014 của dev giữ nguyên, gate 015–017 giữ nguyên nội dung SQL.
+- DB mới hoàn toàn `metro_test_be10_pr90_integrated_20261126`: deploy 001–017 + verifier đạt. Build Release `--no-restore --warnaserror`: **0 warning / 0 error**.
+- Harness đầy đủ: **309 pass = 149 unit + 160 integration, 0 fail / 0 skip**. Runner nhận diện 112 test trong các lớp PostgreSQL được cấu hình. Đây là kết quả cuối đã gồm BE-14 + BE-15 + BE-10.
+- Smoke 100 request/20 client: **P95 288,06 ms, max 316,91 ms**; probe DB min 0,07 / median 0,12 / max 0,36 ms. Vẫn giữ ngưỡng 1000 ms; chưa chạy lại Neon và chưa nghiệm thu NFR-002 đầy đủ.
+- TRX cuối ở `%TEMP%/metro-be10-local/pr90-review-20261126/integrated-tests`; deploy/verify log cùng thư mục cha. Kết quả 283 test ở bước trước chỉ là lịch sử trước khi BE-14 được merge.
