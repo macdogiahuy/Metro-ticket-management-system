@@ -2,6 +2,7 @@ using Metro.Application.Abstractions.Auth;
 using Metro.Application.Abstractions.Catalog;
 using Metro.Application.Abstractions.Fare;
 using Metro.Application.Abstractions.MultiTenancy;
+using Metro.Application.Abstractions.Network;
 using Metro.Application.Abstractions.Storage;
 using Metro.Infrastructure.Caching;
 using Metro.Infrastructure.Booking;
@@ -9,6 +10,7 @@ using Metro.Infrastructure.Catalog;
 using Metro.Infrastructure.Configuration;
 using Metro.Infrastructure.Fare;
 using Metro.Infrastructure.Identity;
+using Metro.Infrastructure.Network;
 using Metro.Infrastructure.Persistence.Context;
 using Metro.Infrastructure.Persistence.MultiTenancy;
 using Metro.Infrastructure.Storage;
@@ -100,6 +102,7 @@ public static class DependencyInjection
         services.AddScoped<IAdminProductService, AdminProductService>();
         services.AddScoped<IAdminFareService, AdminFareService>();
         services.AddScoped<IAdminEligibilityPolicyService, AdminEligibilityPolicyService>();
+        services.AddScoped<IAdminNetworkService, AdminNetworkService>();
 
         var storageOptions = new NeonStorageOptions
         {
