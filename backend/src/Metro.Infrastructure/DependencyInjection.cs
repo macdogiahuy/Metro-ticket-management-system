@@ -17,7 +17,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Metro.Application.Abstractions.Payment;
+using Metro.Application.Abstractions.Reports;
 using Metro.Infrastructure.Payments;
+using Metro.Infrastructure.Reports;
 using StackExchange.Redis;
 
 namespace Metro.Infrastructure;
@@ -105,6 +107,10 @@ public static class DependencyInjection
         // BE-08: MoMo TEST gateway + payment orchestration.
         services.Configure<MoMoOptions>(configuration.GetSection("Payment"));
         services.AddScoped<IPaymentService, PaymentService>();
+
+        // BE-15: reports use administrator membership, never a client-selected operator.
+        services.AddScoped<IReportOperatorResolver, ReportOperatorResolver>();
+        services.AddScoped<IReportService, ReportService>();
 
         return services;
     }
