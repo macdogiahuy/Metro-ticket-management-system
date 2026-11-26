@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Metro.Application.Abstractions.Booking;
 using Metro.Infrastructure.Booking;
 using Microsoft.AspNetCore.Mvc;
@@ -46,6 +46,13 @@ public static class BookingEndpoints
             booking.CancelAsync(Actor(http), id, orderVersion, Key(http, key), ct))
             .WithName("CancelBooking").WithSummary("Cancel an unpaid order before payment starts")
             .ProducesProblem(403).ProducesProblem(404).ProducesProblem(409);
+        group.MapPost("/{id:guid}/cancel", async (HttpContext http, Guid id, CancelOrderRequest? request,
+            [FromHeader(Name = "Idempotency-Key")] string key, BookingService booking, CancellationToken ct) =>
+        {
+            var result = await booking.CancelAsync(Actor(http), id, request?.OrderVersion, Key(http, key), ct, request?.Reason ?? "BUYER_CANCELLED");
+            return TypedResults.Ok(result);
+        }).WithName("CancelOrder").WithSummary("Cancel an unpaid order before payment starts via POST (UC42 / BE-16)")
+            .Produces<BookingResponse>(200).ProducesProblem(400).ProducesProblem(403).ProducesProblem(404).ProducesProblem(409);
         group.MapGet("/{id:guid}/suggestion", (HttpContext http, Guid id, BookingService booking, CancellationToken ct) =>
             booking.GetSuggestionAsync(Actor(http), id, ct)).WithName("GetBookingSuggestion")
             .WithSummary("Get the first boarding trip suggestion without a capacity reservation")

@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Metro.Application.Abstractions.Booking;
 using Metro.Application.Abstractions.MultiTenancy;
@@ -136,16 +136,22 @@ public sealed class BookingService(ApplicationDbContext db, IOperatorContext sco
         }, ct);
     }
 
-    public async Task<BookingResponse> CancelAsync(string actor, Guid id, int versionNumber, string key, CancellationToken ct)
+    public async Task<BookingResponse> CancelAsync(string actor, Guid id, int? versionNumber, string key, CancellationToken ct, string reason = "BUYER_CANCELLED")
     {
         await ResolveAsync(actor, id, ct);
-        return await WriteAsync(actor, "cancel", key, new { id, versionNumber }, async () =>
+        return await WriteAsync(actor, "cancel", key, new { id, versionNumber, reason }, async () =>
         {
             var order = await LockAsync(id, ct);
             RequireBuyer(order, actor);
             await RequireActiveAsync(actor, ct);
             var now = time.GetUtcNow();
-            await RequireEditableAsync(order, versionNumber, now, ct);
+            if (order.Status == "CANCELLED")
+            {
+                var (curVer, _, curConsent) = await DetailsAsync(order, ct);
+                return ToResponse(order, curVer, curConsent, actor, now);
+            }
+            var targetVersion = versionNumber ?? order.OrderVersion;
+            await RequireEditableAsync(order, targetVersion, now, ct);
             var (version, _, consent) = await DetailsAsync(order, ct);
             version.Status = "CANCELLED";
             if (consent?.Status is PurchaseConsentStatus.Requested or PurchaseConsentStatus.Accepted)
@@ -155,7 +161,8 @@ public sealed class BookingService(ApplicationDbContext db, IOperatorContext sco
                 await QueueConsentAsync(order, consent, ct);
             }
             var op = order.OperatorId;
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT metro.cancel_unpaid_order({op},{id},{actor},'BUYER_CANCELLED')", ct);
+            var sqlReason = string.IsNullOrWhiteSpace(reason) ? "BUYER_CANCELLED" : reason.Trim();
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT metro.cancel_unpaid_order({op},{id},{actor},{sqlReason})", ct);
             await db.Entry(order).ReloadAsync(ct);
             return ToResponse(order, version, consent, actor, now);
         }, ct);

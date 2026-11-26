@@ -1,0 +1,210 @@
+{
+  "info": {
+    "name": "Metro BE-16 Cancellation, Refund & Disruption Exchange",
+    "description": "UC42 / BE-16 workflow for canceling unpaid orders, requesting and approving refunds (preserving payment record), and requesting/approving disruption ticket changes (max 1 change/ticket, old QR revoked).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5192" },
+    { "key": "accessToken", "value": "", "type": "secret" },
+    { "key": "adminToken", "value": "", "type": "secret" },
+    { "key": "staffToken", "value": "", "type": "secret" },
+    { "key": "orderId", "value": "" },
+    { "key": "orderVersion", "value": "1" },
+    { "key": "paymentId", "value": "" },
+    { "key": "refundId", "value": "" },
+    { "key": "ticketId", "value": "" },
+    { "key": "ticketChangeRequestId", "value": "" },
+    { "key": "newOriginStationId", "value": "" },
+    { "key": "newDestinationStationId", "value": "" },
+    { "key": "newTravelDate", "value": "" },
+    { "key": "idempotencyKey", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('idempotencyKey')) {",
+          "  pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Cancellation",
+      "item": [
+        {
+          "name": "Cancel unpaid order",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderVersion\": {{orderVersion}},\n  \"reason\": \"Passenger changed mind before payment\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Atomically cancels an unpaid order (DRAFT or PENDING_PAYMENT) using metro.cancel_unpaid_order. Idempotent on repeated calls."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Refunds",
+      "item": [
+        {
+          "name": "Request refund",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/refunds",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentId\": \"{{paymentId}}\",\n  \"amountMinor\": 15000,\n  \"reason\": \"CUSTOMER_REQUEST\",\n  \"description\": \"Fare refund request due to service interruption\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Submits a refund request against a successful payment. Does not delete payment records (preserves audit trail)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.collectionVariables.set('refundId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get refund details",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/refunds/{{refundId}}",
+            "description": "Returns current status and metadata of the refund request."
+          }
+        },
+        {
+          "name": "Approve or reject refund (Admin only)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/refunds/{{refundId}}/approve",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true,\n  \"decisionReason\": \"Approved following disruption verification\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Requires Admin role. Creates a refund transaction, updates payment status (Refunded or PartiallyRefunded), and revokes associated unused tickets."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Ticket Disruption Exchange",
+      "item": [
+        {
+          "name": "Request ticket change (Disruption)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/tickets/{{ticketId}}/change-requests",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newOriginStationId\": \"{{newOriginStationId}}\",\n  \"newDestinationStationId\": \"{{newDestinationStationId}}\",\n  \"newTravelDate\": \"{{newTravelDate}}\",\n  \"reason\": \"SERVICE_DISRUPTION\",\n  \"notes\": \"Line 1 disruption at transfer station\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Requests a ticket route or travel date change due to service disruption. Ticket must be UNUSED and change_count must be 0 (maximum 1 exchange allowed per ticket)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.collectionVariables.set('ticketChangeRequestId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get ticket change request details",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/ticket-change-requests/{{ticketChangeRequestId}}",
+            "description": "Returns status and parameters of the disruption ticket change request."
+          }
+        },
+        {
+          "name": "Approve or reject ticket change (Staff/Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/ticket-change-requests/{{ticketChangeRequestId}}/approve",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true,\n  \"reason\": \"Verified system-wide line disruption\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Requires StationStaff or Admin role. Invokes metro.apply_ticket_change to update ticket route/date, increment change_count to 1, revoke the old QR credential, and generate a new QR credential if traveling today."
+          }
+        }
+      ]
+    }
+  ]
+}
