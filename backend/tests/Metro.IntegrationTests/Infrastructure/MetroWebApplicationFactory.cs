@@ -2,6 +2,9 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Metro.Application.Abstractions.Gates;
 
 namespace Metro.IntegrationTests.Infrastructure;
 
@@ -22,9 +25,15 @@ public sealed class MetroWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Issuer", "metro-api");
         builder.UseSetting("Jwt:Audience", "metro-web");
         builder.UseSetting("TicketQr:WorkerEnabled", "false");
+        builder.UseSetting("GateEmail:WorkerEnabled", "false");
         builder.UseSetting("TicketQr:ActiveKeyId", "test-v1");
         builder.UseSetting("TicketQr:Keys:test-v1", _signingKey);
         builder.UseSetting("METRO_TEST_MODE", "1");
+        builder.ConfigureTestServices(services=>
+        {
+            services.AddSingleton<TestGateEmailSender>();
+            services.AddScoped<IGateEmailSender>(provider=>provider.GetRequiredService<TestGateEmailSender>());
+        });
         builder.ConfigureLogging(logging => logging.AddProvider(TestLogs));
     }
 }

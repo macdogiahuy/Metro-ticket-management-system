@@ -56,6 +56,13 @@ the stored Checkout URL used for replay, and the no-trip suggestion constraint. 
 
 The deployment is repeatable. Reapplying an unchanged migration reports it as already applied. A checksum mismatch stops deployment and requires a new migration.
 
+BE-14 owns `014_service_operations.sql`, included unchanged from PR #87 as a schema prerequisite.
+BE-10 appends migrations 015–017 for atomic gate receipts, immutable passage snapshots,
+evidence-based resolutions/corrections, verified QR support, encrypted email queue and shared
+SRS email-code policy (five-minute expiry, cooldown/quota across purposes). Migrations 001–013 are unchanged.
+See [BE-10 integration notes](../../docs/handover/BE-10-GATE-VALIDATION.md), including the
+migration ownership and compatibility with the unmerged BE-14 branch. Do not reuse 014 for gate validation.
+
 ## Seed data
 
 No production operator, user, credential, role assignment, fare, timetable, capacity, or retention policy is silently seeded. These values require an approved operator source/version. Test-only deterministic fixtures are under `tests/00_test_fixture.sql` and must never be loaded into production.
@@ -80,7 +87,7 @@ All workflow functions are `SECURITY DEFINER` with a pinned `search_path` and no
 
 ## Validation tests
 
-Current acceptance through migration 014 uses real PostgreSQL through `backend/tests/Run-PostgresTests.ps1`. Create a fresh dedicated test database for every run, deploy `deploy.sql`, run `scripts/09_verify.sql`, then follow [backend test setup](../../backend/tests/README.md). BE-09 tests cover paid/free SQL contracts, locking/races, current QR, eligibility, history and HTTP ownership. BE-07 adds Booking/consent, immutable retry attempts, unresolved payment guards, free child Checkout and trip suggestion history. BE-14 adds ETA/kg histories, idempotent operations, disruption publication/recovery, cache revisions and suggestion refresh. Never run fixtures against a shared DB or reuse a database from an earlier acceptance run.
+Current acceptance through migration 017 uses real PostgreSQL through `backend/tests/Run-PostgresTests.ps1`. Create a fresh dedicated test database for every run, deploy `deploy.sql`, run `scripts/09_verify.sql`, then follow [backend test setup](../../backend/tests/README.md). BE-09 tests cover paid/free SQL contracts, locking/races, current QR, eligibility, history and HTTP ownership. BE-07 adds Booking/consent, immutable retry attempts, unresolved payment guards, free child Checkout and trip suggestion history. BE-10 adds gate decisions/journeys, verified QR replacement, shared email-code policy, encrypted delivery and administrator support review. BE-14 adds ETA/kg histories, idempotent operations, disruption publication/recovery, cache revisions and suggestion refresh. Never run fixtures against a shared DB or reuse a database from an earlier acceptance run.
 
 The standalone SQL files under `tests/` predate BE-09 migration 010 and preserve historical migration 005/006 expectations (group capacity issuance and orders immediately ISSUED). They are historical regression assets for those schema revisions, not the acceptance suite for the current Metro issuance contract. Do not run that old ordered fixture chain as validation of 010–012 or interpret its immediate-ISSUED assertions as current requirements.
 

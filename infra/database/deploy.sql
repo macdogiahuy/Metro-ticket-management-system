@@ -4227,4 +4227,250 @@ LEFT JOIN metro.capacity_profiles cp ON cp.operator_id=pt.operator_id AND cp.id=
   VALUES (14, '014_service_operations.sql', '737729ad30cd60376aef07427cd212eeb170c3a8b986ed86c891e365e0335a9b');
 END $migration_014$;
 
+-- 015_gate_validation.sql
+DO $migration_015$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 15) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 15
+                   AND name = '015_gate_validation.sql' AND checksum = '5c17487a5855c7ebf1c374a44a127f5aa54305aba0bc76bee3507cfd8edc7bcc') THEN
+      RAISE EXCEPTION 'Migration 015 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 015 already applied';
+    RETURN;
+  END IF;
+
+-- BE-10. Receipts include rejected/unknown QR requests without storing QR tokens or invented ticket IDs.
+CREATE TABLE metro.gate_requests (
+    operator_id uuid NOT NULL REFERENCES metro.operators(id), request_id uuid NOT NULL,
+    actor_user_id text NOT NULL REFERENCES public."AspNetUsers"("Id"),
+    payload_hash char(64) NOT NULL CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
+    kind text NOT NULL CHECK (kind IN ('SCAN','RESOLUTION')),
+    response jsonb NOT NULL CHECK (jsonb_typeof(response)='object'),
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY(operator_id,request_id)
+);
+CREATE TABLE metro.gate_changes (
+    change_no bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    operator_id uuid NOT NULL, request_id uuid NOT NULL, ticket_id uuid NOT NULL, journey_id uuid NOT NULL,
+    action text NOT NULL CHECK (action IN ('ENTRY','EXIT','MANUAL_ENTRY','MANUAL_EXIT')),
+    before_state jsonb NOT NULL, after_state jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    UNIQUE(operator_id,change_no),
+    FOREIGN KEY(operator_id,request_id) REFERENCES metro.gate_requests(operator_id,request_id) DEFERRABLE INITIALLY DEFERRED,
+    FOREIGN KEY(operator_id,ticket_id) REFERENCES metro.tickets(operator_id,id),
+    FOREIGN KEY(operator_id,journey_id) REFERENCES metro.journeys(operator_id,id)
+);
+CREATE INDEX ix_gate_changes_ticket ON metro.gate_changes(operator_id,ticket_id,change_no DESC);
+CREATE TABLE metro.gate_resolutions (
+    operator_id uuid NOT NULL, request_id uuid NOT NULL, source_request_id uuid NOT NULL,
+    action text NOT NULL CHECK (action IN ('CLOSE_JOURNEY','SUPPLY_ENTRY_AND_EXIT','UNDO_SCAN','ESCALATE')),
+    reason text NOT NULL CHECK (length(btrim(reason)) BETWEEN 1 AND 1000),
+    evidence_reference text NOT NULL CHECK (length(btrim(evidence_reference)) BETWEEN 1 AND 1000),
+    identity_verified boolean NOT NULL, passenger_has_not_travelled boolean NOT NULL,
+    PRIMARY KEY(operator_id,request_id),
+    FOREIGN KEY(operator_id,request_id) REFERENCES metro.gate_requests(operator_id,request_id) DEFERRABLE INITIALLY DEFERRED,
+    FOREIGN KEY(operator_id,source_request_id) REFERENCES metro.gate_requests(operator_id,request_id),
+    CHECK(action='ESCALATE' OR identity_verified),
+    CHECK(action<>'UNDO_SCAN' OR passenger_has_not_travelled)
+);
+CREATE TABLE metro.gate_undo_authorizations (
+    operator_id uuid NOT NULL, source_change_no bigint NOT NULL, request_id uuid NOT NULL, ticket_id uuid NOT NULL,
+    target_status text NOT NULL CHECK(target_status IN ('ACTIVE','IN_USE')), transaction_id text NOT NULL,
+    PRIMARY KEY(operator_id,source_change_no),
+    FOREIGN KEY(operator_id,source_change_no) REFERENCES metro.gate_changes(operator_id,change_no),
+    FOREIGN KEY(operator_id,request_id) REFERENCES metro.gate_resolutions(operator_id,request_id) DEFERRABLE INITIALLY DEFERRED,
+    FOREIGN KEY(operator_id,ticket_id) REFERENCES metro.tickets(operator_id,id)
+);
+-- A valid child/guardian entry inserts both journeys in one transaction with mutual links.
+ALTER TABLE metro.journeys ALTER CONSTRAINT fk_journeys_pair DEFERRABLE INITIALLY DEFERRED;
+
+CREATE FUNCTION metro.reject_gate_history_mutation() RETURNS trigger LANGUAGE plpgsql AS $f$
+BEGIN RAISE EXCEPTION USING ERRCODE='P0001', MESSAGE='Gate history is immutable'; END $f$;
+CREATE TRIGGER trg_gate_requests_immutable BEFORE UPDATE OR DELETE ON metro.gate_requests
+ FOR EACH ROW EXECUTE FUNCTION metro.reject_gate_history_mutation();
+CREATE TRIGGER trg_gate_changes_immutable BEFORE UPDATE OR DELETE ON metro.gate_changes
+ FOR EACH ROW EXECUTE FUNCTION metro.reject_gate_history_mutation();
+CREATE TRIGGER trg_gate_resolutions_immutable BEFORE UPDATE OR DELETE ON metro.gate_resolutions
+ FOR EACH ROW EXECUTE FUNCTION metro.reject_gate_history_mutation();
+CREATE TRIGGER trg_gate_undo_immutable BEFORE UPDATE OR DELETE ON metro.gate_undo_authorizations
+ FOR EACH ROW EXECUTE FUNCTION metro.reject_gate_history_mutation();
+CREATE TRIGGER trg_afc_events_immutable BEFORE UPDATE ON metro.afc_events
+ FOR EACH ROW EXECUTE FUNCTION metro.reject_gate_history_mutation();
+
+-- Preserve the existing order/payment/ticket transition rules verbatim, adding only guarded gate transitions.
+DO $gate_workflow$
+DECLARE definition text;
+BEGIN
+ SELECT pg_get_functiondef('metro.enforce_workflow_state_transition()'::regprocedure) INTO definition;
+ IF position('IF OLD.status = NEW.status THEN' IN definition)=0 THEN
+   RAISE EXCEPTION 'Unexpected workflow baseline; review the gate transition extension';
+ END IF;
+ definition := replace(definition,'IF OLD.status = NEW.status THEN',$branch$
+ IF TG_TABLE_NAME='tickets' AND OLD.status<>NEW.status THEN
+   -- A pass returns to ACTIVE after its current journey closes; its expiry is never extended.
+   IF OLD.status='IN_USE' AND NEW.status='ACTIVE'
+      AND EXISTS(SELECT 1 FROM metro.ticket_products p WHERE p.operator_id=NEW.operator_id AND p.id=NEW.ticket_product_id
+                 AND p.product_type IN ('DAY','WEEK','MONTH'))
+      AND EXISTS(SELECT 1 FROM metro.journeys j WHERE j.operator_id=NEW.operator_id AND j.ticket_id=NEW.id AND j.status='COMPLETED')
+      AND NOT EXISTS(SELECT 1 FROM metro.journeys j WHERE j.operator_id=NEW.operator_id AND j.ticket_id=NEW.id AND j.status IN ('OPEN','MANUAL_REVIEW'))
+   THEN RETURN NEW; END IF;
+   -- Undo is possible only with immutable evidence and an authorization created in this very transaction.
+   IF EXISTS(SELECT 1 FROM metro.gate_undo_authorizations a JOIN metro.gate_changes c
+      ON c.operator_id=a.operator_id AND c.change_no=a.source_change_no
+      WHERE a.operator_id=NEW.operator_id AND a.ticket_id=NEW.id AND c.ticket_id=NEW.id
+        AND a.transaction_id=pg_current_xact_id()::text AND a.target_status=NEW.status
+        AND c.before_state->'ticket'->>'status'=NEW.status AND c.after_state->'ticket'->>'status'=OLD.status
+        AND NOT EXISTS(SELECT 1 FROM metro.gate_changes later WHERE later.operator_id=c.operator_id AND later.ticket_id=c.ticket_id AND later.change_no>c.change_no))
+   THEN RETURN NEW; END IF;
+ END IF;
+ IF OLD.status = NEW.status THEN
+$branch$);
+ EXECUTE definition;
+END $gate_workflow$;
+
+-- Deterministic choice when multiple observations have the same timestamps. No automatic load expiry.
+CREATE OR REPLACE VIEW metro.v_trip_load_status AS
+SELECT pt.operator_id,pt.id AS planned_trip_id,pt.trip_code,pt.service_date,pt.boarding_status,
+ lo.observed_load_kg,lo.observed_at,cp.max_load_kg,
+ CASE WHEN lo.observed_load_kg IS NULL THEN 'NO_DATA' WHEN cp.max_load_kg IS NULL THEN 'NO_LIMIT'
+      WHEN lo.observed_load_kg>=cp.max_load_kg THEN 'FULL' ELSE 'AVAILABLE' END AS load_status
+FROM metro.planned_trips pt
+LEFT JOIN LATERAL (SELECT o.observed_load_kg,o.observed_at FROM metro.load_observations o
+ WHERE o.operator_id=pt.operator_id AND o.planned_trip_id=pt.id ORDER BY o.observed_at DESC,o.recorded_at DESC,o.id DESC LIMIT 1) lo ON true
+LEFT JOIN metro.capacity_profiles cp ON cp.operator_id=pt.operator_id AND cp.id=pt.load_profile_id;
+
+COMMENT ON TABLE metro.gate_requests IS 'BE-10 atomic scan receipts. Pending means unconfirmed, not a stored REVIEW decision. Never store raw QR tokens.';
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (15, '015_gate_validation.sql', '5c17487a5855c7ebf1c374a44a127f5aa54305aba0bc76bee3507cfd8edc7bcc');
+END $migration_015$;
+
+-- 016_gate_qr_support.sql
+DO $migration_016$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 16) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 16
+                   AND name = '016_gate_qr_support.sql' AND checksum = 'c7c730e25ab28c05e00f192b53fab21a7ca29980e812c2aea0dcd1323e9737b3') THEN
+      RAISE EXCEPTION 'Migration 016 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 016 already applied';
+    RETURN;
+  END IF;
+
+-- SRS FR-18.02/03 and section 8.2: shared email-code policy, isolated TicketQrSupport purpose.
+ALTER TABLE metro.email_verification_challenges DROP CONSTRAINT email_verification_challenges_purpose_check;
+ALTER TABLE metro.email_verification_challenges ADD CONSTRAINT email_verification_challenges_purpose_check
+ CHECK(purpose IN ('VERIFY_EMAIL','RESET_PASSWORD','MFA','TICKET_QR_SUPPORT'));
+ALTER TABLE metro.email_verification_challenges DROP CONSTRAINT email_verification_challenges_check;
+UPDATE metro.email_verification_challenges SET expires_at=created_at+interval '5 minutes';
+ALTER TABLE metro.email_verification_challenges ADD CONSTRAINT email_verification_challenges_check
+ CHECK(expires_at=created_at+interval '5 minutes');
+
+CREATE TABLE metro.gate_qr_intents (
+ operator_id uuid NOT NULL, id uuid NOT NULL, ticket_id uuid NOT NULL,
+ actor_user_id text NOT NULL REFERENCES public."AspNetUsers"("Id"), session_id uuid NOT NULL REFERENCES metro.auth_sessions(id),
+ action text NOT NULL CHECK(action IN ('DISPLAY','REPLACE')), profile_hash char(64) NOT NULL, reason_hash char(64) NOT NULL,
+ credential_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(operator_id,id), FOREIGN KEY(operator_id,ticket_id) REFERENCES metro.tickets(operator_id,id),
+ FOREIGN KEY(operator_id,credential_id) REFERENCES metro.ticket_credentials(operator_id,id)
+);
+CREATE TABLE metro.gate_qr_challenges (
+ operator_id uuid NOT NULL, challenge_id uuid NOT NULL REFERENCES metro.email_verification_challenges(id), intent_id uuid NOT NULL,
+ PRIMARY KEY(operator_id,challenge_id), FOREIGN KEY(operator_id,intent_id) REFERENCES metro.gate_qr_intents(operator_id,id)
+);
+CREATE TABLE metro.gate_qr_requests (
+ operator_id uuid NOT NULL REFERENCES metro.operators(id), request_id uuid NOT NULL, operation_id uuid NOT NULL,
+ actor_user_id text NOT NULL REFERENCES public."AspNetUsers"("Id"), session_id uuid NOT NULL REFERENCES metro.auth_sessions(id),
+ kind text NOT NULL CHECK(kind IN ('CHALLENGE','ACCESS')), status text NOT NULL CHECK(status IN ('QUEUED','READY','DENIED')),
+ payload_hash char(64) NOT NULL, response jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(operator_id,request_id)
+);
+CREATE UNIQUE INDEX uq_qr_operation_ready ON metro.gate_qr_requests(operator_id,operation_id) WHERE kind='ACCESS' AND status='READY';
+CREATE TABLE metro.gate_qr_verifications (
+ operator_id uuid NOT NULL, request_id uuid NOT NULL, ticket_id uuid NOT NULL, method text NOT NULL CHECK(method IN ('EMAIL','DOCUMENT')),
+ challenge_id uuid REFERENCES metro.email_verification_challenges(id), evidence_reference text, reason text NOT NULL,
+ before_credential_id uuid NOT NULL, after_credential_id uuid NOT NULL,
+ PRIMARY KEY(operator_id,request_id), FOREIGN KEY(operator_id,request_id) REFERENCES metro.gate_qr_requests(operator_id,request_id) DEFERRABLE INITIALLY DEFERRED,
+ FOREIGN KEY(operator_id,ticket_id) REFERENCES metro.tickets(operator_id,id),
+ FOREIGN KEY(operator_id,before_credential_id) REFERENCES metro.ticket_credentials(operator_id,id),
+ FOREIGN KEY(operator_id,after_credential_id) REFERENCES metro.ticket_credentials(operator_id,id),
+ CHECK((method='EMAIL' AND challenge_id IS NOT NULL AND evidence_reference IS NULL) OR
+       (method='DOCUMENT' AND challenge_id IS NULL AND length(btrim(evidence_reference)) BETWEEN 1 AND 1000))
+);
+CREATE TABLE metro.gate_email_outbox (
+ id uuid PRIMARY KEY, operator_id uuid NOT NULL REFERENCES metro.operators(id),
+ challenge_id uuid REFERENCES metro.email_verification_challenges(id), notification_id uuid,
+ kind text NOT NULL CHECK(kind IN ('OTP','QR_CHANGED')), protected_payload text,
+ status text NOT NULL DEFAULT 'QUEUED' CHECK(status IN ('QUEUED','SENDING','ACCEPTED','FAILED','CANCELLED','EXPIRED')),
+ attempts smallint NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT clock_timestamp(), next_attempt_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ expires_at timestamptz, last_error_code varchar(60), accepted_at timestamptz,
+ FOREIGN KEY(operator_id,notification_id) REFERENCES metro.notifications(operator_id,id),
+ CHECK((kind='OTP' AND challenge_id IS NOT NULL AND expires_at IS NOT NULL AND attempts BETWEEN 0 AND 2)
+    OR (kind='QR_CHANGED' AND challenge_id IS NULL AND attempts BETWEEN 0 AND 3))
+);
+CREATE INDEX ix_gate_email_due ON metro.gate_email_outbox(next_attempt_at) WHERE status='QUEUED';
+CREATE TABLE metro.gate_email_attempts (
+ delivery_id uuid NOT NULL REFERENCES metro.gate_email_outbox(id), attempt_no smallint NOT NULL,
+ status text NOT NULL CHECK(status IN ('ACCEPTED','FAILED')), attempted_at timestamptz NOT NULL DEFAULT clock_timestamp(), error_code varchar(60),
+ PRIMARY KEY(delivery_id,attempt_no)
+);
+
+CREATE FUNCTION metro.enforce_email_code_policy() RETURNS trigger LANGUAGE plpgsql SET search_path=metro,public,pg_catalog AS $f$
+BEGIN
+ IF NEW.purpose NOT IN ('VERIFY_EMAIL','RESET_PASSWORD','TICKET_QR_SUPPORT') THEN RETURN NEW; END IF;
+ -- Unique immutable account email: count across all purposes/operators/devices under the same user lock.
+ PERFORM pg_advisory_xact_lock(hashtextextended(NEW.user_id,35));
+ IF EXISTS(SELECT 1 FROM metro.email_verification_challenges c WHERE c.user_id=NEW.user_id
+   AND c.purpose IN ('VERIFY_EMAIL','RESET_PASSWORD','TICKET_QR_SUPPORT') AND c.created_at>NEW.created_at-interval '60 seconds') OR
+   (SELECT count(*) FROM metro.email_verification_challenges c WHERE c.user_id=NEW.user_id
+     AND c.purpose IN ('VERIFY_EMAIL','RESET_PASSWORD','TICKET_QR_SUPPORT') AND c.created_at>NEW.created_at-interval '15 minutes')>=3 THEN
+   RAISE EXCEPTION USING ERRCODE='P0001', MESSAGE='EMAIL_CODE_RATE_LIMIT';
+ END IF;
+ UPDATE metro.email_verification_challenges SET superseded_at=NEW.created_at WHERE user_id=NEW.user_id AND purpose=NEW.purpose
+   AND consumed_at IS NULL AND superseded_at IS NULL;
+ RETURN NEW;
+END $f$;
+CREATE TRIGGER trg_shared_email_code_policy BEFORE INSERT ON metro.email_verification_challenges
+ FOR EACH ROW EXECUTE FUNCTION metro.enforce_email_code_policy();
+CREATE FUNCTION metro.erase_finished_qr_email() RETURNS trigger LANGUAGE plpgsql SET search_path=metro,public,pg_catalog AS $f$
+BEGIN
+ IF NEW.consumed_at IS NOT NULL OR NEW.superseded_at IS NOT NULL THEN
+  UPDATE metro.gate_email_outbox SET protected_payload=NULL,status=CASE WHEN status='ACCEPTED' THEN status ELSE 'CANCELLED' END
+   WHERE challenge_id=NEW.id AND protected_payload IS NOT NULL;
+ END IF; RETURN NEW;
+END $f$;
+CREATE TRIGGER trg_erase_finished_qr_email AFTER UPDATE OF consumed_at,superseded_at ON metro.email_verification_challenges
+ FOR EACH ROW EXECUTE FUNCTION metro.erase_finished_qr_email();
+CREATE TRIGGER trg_qr_intents_immutable BEFORE UPDATE OR DELETE ON metro.gate_qr_intents FOR EACH ROW EXECUTE FUNCTION metro.reject_gate_history_mutation();
+CREATE TRIGGER trg_qr_requests_immutable BEFORE UPDATE OR DELETE ON metro.gate_qr_requests FOR EACH ROW EXECUTE FUNCTION metro.reject_gate_history_mutation();
+CREATE TRIGGER trg_qr_verifications_immutable BEFORE UPDATE OR DELETE ON metro.gate_qr_verifications FOR EACH ROW EXECUTE FUNCTION metro.reject_gate_history_mutation();
+CREATE TRIGGER trg_gate_email_attempts_immutable BEFORE UPDATE OR DELETE ON metro.gate_email_attempts FOR EACH ROW EXECUTE FUNCTION metro.reject_gate_history_mutation();
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (16, '016_gate_qr_support.sql', 'c7c730e25ab28c05e00f192b53fab21a7ca29980e812c2aea0dcd1323e9737b3');
+END $migration_016$;
+
+-- 017_gate_support_review.sql
+DO $migration_017$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 17) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 17
+                   AND name = '017_gate_support_review.sql' AND checksum = '764f59a9a6e253c0e419c59a67dd5f0a1db089a809e1272128aeb76f6ae9a920') THEN
+      RAISE EXCEPTION 'Migration 017 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 017 already applied';
+    RETURN;
+  END IF;
+
+-- FR-17.05: an administrator can review/close an escalated case without granting passage.
+ALTER TABLE metro.gate_resolutions DROP CONSTRAINT gate_resolutions_action_check;
+ALTER TABLE metro.gate_resolutions ADD CONSTRAINT gate_resolutions_action_check
+ CHECK(action IN ('CLOSE_JOURNEY','SUPPLY_ENTRY_AND_EXIT','UNDO_SCAN','ESCALATE','CLOSE_SUPPORT'));
+ALTER TABLE metro.gate_resolutions DROP CONSTRAINT gate_resolutions_check;
+ALTER TABLE metro.gate_resolutions ADD CONSTRAINT gate_resolutions_check CHECK(action IN ('ESCALATE','CLOSE_SUPPORT') OR identity_verified);
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (17, '017_gate_support_review.sql', '764f59a9a6e253c0e419c59a67dd5f0a1db089a809e1272128aeb76f6ae9a920');
+END $migration_017$;
+
 COMMIT;

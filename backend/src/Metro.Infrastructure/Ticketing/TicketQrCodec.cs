@@ -15,6 +15,18 @@ public sealed class TicketQrOptions
 
 public sealed class TicketQrCodec(IOptions<TicketQrOptions> options)
 {
+    public sealed record Reference(string KeyId, Guid Operator, Guid TicketReference, Guid Credential, int Version);
+    /// <summary>Parse routing fields only. Authorization still requires the current stored credential and token hash.</summary>
+    public static Reference? Read(string token)
+    {
+        var p = token.Split('.');
+        return p.Length == 7 && p[0] == "M1" && p[1].Length is > 0 and <= 40 &&
+            p[1].All(c => char.IsAsciiLetterOrDigit(c) || c == '-') &&
+            Guid.TryParseExact(p[2], "N", out var op) && Guid.TryParseExact(p[3], "N", out var ticket) &&
+            Guid.TryParseExact(p[4], "N", out var credential) && int.TryParse(p[5], out var version) && version > 0 &&
+            p[6].Length == 64 && p[6].All(char.IsAsciiHexDigit)
+            ? new(p[1], op, ticket, credential, version) : null;
+    }
     public string ActiveKeyId => options.Value.ActiveKeyId;
     public string Token(Guid op, Guid ticketReference, Guid credential, int version, string keyId)
     {

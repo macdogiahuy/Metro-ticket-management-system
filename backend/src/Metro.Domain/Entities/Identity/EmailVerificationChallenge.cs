@@ -6,7 +6,7 @@ public class EmailVerificationChallenge
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string UserId { get; set; } = string.Empty;
-    public string Purpose { get; set; } = "VERIFY_EMAIL"; // VERIFY_EMAIL, RESET_PASSWORD, MFA
+    public string Purpose { get; set; } = "VERIFY_EMAIL"; // VERIFY_EMAIL, RESET_PASSWORD, TICKET_QR_SUPPORT; MFA retained for legacy data.
     public string CodeHash { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime ExpiresAt { get; set; }
