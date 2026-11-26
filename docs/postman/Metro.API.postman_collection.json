@@ -74,6 +74,12 @@
       "value": "",
       "type": "secret"
     },
+    { "key": "reportFrom", "value": "2026-11-01" },
+    { "key": "reportTo", "value": "2026-11-30" },
+    { "key": "reportLineId", "value": "" },
+    { "key": "reportTicketProductId", "value": "" },
+    { "key": "reportPurpose", "value": "Monthly reconciliation" },
+    { "key": "passengerAccessToken", "value": "", "type": "secret" },
     {
       "key": "adminProductId",
       "value": ""
@@ -116,6 +122,147 @@
     }
   ],
   "item": [
+    {
+      "name": "Reports — Admin (BE-15)",
+      "description": "Use a dedicated test environment and set adminAccessToken from an Admin account with ACTIVE operator membership; this collection does not create or seed that account. Set passengerAccessToken separately for the 403 check. reportLineId/reportTicketProductId must belong to the Admin's operator. Each successful export writes an audit and report job; retries create additional records. Dates are inclusive UTC+7, maximum 31 days. paymentStatus filters collections only, not refunds. Use current-value variables for tokens; do not export credentials.",
+      "item": [
+        {
+          "name": "Revenue report",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Revenue returns 200', () => pm.response.to.have.status(200));",
+            "if (pm.response.code === 200) { const b = pm.response.json(); pm.test('Revenue contract and net cashflow', () => { pm.expect(b.timezone).to.eql('Asia/Ho_Chi_Minh'); pm.expect(b).to.have.all.keys('from','to','timezone','dataAsOf','totals','rows'); pm.expect(b.totals.netCashflowMinor).to.eql(b.totals.actualCollectedMinor - b.totals.successfulRefundMinor); }); }"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/reports/revenue?from={{reportFrom}}&to={{reportTo}}",
+            "description": "Payment totals use the payment's frozen order version. Successful refunds use succeeded_at; pending refunds are requests created in the range with a currently unresolved status, not an end-of-period balance."
+          }
+        },
+        {
+          "name": "Ticket issuance report",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Tickets returns 200', () => pm.response.to.have.status(200));",
+            "if (pm.response.code === 200) { const b = pm.response.json(); pm.test('Ticket pagination and totals', () => { pm.expect(b.page).to.eql(1); pm.expect(b.pageSize).to.eql(50); pm.expect(b.totals).to.have.property('readyTicketCount'); pm.expect(b.totals).to.have.property('pendingIssuanceTicketCount'); }); }"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/reports/tickets?from={{reportFrom}}&to={{reportTo}}&page=1&pageSize=50",
+            "description": "Filters ticket issued_at. READY is ready; PENDING and NEEDS_SUPPORT are pending. CANCELLED counts as neither; missing jobs return UNAVAILABLE. Defaults: page=1, pageSize=50, maximum pageSize=100."
+          }
+        },
+        {
+          "name": "Export revenue CSV",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Export returns CSV', () => { pm.response.to.have.status(200); pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv'); pm.expect(pm.response.text()).to.include('businessDate,paymentCount,actualCollectedMinor'); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/reports/revenue/export?from={{reportFrom}}&to={{reportTo}}&purpose={{reportPurpose}}",
+            "description": "Returns UTF-8 CSV and records REPORT_EXPORT audit data. purpose is required; never put personal data in it."
+          }
+        },
+        {
+          "name": "Revenue — filter line and product",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/revenue?from={{reportFrom}}&to={{reportTo}}&lineId={{reportLineId}}&ticketProductId={{reportTicketProductId}}", "description": "Requires fixture IDs for the authenticated operator. Line is the last suggestion at payment success, not an actual ride. Compare with exported CSV using the same filters." },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Filtered revenue returns 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "Tickets — filter issuance READY",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/tickets?from={{reportFrom}}&to={{reportTo}}&issuanceStatus=READY" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('READY filter returns only READY rows', () => { pm.response.to.have.status(200); pm.response.json().rows.forEach(r => pm.expect(r.issuanceStatus).to.eql('READY')); });"] } }]
+        },
+        {
+          "name": "Revenue — filter line",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/revenue?from={{reportFrom}}&to={{reportTo}}&lineId={{reportLineId}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Line filter returns 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "Revenue — filter product",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/revenue?from={{reportFrom}}&to={{reportTo}}&ticketProductId={{reportTicketProductId}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Product filter returns 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "Export — filter line and product",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/revenue/export?from={{reportFrom}}&to={{reportTo}}&purpose={{reportPurpose}}&lineId={{reportLineId}}&ticketProductId={{reportTicketProductId}}", "description": "Use the same filters as filtered revenue. Each successful request records an export audit." },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Filtered export returns CSV', () => { pm.response.to.have.status(200); pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv'); });"] } }]
+        },
+        {
+          "name": "Tickets — second page",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/tickets?from={{reportFrom}}&to={{reportTo}}&page=2&pageSize=1" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Pagination contract', () => { pm.response.to.have.status(200); const b=pm.response.json(); pm.expect(b.page).to.eql(2); pm.expect(b.pageSize).to.eql(1); pm.expect(b.rows.length).to.be.at.most(1); });"] } }]
+        },
+        {
+          "name": "Revenue — missing from rejected",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/revenue?to={{reportTo}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Missing from rejected', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().code).to.eql('INVALID_REPORT_DATE_RANGE'); });"] } }]
+        },
+        {
+          "name": "Revenue — missing to rejected",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/revenue?from={{reportFrom}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Missing to rejected', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().code).to.eql('INVALID_REPORT_DATE_RANGE'); });"] } }]
+        },
+        {
+          "name": "Revenue — 31 days accepted",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/revenue?from=2026-11-01&to=2026-12-01" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('31 inclusive days accepted', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "Tickets — invalid issuance status rejected",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/tickets?from={{reportFrom}}&to={{reportTo}}&issuanceStatus=INVALID" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Invalid issuance status rejected', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().code).to.eql('INVALID_ISSUANCE_STATUS'); });"] } }]
+        },
+        {
+          "name": "Revenue — 32 days rejected",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/revenue?from=2026-11-01&to=2026-12-02" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('32 days rejected', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().code).to.eql('INVALID_REPORT_DATE_RANGE'); });"] } }]
+        },
+        {
+          "name": "Export — missing purpose rejected",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/revenue/export?from={{reportFrom}}&to={{reportTo}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Missing purpose rejected', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().code).to.eql('INVALID_REPORT_EXPORT_PURPOSE'); });"] } }]
+        },
+        {
+          "name": "Revenue — no token rejected",
+          "request": { "method": "GET", "auth": { "type": "noauth" }, "url": "{{baseUrl}}/api/v1/reports/revenue?from={{reportFrom}}&to={{reportTo}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Authentication required', () => pm.response.to.have.status(401));"] } }]
+        },
+        {
+          "name": "Revenue — passenger forbidden",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{passengerAccessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/v1/reports/revenue?from={{reportFrom}}&to={{reportTo}}", "description": "Set passengerAccessToken to a valid Passenger token before running; an absent token produces 401 instead of 403." },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Passenger forbidden', () => pm.response.to.have.status(403));"] } }]
+        }
+      ]
+    },
     {
       "name": "Health live",
       "request": {
