@@ -5,6 +5,7 @@ using Metro.Application.Abstractions.Booking;
 using Metro.Application.Abstractions.Catalog;
 using Metro.Application.Abstractions.Fare;
 using Metro.Application.Abstractions.Payment;
+using Metro.Application.Abstractions.Reports;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +32,8 @@ public sealed class GlobalExceptionHandler(
             Metro.Application.Abstractions.Ticketing.TicketChangeException change => (change.Status, "Ticket change request failed", change.Message, change.Code),
             RefundException refund => (refund.Status, "Refund request failed", refund.Message, refund.Code),
             BookingException booking => (booking.Status, "Booking request failed", booking.Code, booking.Code),
+            Metro.Application.Abstractions.Operations.OperationsException operations =>
+                (operations.Status, "Service operations request failed", operations.Code, operations.Code),
             AuthException auth => (auth.Status, "Authentication failed", auth.Message, (string?)auth.Code),
             PaymentException payment => (payment.Status, payment.Status switch
             {
@@ -40,6 +43,13 @@ public sealed class GlobalExceptionHandler(
                 StatusCodes.Status409Conflict => "Payment state conflict",
                 _ => "Payment provider error",
             }, payment.Message, payment.Code),
+            ReportException report => (report.Status, report.Status switch
+            {
+                StatusCodes.Status401Unauthorized => "Report authentication failed",
+                StatusCodes.Status403Forbidden => "Report forbidden",
+                StatusCodes.Status422UnprocessableEntity => "Report export limit exceeded",
+                _ => "Invalid report request",
+            }, report.Message, report.Code),
             CatalogException catalog => (catalog.Status, catalog.Status switch
             {
                 StatusCodes.Status404NotFound => "Resource not found",

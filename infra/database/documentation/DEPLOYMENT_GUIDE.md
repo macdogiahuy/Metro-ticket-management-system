@@ -1,6 +1,53 @@
 # Deployment guide
 
+## BE-14 migration 014 production release gate
+
+**Migration 014 has not been applied to Neon production.** This is a required
+release procedure, as for migrations 010–013. Do not run production SQL or
+enable the BE-14 rollout until all evidence below has been recorded in the
+[BE-14 production release record](../../../docs/handover/BE-14-PRODUCTION-RELEASE.md).
+That record starts **BLOCKED / NOT DEPLOYED**; empty fields are not approvals.
+
+1. Obtain separate, explicit authorization naming the Neon project ID,
+   production branch ID, database, release window, reviewed Git SHA and exact
+   migration scope. Authorization for an earlier release, a PR approval or
+   passing tests does not authorize 014. Read the target migration ledger first:
+   the generated package applies **every pending migration through 014**, so
+   any pending 010–013 must also be included in the authorized scope.
+2. Before applying SQL, create a **new, separate database backup branch** from
+   the confirmed production branch at the pre-release point. Record its actual
+   ID, parent/source branch, creation time with timezone, snapshot LSN/time and
+   retention. An existing BE-04 backup or a Git branch does not satisfy this
+   release's backup requirement. Authorization to create a backup/rehearsal
+   branch and authorization to apply production SQL must be recorded separately.
+3. Verify recovery using a separate restore/rehearsal branch from that backup.
+   Record the recovery procedure and results; compare the migration ledger,
+   checksums and relevant data counts with the captured pre-release baseline.
+   Keep the backup unchanged and retained throughout release acceptance.
+4. Rehearse the exact reviewed package on the isolated rehearsal branch, then
+   run `09_verify.sql`. Run acceptance tests only on a fresh `metro_test_*`
+   database, never on production or the retained backup. Resolve the migration
+   number collision with PR #90 before finalizing the release package; if the
+   package or scope changes, repeat rehearsal and obtain matching authorization.
+5. Immediately before deployment, recheck the release window, target IDs,
+   backup/recovery evidence, approved Git/package checksums and current ledger.
+   **Stop if any item is missing or differs from the approved release.** Only
+   the explicitly authorized operator may apply the package with
+   `ON_ERROR_STOP=1`, then run the verifier and BE-14 smoke checks. Record the
+   resulting ledger and outcomes before marking the release complete.
+6. If SQL fails before commit, its transaction rolls back; investigate before
+   retrying. After commit, stop the affected application rollout if necessary.
+   Any production restore or branch switch requires separate authorization and
+   reconciliation of writes since the backup; do not automatically restore.
+
+This gate is procedural: the raw SQL package does not verify human approvals
+or Neon backup metadata. The commands below do not bypass this gate and are
+not authorization to operate on production.
+
 ## Clean deployment
+
+Use a new, dedicated non-production database for this example. Production
+upgrades must satisfy the release gate above first.
 
 1. Create a UTF-8 PostgreSQL 17 database owned by a migration role.
 2. Back up any environment being upgraded.
@@ -19,8 +66,9 @@ psql -v ON_ERROR_STOP=1 -d metro_ticket -f infra/database/scripts/09_verify.sql
 The deploy file uses one transaction, a 15-second lock timeout, a 5-minute
 statement timeout and an advisory transaction lock. It refuses PostgreSQL below
 version 17, non-UTF8 encoding, or an existing unversioned `metro` schema containing
-tables. The current artifact contains nine checksummed migrations; `09_verify.sql`
-requires migration 9, the 14 workflow functions, the SRS v1.2 and profile verification/purge tables, the
+tables. The current artifact contains fourteen checksummed migrations; `09_verify.sql`
+requires migrations 012–014, the BE-09 issuance and BE-07 booking metadata,
+the BE-14 operations tables, the 14 workflow functions, the SRS v1.2 and profile verification/purge tables, the
 `ex_tickets_no_overlapping_validity` constraint and 25 retention triggers.
 
 ## BE-04 production release gate
@@ -79,7 +127,14 @@ not alter the deployed migration or its checksum.
 
 ## Validation tests
 
-Run tests only in a disposable database:
+For the current package through 014, follow the
+[backend acceptance harness](../../../backend/tests/README.md) using a completely
+fresh dedicated `metro_test_*` database for each run. Do not use production or
+the retained backup for fixtures/tests.
+
+The standalone SQL commands below are **historical tests for migrations
+005/006**, not acceptance evidence for 010–014. Run them only when intentionally
+checking that historical schema in a disposable database:
 
 ```powershell
 psql -v ON_ERROR_STOP=1 -d metro_ticket_test -f infra/database/deploy.sql
