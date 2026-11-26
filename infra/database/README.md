@@ -12,6 +12,10 @@ Neon project/production branch and release window, plus a separate pre-deploy
 database backup with verified recovery. Record its branch ID, source and time;
 rehearse on a separate branch before production deployment. A Git branch is not
 a database backup; passing tests or review comments do not authorize deployment.
+Follow the [014 production release gate](documentation/DEPLOYMENT_GUIDE.md#be-14-migration-014-production-release-gate)
+and complete the [release evidence record](../../docs/handover/BE-14-PRODUCTION-RELEASE.md)
+before applying production SQL. Missing backup/recovery or authorization
+evidence keeps the release blocked.
 
 - PostgreSQL 17 or later with UTF-8 server encoding.
 - A deployment role that can create the `btree_gist` extension and the `metro` schema.

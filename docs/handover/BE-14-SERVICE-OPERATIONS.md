@@ -66,6 +66,12 @@ psql -v ON_ERROR_STOP=1 -f infra/database/scripts/09_verify.sql
 
 Không dùng EF migrations. **Migration 014 chưa apply Neon production.** Trước khi deploy, cần authorization riêng, tường minh cho đúng Neon project/production branch và cửa sổ triển khai, cùng backup DB riêng trước deploy đã xác minh khả năng phục hồi, giống 010–013. Ghi lại branch ID/nguồn/thời điểm backup và chạy rehearsal trên branch riêng trước khi apply production. Git branch không thay thế backup DB; kết quả test/review không cấp quyền deploy. Runtime cần quyền đọc/ghi operations/audit/outbox và bảng mới; không có secret/config mới.
 
+Thực hiện theo [release gate 014](../../infra/database/documentation/DEPLOYMENT_GUIDE.md#be-14-migration-014-production-release-gate)
+và ghi bằng chứng trong [hồ sơ phát hành production](BE-14-PRODUCTION-RELEASE.md).
+Hồ sơ đang **BLOCKED / NOT DEPLOYED**: chưa ghi nhận backup mới, kiểm chứng
+phục hồi hay authorization riêng cho lần deploy này. Package apply mọi migration
+còn thiếu đến 014, nên authorization phải bao gồm 010–013 nếu đích chưa có.
+
 [Postman](../postman/Metro.API.postman_collection.json) có folder **Service Operations (BE-14)** với 11 request. Điền operatorCode/adminAccessToken/operationsTripId/operationsStationId. `operationsLoadKg=17999.9`; chọn trip đúng ngày quan sát. ETA/time tự sinh nếu trống; phải cùng ngày phục vụ. Khi replay cố định operationsRequestKey và timestamp/body. Draft lưu operationsDisruptionId cho publish/resolve. Các request module khác giữ nguyên.
 
 Swagger có Bearer, header chống lặp, DTO, ví dụ body và mã lỗi. Các code chính: INVALID_TRIP_ETA, ETA_STATION_NOT_ON_TRIP, ETA_OUTSIDE_SERVICE_DAY, INVALID_LOAD_KG, INVALID_LOAD_OBSERVED_AT, TRIP_LOAD_PROFILE_REQUIRED, TRIP_ALREADY_ENDED, OPERATIONS_FORBIDDEN, INVALID_DISRUPTION_TRANSITION, DISRUPTION_ALREADY_ACTIVE, ACTIVE_DISRUPTION_REQUIRES_RECOVERY.

@@ -75,10 +75,33 @@ Bằng chứng local chạy lại ngày **25/11/2026** sau merge dev, source t�
 - TRX local tại `%TEMP%/metro-be14-review-35a8936e443e48a780099b3f31273369/results/`:
   `backend_net9.0_20261125151759.trx` và `backend_net9.0_20261125152020.trx`.
 
-Các chỉnh sửa sau lượt test chỉ cập nhật tài liệu này và handover. Chưa xác
-nhận hosted CI cho head merge local; kết quả local không thay trạng thái CI.
+### Review lại ngày 26/11/2026
+
+- HEAD local hiện tại: **`e841f75`**. Đối chiếu `e9ffbbf..e841f75` xác nhận
+  backend source, unit/integration tests, migrations và `deploy.sql` không đổi;
+  các thay đổi chỉ thuộc tài liệu và board/file Excel kế hoạch từ merge `dev`.
+- Kết luận review được cung cấp giữ nguyên: **0 warning, 240/240 test đạt,
+  CI xanh, không blocker kỹ thuật trong phạm vi BE-14**. Đã mở PR trên GitHub:
+  **All checks have passed — 3 successful, 1 skipped**. Check CI bị bỏ qua khác
+  với bằng chứng acceptance **0 test skipped**; PR vẫn chờ approving review
+  của code owner.
+- Kiểm tra lại local: `build_deploy.py --check`, `git diff --check` đạt;
+  `dotnet build backend/Metro.sln --configuration Release --no-restore --warnaserror`
+  đạt **0 warning, 0 error**. Không chạy lại full suite trong lượt chỉ sửa docs
+  này; bằng chứng 240/240 vẫn gắn với các head ở trên.
+- Các mục cần bổ sung trong description đã được ghi ở bản này: **014 chưa apply
+  production**, backup + authorization riêng trước deploy và DB mới riêng cho
+  từng acceptance run. Đã cập nhật description trên GitHub ngày 26/11/2026 và
+  kiểm tra lại nội dung sau khi lưu.
 
 ## Production release gate
+
+Quy trình bắt buộc: [release gate 014](../../infra/database/documentation/DEPLOYMENT_GUIDE.md#be-14-migration-014-production-release-gate).
+Ghi authorization, backup mới, kiểm chứng phục hồi và rehearsal vào
+[hồ sơ phát hành production](BE-14-PRODUCTION-RELEASE.md), hiện còn
+**BLOCKED / NOT DEPLOYED**. Đây là điều kiện vận hành trước deploy, chưa phải
+backup/authorization đã thực hiện. Package apply tất cả migration còn thiếu
+đến 014; authorization phải bao gồm 010–013 nếu còn thiếu trên đích.
 
 - [ ] Có authorization riêng, tường minh cho đúng Neon project/production
   branch và cửa sổ triển khai, giống yêu cầu của migrations 010–013.
@@ -92,6 +115,14 @@ nhận hosted CI cho head merge local; kết quả local không thay trạng th�
 Các mục trên còn chờ thực hiện; **014 chưa apply production**. Review hiện tại
 không có phản đối về code/test, ở mức **review/comment**, chưa approve/merge.
 
+## Merge coordination
+
+Review mới nhất trên PR #87 còn yêu cầu phối hợp với
+[PR #90](https://github.com/macdogiahuy/Metro-ticket-management-system/pull/90):
+`014_gate_validation.sql` trùng số với `014_service_operations.sql` của PR này.
+**Trước khi merge một trong hai PR, cần đổi số migration cho một bên.** Lần
+cập nhật description này chỉ ghi nhận yêu cầu phối hợp, chưa đổi code/migration.
+
 ## Screenshots
 
 Không có thay đổi UI.
@@ -102,6 +133,11 @@ Không có thay đổi UI.
 - [x] Đồng bộ `origin/dev@d19b980` và chạy lại 240/240 trên source `5afd380`.
 - [x] Ghi nhận lần fail trên DB dùng chung và yêu cầu DB mới cho mỗi run.
 - [x] Ghi rõ trạng thái production và yêu cầu backup/authorization riêng cho 014.
+- [ ] Phối hợp xử lý số migration trùng với PR #90 trước merge.
+- [ ] Có approving review của code owner.
 
-Đây là bản description chuẩn bị trong repo; chưa cập nhật PR trên GitHub.
+Nội dung review bổ sung đã được cập nhật vào description
+[PR #87 trên GitHub](https://github.com/macdogiahuy/Metro-ticket-management-system/pull/87)
+ngày 26/11/2026, gồm bằng chứng kiểm thử, yêu cầu DB riêng, production release
+gate và lưu ý phối hợp số migration với PR #90; đã kiểm tra lại sau khi lưu.
 Lần sửa tài liệu này không push, approve, merge hoặc deploy production.
