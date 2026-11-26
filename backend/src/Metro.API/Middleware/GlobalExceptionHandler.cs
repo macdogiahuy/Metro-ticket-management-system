@@ -5,6 +5,7 @@ using Metro.Application.Abstractions.Booking;
 using Metro.Application.Abstractions.Catalog;
 using Metro.Application.Abstractions.Fare;
 using Metro.Application.Abstractions.Payment;
+using Metro.Application.Abstractions.Reports;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,13 @@ public sealed class GlobalExceptionHandler(
                 StatusCodes.Status409Conflict => "Payment state conflict",
                 _ => "Payment provider error",
             }, payment.Message, payment.Code),
+            ReportException report => (report.Status, report.Status switch
+            {
+                StatusCodes.Status401Unauthorized => "Report authentication failed",
+                StatusCodes.Status403Forbidden => "Report forbidden",
+                StatusCodes.Status422UnprocessableEntity => "Report export limit exceeded",
+                _ => "Invalid report request",
+            }, report.Message, report.Code),
             CatalogException catalog => (catalog.Status, catalog.Status switch
             {
                 StatusCodes.Status404NotFound => "Resource not found",

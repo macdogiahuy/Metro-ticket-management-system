@@ -26,8 +26,17 @@ quick offline unit-test run; that result is not acceptance evidence.
 BE-10 adds GateRulesTests, GateQrRulesTests and GateEndpointsTests: scan/replay/races,
 paired entry/exit, evidence/corrections, Pending recovery, verified QR display/replacement,
 shared email quotas, encrypted delivery/retry, administrator support review and audit rollback.
-Apply migrations 014–016 first. The local 100-request/20-client performance smoke includes
-TestServer HTTP/auth overhead and does not replace the full SRS reference-dataset benchmark.
+Apply migrations through 017 first: unchanged BE-14 schema prerequisite 014 followed
+by BE-10 gate/QR/support migrations 015–017. The 100-request/20-client performance smoke includes
+TestServer HTTP/auth, database execution, connection-pool waits and application-to-database
+transport latency (including a remote or pooled endpoint). It excludes the camera and
+browser-to-API network. It logs loopback/non-loopback transport and five sequential
+`SELECT 1` timings without disclosing the hostname or credentials. Those diagnostic
+timings are not subtracted from scan P95, and the 1000 ms assertion always applies.
+For reproducible local smoke results, use PostgreSQL directly on the same machine,
+as CI does. A remote result above 1000 ms remains a failed performance smoke;
+functional tests passing alone neither prove the cause nor satisfy NFR-002.
+The smoke does not replace the full SRS reference-environment/dataset benchmark.
 Email worker is disabled in the factory; tests explicitly process the private queue through
 TestGateEmailSender. No production endpoint exposes OTP. See [BE-10 handover](../../docs/handover/BE-10-GATE-VALIDATION.md).
 

@@ -4152,15 +4152,90 @@ ALTER TABLE metro.trip_suggestions ADD CONSTRAINT ck_suggestion_schedule_source 
   VALUES (13, '013_booking_requests.sql', '48f45aee9e4755dfdd011983b7dd593d08118bc74c1cc5d1e644df66b606beb3');
 END $migration_013$;
 
--- 014_gate_validation.sql
+-- 014_service_operations.sql
 DO $migration_014$
 BEGIN
   IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 14) THEN
     IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 14
-                   AND name = '014_gate_validation.sql' AND checksum = '5c17487a5855c7ebf1c374a44a127f5aa54305aba0bc76bee3507cfd8edc7bcc') THEN
+                   AND name = '014_service_operations.sql' AND checksum = '737729ad30cd60376aef07427cd212eeb170c3a8b986ed86c891e365e0335a9b') THEN
       RAISE EXCEPTION 'Migration 014 checksum mismatch; add a new migration';
     END IF;
     RAISE NOTICE 'Migration 014 already applied';
+    RETURN;
+  END IF;
+
+-- BE-14: responses and service changes commit atomically; no capacity holds.
+CREATE TABLE metro.operations_requests (
+    operator_id uuid NOT NULL REFERENCES metro.operators(id),
+    actor_user_id text NOT NULL REFERENCES public."AspNetUsers"("Id"),
+    operation varchar(40) NOT NULL,
+    request_key_hash char(64) NOT NULL,
+    payload_hash char(64) NOT NULL,
+    response jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY(operator_id,actor_user_id,operation,request_key_hash)
+);
+
+-- Versioned cache namespaces prevent an in-flight old read from re-caching stale service data.
+CREATE TABLE metro.operation_revisions (
+    operator_id uuid PRIMARY KEY REFERENCES metro.operators(id),
+    revision bigint NOT NULL DEFAULT 0 CHECK(revision >= 0)
+);
+
+CREATE TABLE metro.service_disruptions (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    operator_id uuid NOT NULL REFERENCES metro.operators(id),
+    line_id uuid, station_id uuid, planned_trip_id uuid,
+    effect text NOT NULL CHECK(effect IN ('DELAYED','SUSPENDED','CLOSED')),
+    status text NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','PUBLISHED','RESOLVED')),
+    title text NOT NULL, description text NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    published_at timestamptz, resolved_at timestamptz,
+    previous_status text, applied_status text, previous_boarding_status text,
+    created_by_user_id text NOT NULL REFERENCES public."AspNetUsers"("Id"),
+    updated_by_user_id text NOT NULL REFERENCES public."AspNetUsers"("Id"),
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    UNIQUE(operator_id,id),
+    FOREIGN KEY(operator_id,line_id) REFERENCES metro.lines(operator_id,id),
+    FOREIGN KEY(operator_id,station_id) REFERENCES metro.stations(operator_id,id),
+    FOREIGN KEY(operator_id,planned_trip_id) REFERENCES metro.planned_trips(operator_id,id),
+    CHECK(num_nonnulls(line_id,station_id,planned_trip_id)=1),
+    CHECK((station_id IS NOT NULL AND effect='CLOSED') OR (station_id IS NULL AND effect IN ('DELAYED','SUSPENDED'))),
+    CHECK((status='DRAFT' AND published_at IS NULL AND resolved_at IS NULL) OR
+          (status='PUBLISHED' AND published_at IS NOT NULL AND resolved_at IS NULL) OR
+          (status='RESOLVED' AND published_at IS NOT NULL AND resolved_at>=published_at))
+);
+CREATE INDEX ix_service_disruptions_active ON metro.service_disruptions(operator_id,status);
+
+-- A stable final tie-breaker agrees with the API's load reader for concurrent observations.
+CREATE OR REPLACE VIEW metro.v_trip_load_status AS
+SELECT pt.operator_id, pt.id AS planned_trip_id, pt.trip_code, pt.service_date, pt.boarding_status,
+       lo.observed_load_kg, lo.observed_at, cp.max_load_kg,
+       CASE WHEN lo.observed_load_kg IS NULL THEN 'NO_DATA'
+            WHEN cp.max_load_kg IS NULL THEN 'NO_LIMIT'
+            WHEN lo.observed_load_kg >= cp.max_load_kg THEN 'FULL'
+            ELSE 'AVAILABLE' END AS load_status
+FROM metro.planned_trips pt
+LEFT JOIN LATERAL (
+    SELECT o.observed_load_kg,o.observed_at FROM metro.load_observations o
+    WHERE o.operator_id=pt.operator_id AND o.planned_trip_id=pt.id
+    ORDER BY o.observed_at DESC,o.recorded_at DESC,o.id DESC LIMIT 1
+) lo ON true
+LEFT JOIN metro.capacity_profiles cp ON cp.operator_id=pt.operator_id AND cp.id=pt.load_profile_id;
+
+  INSERT INTO metro.schema_migrations (version, name, checksum)
+  VALUES (14, '014_service_operations.sql', '737729ad30cd60376aef07427cd212eeb170c3a8b986ed86c891e365e0335a9b');
+END $migration_014$;
+
+-- 015_gate_validation.sql
+DO $migration_015$
+BEGIN
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 15) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 15
+                   AND name = '015_gate_validation.sql' AND checksum = '5c17487a5855c7ebf1c374a44a127f5aa54305aba0bc76bee3507cfd8edc7bcc') THEN
+      RAISE EXCEPTION 'Migration 015 checksum mismatch; add a new migration';
+    END IF;
+    RAISE NOTICE 'Migration 015 already applied';
     RETURN;
   END IF;
 
@@ -4267,18 +4342,18 @@ LEFT JOIN metro.capacity_profiles cp ON cp.operator_id=pt.operator_id AND cp.id=
 COMMENT ON TABLE metro.gate_requests IS 'BE-10 atomic scan receipts. Pending means unconfirmed, not a stored REVIEW decision. Never store raw QR tokens.';
 
   INSERT INTO metro.schema_migrations (version, name, checksum)
-  VALUES (14, '014_gate_validation.sql', '5c17487a5855c7ebf1c374a44a127f5aa54305aba0bc76bee3507cfd8edc7bcc');
-END $migration_014$;
+  VALUES (15, '015_gate_validation.sql', '5c17487a5855c7ebf1c374a44a127f5aa54305aba0bc76bee3507cfd8edc7bcc');
+END $migration_015$;
 
--- 015_gate_qr_support.sql
-DO $migration_015$
+-- 016_gate_qr_support.sql
+DO $migration_016$
 BEGIN
-  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 15) THEN
-    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 15
-                   AND name = '015_gate_qr_support.sql' AND checksum = 'c7c730e25ab28c05e00f192b53fab21a7ca29980e812c2aea0dcd1323e9737b3') THEN
-      RAISE EXCEPTION 'Migration 015 checksum mismatch; add a new migration';
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 16) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 16
+                   AND name = '016_gate_qr_support.sql' AND checksum = 'c7c730e25ab28c05e00f192b53fab21a7ca29980e812c2aea0dcd1323e9737b3') THEN
+      RAISE EXCEPTION 'Migration 016 checksum mismatch; add a new migration';
     END IF;
-    RAISE NOTICE 'Migration 015 already applied';
+    RAISE NOTICE 'Migration 016 already applied';
     RETURN;
   END IF;
 
@@ -4372,18 +4447,18 @@ CREATE TRIGGER trg_qr_verifications_immutable BEFORE UPDATE OR DELETE ON metro.g
 CREATE TRIGGER trg_gate_email_attempts_immutable BEFORE UPDATE OR DELETE ON metro.gate_email_attempts FOR EACH ROW EXECUTE FUNCTION metro.reject_gate_history_mutation();
 
   INSERT INTO metro.schema_migrations (version, name, checksum)
-  VALUES (15, '015_gate_qr_support.sql', 'c7c730e25ab28c05e00f192b53fab21a7ca29980e812c2aea0dcd1323e9737b3');
-END $migration_015$;
+  VALUES (16, '016_gate_qr_support.sql', 'c7c730e25ab28c05e00f192b53fab21a7ca29980e812c2aea0dcd1323e9737b3');
+END $migration_016$;
 
--- 016_gate_support_review.sql
-DO $migration_016$
+-- 017_gate_support_review.sql
+DO $migration_017$
 BEGIN
-  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 16) THEN
-    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 16
-                   AND name = '016_gate_support_review.sql' AND checksum = '764f59a9a6e253c0e419c59a67dd5f0a1db089a809e1272128aeb76f6ae9a920') THEN
-      RAISE EXCEPTION 'Migration 016 checksum mismatch; add a new migration';
+  IF EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 17) THEN
+    IF NOT EXISTS (SELECT 1 FROM metro.schema_migrations WHERE version = 17
+                   AND name = '017_gate_support_review.sql' AND checksum = '764f59a9a6e253c0e419c59a67dd5f0a1db089a809e1272128aeb76f6ae9a920') THEN
+      RAISE EXCEPTION 'Migration 017 checksum mismatch; add a new migration';
     END IF;
-    RAISE NOTICE 'Migration 016 already applied';
+    RAISE NOTICE 'Migration 017 already applied';
     RETURN;
   END IF;
 
@@ -4395,7 +4470,7 @@ ALTER TABLE metro.gate_resolutions DROP CONSTRAINT gate_resolutions_check;
 ALTER TABLE metro.gate_resolutions ADD CONSTRAINT gate_resolutions_check CHECK(action IN ('ESCALATE','CLOSE_SUPPORT') OR identity_verified);
 
   INSERT INTO metro.schema_migrations (version, name, checksum)
-  VALUES (16, '016_gate_support_review.sql', '764f59a9a6e253c0e419c59a67dd5f0a1db089a809e1272128aeb76f6ae9a920');
-END $migration_016$;
+  VALUES (17, '017_gate_support_review.sql', '764f59a9a6e253c0e419c59a67dd5f0a1db089a809e1272128aeb76f6ae9a920');
+END $migration_017$;
 
 COMMIT;

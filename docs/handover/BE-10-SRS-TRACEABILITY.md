@@ -36,7 +36,7 @@ Phạm vi: backend UC16–UC18 trên nhánh local `feature/BE-10-gate-validation
 | AC-X21: Journey, ngoại lệ, không tự đóng/bịa thời gian | Missing_entry_needs_proven_time_and_context_and_escalation_never_grants_passage; Wrong_exit_requires_verified_evidence_and_keeps_bought_station_and_original_event |
 | AC-X22: QR giữ ổn định, thay cũ vô hiệu/new tiếp tục Journey, sửa nhầm có điều kiện | Display_keeps_the_same_QR_and_proof_is_bound_to_the_staff_session_and_current_profile; Verified_email_replacement_revokes_old_QR_preserves_open_journey_and_is_idempotent; Mistaken_entry_or_exit_can_be_corrected_once_with_audit_but_later_use_blocks_undo |
 | AC-X37: suggestedTrip khác entryTrip hợp lệ | Suggested_trip_is_not_a_gate_restriction_and_missing_ETA_does_not_block_real_boarding |
-| NFR-002: quyết định QR P95 ≤1 giây | QR_decision_local_smoke_has_P95_below_one_second_for_100_requests_at_20_concurrent_clients; chỉ smoke local trên fixture nhỏ, không thay benchmark bộ dữ liệu/môi trường tham chiếu đầy đủ |
+| NFR-002: quyết định QR P95 ≤1 giây | QR_decision_local_smoke_has_P95_below_one_second_for_100_requests_at_20_concurrent_clients; fixture nhỏ, ngưỡng luôn 1000 ms; gồm DB execution/pool/transport latency, log probe DB riêng không trừ vào P95; không thay benchmark bộ dữ liệu/môi trường tham chiếu đầy đủ |
 | AC-A03/04, NFR-004/005: máy chủ quyết định, quyền, concurrency, privacy | Các test quyền/operator/replay/audit rollback/QR cũ/proof sai purpose ở trên; phần camera/upload và hiển thị FE chưa phải bằng chứng đã nghiệm thu |
 
 ## Giới hạn kết luận
@@ -44,4 +44,5 @@ Phạm vi: backend UC16–UC18 trên nhánh local `feature/BE-10-gate-validation
 - Kết quả thực chạy và tổng số test nằm trong [bàn giao](BE-10-GATE-VALIDATION.md). Tên test trong bảng là truy vết, không thay log/TRX thực chạy.
 - Đây là bằng chứng backend local. Không tự xác nhận các AC giao diện camera/upload/in ảnh, SMTP inbox thực, HTTPS triển khai, benchmark tham chiếu đầy đủ, backup/restore hoặc phê duyệt người dùng đã đạt.
 - BE-13/14 chưa hợp nhất: dùng lịch/actual boarding fixture để kiểm quy tắc BE-10. Không lấy ETA làm actual arrival hoặc giả các API quản trị đó đã có.
-- Bản local có migrations 014–016 riêng; khi tích hợp BE-14 phải xếp lại số migration chưa triển khai. Không sửa checksum lịch sử đã áp dụng trên môi trường chung.
+- Chuỗi chuẩn: 014 schema BE-14 nguyên văn từ PR #87 (`7cff576`), 015–017 gate/QR/support của BE-10. Không nhập runtime BE-14. Verifier/deploy đồng bộ, kiểm deploy sạch/upgrade từ BE-14 014; không sửa checksum DB chung đã áp dụng chuỗi gate 014–016 cũ.
+- Reviewer báo smoke Neon pooled P95 khoảng 1495 ms trên `5b30cdf` (145/146 integration pass). Đó là fail hiệu năng trong môi trường đó; chưa có bằng chứng tách nguyên nhân DB/network/gate. Xem phản hồi review trong bàn giao, không dùng kết quả local trước đó để thay kết quả Neon.
