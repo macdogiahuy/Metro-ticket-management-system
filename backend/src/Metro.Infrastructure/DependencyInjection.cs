@@ -103,6 +103,7 @@ public static class DependencyInjection
         services.AddScoped<IAdminFareService, AdminFareService>();
         services.AddScoped<IAdminEligibilityPolicyService, AdminEligibilityPolicyService>();
         services.AddScoped<IAdminNetworkService, AdminNetworkService>();
+        services.AddScoped<IAdminScheduleService, AdminScheduleService>();
 
         var storageOptions = new NeonStorageOptions
         {
