@@ -29,7 +29,7 @@ public sealed class RequestLoggingMiddleware(RequestDelegate next, ILogger<Reque
                 logger.Log(level,
                     "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMs:F1} ms",
                     context.Request.Method,
-                    context.Request.Path,
+                    PiiRedactor.Redact(context.Request.Path),
                     statusCode,
                     elapsed.TotalMilliseconds);
             }

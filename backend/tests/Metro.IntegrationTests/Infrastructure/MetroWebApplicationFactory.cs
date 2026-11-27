@@ -24,6 +24,10 @@ public sealed class MetroWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:SigningKey", _signingKey);
         builder.UseSetting("Jwt:Issuer", "metro-api");
         builder.UseSetting("Jwt:Audience", "metro-web");
+        // BE-17: the shared factory serves hundreds of requests per run; keep the
+        // production default intact but raise it here. Individual hardening tests
+        // override PermitLimit through WithWebHostBuilder to exercise 429.
+        builder.UseSetting("Hardening:RateLimiting:PermitLimit", "100000");
         builder.UseSetting("TicketQr:WorkerEnabled", "false");
         builder.UseSetting("GateEmail:WorkerEnabled", "false");
         builder.UseSetting("TicketQr:ActiveKeyId", "test-v1");
