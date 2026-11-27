@@ -45,6 +45,7 @@ public interface ICatalogCache
 {
     Task<T> GetOrCreateAsync<T>(string key, TimeSpan ttl, Func<CancellationToken, Task<T>> factory, CancellationToken cancellationToken);
     Task RemoveAsync(string key, CancellationToken cancellationToken);
+    Task InvalidateOperatorAsync(Guid operatorId, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 /// <summary>Stable machine-readable error for ProblemDetails extension "code".</summary>

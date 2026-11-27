@@ -4,6 +4,7 @@ using Metro.Application.Abstractions.Auth;
 using Metro.Application.Abstractions.Booking;
 using Metro.Application.Abstractions.Catalog;
 using Metro.Application.Abstractions.Fare;
+using Metro.Application.Abstractions.Network;
 using Metro.Application.Abstractions.Payment;
 using Metro.Application.Abstractions.Reports;
 using Microsoft.AspNetCore.Diagnostics;
@@ -64,6 +65,15 @@ public sealed class GlobalExceptionHandler(
                 StatusCodes.Status422UnprocessableEntity => "Fare rule violation",
                 _ => "Invalid fare request",
             }, fare.Message, fare.Code),
+            NetworkAdminException net => (net.Status, net.Status switch
+            {
+                StatusCodes.Status401Unauthorized => "Authentication required",
+                StatusCodes.Status403Forbidden => "Forbidden",
+                StatusCodes.Status404NotFound => "Network resource not found",
+                StatusCodes.Status409Conflict => "Network state conflict",
+                StatusCodes.Status422UnprocessableEntity => "Network rule violation",
+                _ => "Invalid network request",
+            }, net.Message, net.Code),
             _ when pg is { SqlState: "P0001", MessageText: "EMAIL_CODE_RATE_LIMIT" } =>
                 (429,"Email verification rate limit","Please wait before requesting another code.","EMAIL_CODE_RATE_LIMIT"),
             _ when pg is { SqlState: PostgresErrorCodes.UniqueViolation } =>

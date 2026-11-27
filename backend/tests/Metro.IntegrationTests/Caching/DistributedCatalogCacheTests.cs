@@ -85,6 +85,36 @@ public sealed class DistributedCatalogCacheTests
         Assert.Equal(0, spy.SetCount);
     }
 
+    [Fact]
+    public async Task InvalidateOperatorAsync_EvictsOnlyTargetOperatorKeys()
+    {
+        var distributed = new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
+        var sut = new DistributedCatalogCache(
+            distributed,
+            Options.Create(new CatalogCacheOptions { Enabled = true, KeyPrefix = "test:v1:" }),
+            NullLogger<DistributedCatalogCache>.Instance);
+
+        var opA = Guid.NewGuid();
+        var opB = Guid.NewGuid();
+        var callsA = 0;
+        var callsB = 0;
+
+        var keyA = $"lines:{opA:N}:status=all";
+        var keyB = $"lines:{opB:N}:status=all";
+        await sut.GetOrCreateAsync(keyA, TimeSpan.FromSeconds(60), _ => Task.FromResult(new SamplePayload($"A-{++callsA}")), CancellationToken.None);
+        await sut.GetOrCreateAsync(keyB, TimeSpan.FromSeconds(60), _ => Task.FromResult(new SamplePayload($"B-{++callsB}")), CancellationToken.None);
+
+        await sut.InvalidateOperatorAsync(opA, CancellationToken.None);
+
+        var afterA = await sut.GetOrCreateAsync(keyA, TimeSpan.FromSeconds(60), _ => Task.FromResult(new SamplePayload($"A-{++callsA}")), CancellationToken.None);
+        var afterB = await sut.GetOrCreateAsync(keyB, TimeSpan.FromSeconds(60), _ => Task.FromResult(new SamplePayload($"B-{++callsB}")), CancellationToken.None);
+
+        Assert.Equal("A-2", afterA.Name);
+        Assert.Equal("B-1", afterB.Name);
+        Assert.Equal(2, callsA);
+        Assert.Equal(1, callsB);
+    }
+
     private sealed record SamplePayload(string Name);
 
     private sealed class ThrowingDistributedCache : IDistributedCache
