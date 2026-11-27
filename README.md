@@ -799,10 +799,15 @@ psql -v ON_ERROR_STOP=1 -d metro_ticket -f infra/database/deploy.sql
 psql -v ON_ERROR_STOP=1 -d metro_ticket -f infra/database/scripts/09_verify.sql
 ```
 
-**Option B — Neon (team-shared):** copy `DATABASE_URL` and the `AWS_*`
-storage variables from the Neon console into `backend/.env.local`
-(git-ignored). No schema step needed — the `production` branch already
-has all migrations applied.
+**Option B — Neon (own branch recommended):** copy `DATABASE_URL` and the
+`AWS_*` storage variables into `backend/.env.local` (git-ignored), then
+apply the schema to that database with `psql -v ON_ERROR_STOP=1 -f
+infra/database/deploy.sql` and verify with `scripts/09_verify.sql`.
+Do **not** assume the shared `production` branch has the latest schema:
+migrations 010–017 are present in `deploy.sql` but have not been applied
+to production in this workspace. Applying them requires separate
+authorization and a backup branch; prefer a dedicated branch or the
+local database above for a clean-machine run.
 
 Then run the API:
 
@@ -835,12 +840,14 @@ In another terminal:
 
 ``` bash
 cd frontend
-npm install
+npm ci            # use the committed lockfile on a clean machine
 npm run dev
 ```
 
 Vite normally serves the frontend at `http://localhost:5173`. Set
 `VITE_API_BASE_URL` to the local API URL printed by ASP.NET Core.
+`npm run build` and `npm test` use the same lockfile; a clean-machine
+run is recorded in [docs/handover/DOC-01-EVIDENCE.md](docs/handover/DOC-01-EVIDENCE.md).
 
 ## 13. Docker Strategy
 
