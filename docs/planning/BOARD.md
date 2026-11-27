@@ -50,7 +50,7 @@ Mỗi người mở đúng khối của mình, làm từ trên xuống: xong tas
 | 18/11 | `BE-01` | Nền API | S0 | Done |
 | 25/11 | `BE-03` | Identity + JWT | S1 | Done |
 | 04/12 | `BE-08` | Payment MoMo TEST | S1 | Done |
-| 09/12 | `BE-17` | Hardening | S2 | To Do |
+| 09/12 | `BE-17` | Hardening | S2 | Done |
 | 20/12 | `DOC-01` | Demo script + README chạy máy sạch + tài liệu bàn giao | S3 | In Progress |
 
 **M02 — Tuyên** (5 task · 16 pd)
@@ -134,7 +134,7 @@ Mỗi người mở đúng khối của mình, làm từ trên xuống: xong tas
 | **09/12** | [#33](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/33) | `FE-01` | App shell, routing, design token, axios/react-query, layout… | Tiên | My | S2 | 07/12 | 3 | To Do |
 | **09/12** | [#34](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/34) | `FE-02` | Auth + hồ sơ + trạng thái ưu đãi | Hoàng | Tuyên | S2 | 07/12 | 3 | To Do |
 | **09/12** | [#37](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/37) | `FE-05` | Vé của tôi, QR, lịch sử đặt/thanh toán | Thành | Tiên | S2 | 07/12 | 3 | To Do |
-| **09/12** | [#32](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/32) | `BE-17` | Hardening | Huy | — | S2 | 08/12 | 3 | To Do |
+| **09/12** | [#32](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/32) | `BE-17` | Hardening | Huy | — | S2 | 08/12 | 3 | Done |
 | **12/12** | [#36](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/36) | `FE-04` | Booking → thanh toán → kết quả (kèm retry) | Tuyên | Thành | S2 | 07/12 | 5 | To Do |
 | **12/12** | [#35](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/35) | `FE-03` | Catalog | Hoàng | Tiên | S2 | 10/12 | 3 | To Do |
 | **12/12** | [#38](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/38) | `FE-06` | Portal soát vé | Thành | Tiên | S2 | 10/12 | 3 | To Do |
