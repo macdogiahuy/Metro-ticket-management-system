@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Metro Ticket · Demo 10 phút · DOC-01</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0b1020; --surface:#141c33; --line:#263258; --text:#e8edff; --muted:#9aa8cf;
+  --primary:#5b8cff; --accent:#32d6b0; --warn:#ffb35c; --grad:linear-gradient(135deg,#7aa2ff,#32d6b0);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+.deck{position:relative;width:100vw;height:100vh;overflow:hidden}
+@media(min-width:769px){.deck{max-width:calc(100vh * 16/9);max-height:calc(100vw * 9/16);margin:auto;position:absolute;inset:0}}
+.slide{position:absolute;inset:0;padding:5vh 6vw;display:none;flex-direction:column;justify-content:center;gap:2.4vh;background:radial-gradient(circle at 85% 15%,#1b2a55 0%,var(--bg) 55%)}
+.slide.active{display:flex}
+h1,h2{font-family:inherit;line-height:1.15}
+h1{font-size:clamp(34px,5.6vw,76px);background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+h2{font-size:clamp(26px,3.6vw,52px)}
+h3{font-size:clamp(15px,1.5vw,22px);color:var(--accent);margin-bottom:.5em}
+p,li{font-size:clamp(14px,1.45vw,21px);color:var(--muted);line-height:1.55}
+.kicker{color:var(--accent);font-size:clamp(12px,1.1vw,16px);letter-spacing:.18em;text-transform:uppercase}
+.grid{display:grid;gap:1.6vw}.g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:2vh 1.6vw}
+.card strong{display:block;font-size:clamp(16px,1.7vw,25px);color:var(--text);margin-bottom:.35em}
+.card span{font-size:clamp(12px,1.15vw,17px);color:var(--muted)}
+ol,ul{padding-left:1.1em}.tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:.25em .8em;font-size:clamp(11px,.95vw,15px);color:var(--muted);margin:.2em}
+.tag.hot{border-color:var(--accent);color:var(--accent)}
+.big{font-size:clamp(30px,4.5vw,64px);font-weight:700;color:var(--accent)}
+.chart-box{width:min(85%,720px);height:min(38vh,340px);position:relative}
+.bars{display:flex;align-items:flex-end;gap:5%;height:100%;width:100%;padding:0 3%}
+.bar{flex:1;background:var(--grad);border-radius:10px 10px 0 0;position:relative;min-height:4px}
+.bar b{position:absolute;top:-1.7em;width:100%;text-align:center;color:var(--text);font-size:clamp(14px,1.5vw,20px)}
+.bar i{position:absolute;bottom:-1.8em;width:100%;text-align:center;color:var(--muted);font-style:normal;font-size:clamp(11px,1vw,15px)}
+.notes{position:fixed;right:2vw;bottom:9vh;max-width:34vw;background:#050914ee;border:1px solid var(--line);border-radius:10px;padding:14px 16px;color:var(--muted);font-size:14px;display:none;z-index:20}
+.notes.show{display:block}
+.bar-progress{position:fixed;top:0;left:0;height:3px;background:var(--grad);z-index:30;transition:width .3s}
+.nav{position:fixed;bottom:2vh;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;z-index:30}
+button{background:#ffffff14;border:1px solid var(--line);color:var(--text);border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:17px}
+.counter{color:var(--muted);font-size:13px}.foot{position:absolute;bottom:2.5vh;left:6vw;color:#6f7ea8;font-size:12px}
+@media(max-width:768px){.g3{grid-template-columns:1fr 1fr}.notes{max-width:90vw}}
+</style>
+</head>
+<body>
+<div class="bar-progress" id="progress"></div>
+<div class="deck">
+
+<section class="slide active" data-notes="Chào nhóm. Đây là bài bàn giao S3: 10 phút đi qua phạm vi, kiến trúc, 6 kịch bản demo, hardening và bằng chứng.">
+  <div class="kicker">Nhóm 6 · Bàn giao 20/12/2026</div>
+  <h1>Metro Ticket Booking<br>&amp; Management System</h1>
+  <p>Full-stack đặt vé metro, vé điện tử QR, soát vé tại cổng và vận hành tuyến.</p>
+  <div><span class="tag hot">SRS v1.2 · UC v1.6</span><span class="tag">27 use case Must-have</span><span class="tag">DOC-01 · issue #44</span></div>
+</section>
+
+<section class="slide" data-notes="Vấn đề: nghiệp vụ vé và vận hành rời rạc. Phạm vi là dự án học phần, không phải hệ thống an toàn vận hành thực.">
+  <div class="kicker">Vấn đề &amp; phạm vi</div>
+  <h2>Từ tra cứu đến soát vé — một luồng thống nhất</h2>
+  <div class="grid g3">
+    <div class="card"><strong>Hành khách</strong><span>Tìm tuyến, xem giá, đặt vé, thanh toán MoMo TEST, giữ QR và lịch sử.</span></div>
+    <div class="card"><strong>Nhân viên ga</strong><span>Tra cứu vé, soát QR tại cổng, xử lý từ chối và cấp lại QR.</span></div>
+    <div class="card"><strong>Quản trị</strong><span>Tài khoản, tuyến/ga, giá vé, lịch chuyến, hủy/hoàn và báo cáo.</span></div>
+  </div>
+  <p><span class="tag hot">UC01–UC19</span><span class="tag">UC22–UC25</span><span class="tag">UC29, UC31, UC33, UC36</span></p>
+</section>
+
+<section class="slide" data-notes="Sơ đồ thành phần: FE React tách biệt, API .NET 9, SQL thuần làm nguồn chân lý schema, Redis cache ngắn.">
+  <div class="kicker">Kiến trúc</div>
+  <h2>API đầu cuối, schema bằng SQL thuần</h2>
+  <div class="grid g3">
+    <div class="card"><strong>Frontend</strong><span>React 19 · TypeScript · Vite · TanStack Query · Ant Design</span></div>
+    <div class="card"><strong>Backend</strong><span>ASP.NET Core 9 · ProblemDetails RFC 9457 · JWT · FluentValidation</span></div>
+    <div class="card"><strong>Dữ liệu</strong><span>PostgreSQL 17+ · migration 001–017 · Redis cache ngắn · Neon object storage</span></div>
+  </div>
+  <p>Không dùng EF Migrations. Schema được build từ <code>infra/database/migrations</code> thành <code>deploy.sql</code> và verify bằng <code>09_verify.sql</code>.</p>
+</section>
+
+<section class="slide" data-notes="Kịch bản 1–2: tài khoản, hồ sơ, ưu đãi, catalog, giá và gợi ý chuyến.">
+  <div class="kicker">Demo 1/3 · UC01–UC10</div>
+  <h2>Tài khoản &amp; tra cứu</h2>
+  <ol>
+    <li>Đăng ký → xác minh email → đăng nhập,refresh token.</li>
+    <li>Cập nhật hồ sơ, nộp minh chứng ưu đãi có audit thay đổi.</li>
+    <li>Xem 2 tuyến / 12 ga, hành trình, bảng giá và tình trạng dịch vụ.</li>
+    <li>Gợi ý chuyến tự động cho vé lượt — <strong>không giữ chỗ</strong>.</li>
+  </ol>
+  <p><span class="tag hot">Seed BE-18A sẵn sàng</span><span class="tag">Cache catalog ngắn</span></p>
+</section>
+
+<section class="slide" data-notes="Kịch bản 3–4: điểm cốt lõi của demo — đặt vé, retry thanh toán, phát hành QR và soát cổng.">
+  <div class="kicker">Demo 2/3 · UC11–UC19</div>
+  <h2>Đặt vé → thanh toán → QR → cổng</h2>
+  <div class="grid g2">
+    <div class="card"><strong>Booking &amp; payment</strong><span>Order PENDING có TTL, event thanh toán idempotent, retry an toàn; order quá hạn tự hủy, không phát hành vé.</span></div>
+    <div class="card"><strong>Ticket &amp; gate</strong><span>QR credential kèm version/key; scan lần đầu hợp lệ, scan lại bị từ chối; mọi quyết định ghi <code>afc_events</code>.</span></div>
+  </div>
+  <p>Nhấn mạnh: fallback trẻ &lt; 6 tuổi, hủy/hoàn và đổi vé không xóa khoản thu đã ghi.</p>
+</section>
+
+<section class="slide" data-notes="Kịch bản 5–6: staff và admin, gồm báo cáo doanh thu/CSV đã merge ở BE-15.">
+  <div class="kicker">Demo 3/3 · UC17–UC33</div>
+  <h2>Vận hành &amp; quản trị</h2>
+  <div class="grid g2">
+    <div class="card"><strong>Nhân viên ga</strong><span>Tra vé theo mã/email, cấp lại QR, QR cũ vô hiệu; phân quyền StaffOrAdmin.</span></div>
+    <div class="card"><strong>Admin</strong><span>Tuyến/ga, lịch chuyến, ETA/load/gián đoạn, sản phẩm &amp; giá theo version, báo cáo vé/doanh thu + CSV.</span></div>
+  </div>
+  <p>Mọi thay đổi quản trị đều có bản ghi <code>AuditLog</code> kèm correlation id.</p>
+</section>
+
+<section class="slide" data-notes="BE-17 vừa hoàn tất: bốn lớp hardening, có unit test và integration test thật.">
+  <div class="kicker">NFR · BE-17</div>
+  <h2>Hardening: 4 lớp bảo vệ</h2>
+  <div class="grid g2">
+    <div class="card"><strong>Security headers</strong><span>nosniff · DENY · CSP · no-referrer · no-store cho route nhạy cảm.</span></div>
+    <div class="card"><strong>Rate limit</strong><span>Fixed window theo subject/IP; 429 ProblemDetails <code>RATE_LIMITED</code> + Retry-After.</span></div>
+    <div class="card"><strong>PII masking</strong><span>Che email, điện thoại, token, OTP trong log và ProblemDetails detail.</span></div>
+    <div class="card"><strong>Audit bắt buộc</strong><span>Mọi admin write thành công có receipt audit + X-Correlation-Id.</span></div>
+  </div>
+</section>
+
+<section class="slide" data-notes="Số liệu lấy từ lượt chạy ngày 28/11: build 0 warning, 229 unit, 173 integration trên PostgreSQL riêng.">
+  <div class="kicker">Bằng chứng kiểm chứng · 28/11/2026</div>
+  <h2>Build xanh, test chạm DB thật</h2>
+  <div class="chart-box">
+    <canvas id="proofChart" style="display:none"></canvas>
+    <div class="bars" id="fallback">
+      <div class="bar" style="height:100%"><b>229</b><i>Unit</i></div>
+      <div class="bar" style="height:76%"><b>173</b><i>Integration</i></div>
+      <div class="bar" style="height:15%"><b>20/33</b><i>Task Done</i></div>
+    </div>
+  </div>
+  <p><span class="tag hot">0 warning / 0 error</span><span class="tag">PostgreSQL riêng metro_test_*</span><span class="tag">Không Docker/InMemory</span></p>
+</section>
+
+<section class="slide" data-notes="Trạng thái bàn giao: backend và tài liệu xong; FE/QA là việc còn lại của các thành viên theo board.">
+  <div class="kicker">Bàn giao</div>
+  <h2>Đã sẵn sàng &amp; còn lại</h2>
+  <div class="grid g2">
+    <div class="card"><strong>Hoàn tất</strong><span>BE-01→BE-17, QA-01, seed demo, migrations 001–017, hardening, README máy sạch, demo script, slide và video dự phòng.</span></div>
+    <div class="card"><strong>Tiếp theo</strong><span>FE-01→FE-09 (app shell đến responsive), QA-02 Newman regression, QA-03 E2E/UAT — theo timeline board.</span></div>
+  </div>
+  <p>Tài liệu: <code>README.md</code> · <code>docs/handover/HANDOVER.md</code> · <code>DEMO_SCRIPT.md</code> · <code>BE-17-HARDENING.md</code></p>
+</section>
+
+<section class="slide" data-notes="Kết thúc: nhắc deadline nộp bài 23/12 và mời câu hỏi.">
+  <div class="kicker">Kết thúc</div>
+  <h1 style="font-size:clamp(30px,4.4vw,60px)">Sẵn sàng bàn giao</h1>
+  <p>Chốt nội bộ 20/12 · Nộp bài 23/12/2026.</p>
+  <div class="big">Cảm ơn · Q &amp; A</div>
+  <p>Metro Ticket Management System — Nhóm 6</p>
+</section>
+
+</div>
+
+<div class="notes" id="notes"></div>
+<div class="nav"><button id="prev" aria-label="Trước">←</button><span class="counter"><span id="cur">1</span> / <span id="tot">10</span></span><button id="next" aria-label="Sau">→</button></div>
+<div class="foot">← → / Space để chuyển · N hiện ghi chú thuyết trình</div>
+<script>
+const slides=[...document.querySelectorAll('.slide')], notesEl=document.getElementById('notes');
+let current=1;
+document.getElementById('tot').textContent=slides.length;
+const params=new URLSearchParams(location.search);
+function show(n){
+  current=Math.min(Math.max(n,1),slides.length);
+  slides.forEach((s,i)=>s.classList.toggle('active',i===current-1));
+  document.getElementById('cur').textContent=current;
+  document.getElementById('progress').style.width=(current/slides.length*100)+'%';
+  notesEl.textContent=slides[current-1].dataset.notes||'';
+  if(history.replaceState) history.replaceState(null,'','?slide='+current);
+}
+document.getElementById('next').onclick=()=>show(current+1);
+document.getElementById('prev').onclick=()=>show(current-1);
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();show(current+1)}
+  if(e.key==='ArrowLeft'){e.preventDefault();show(current-1)}
+  if(e.key.toLowerCase()==='n')notesEl.classList.toggle('show');
+});
+show(parseInt(params.get('slide')||'1',10)||1);
+if(window.Chart){
+  document.getElementById('fallback').style.display='none';
+  document.getElementById('proofChart').style.display='block';
+  new Chart(document.getElementById('proofChart'),{
+    type:'bar',
+    data:{labels:['Unit test','Integration test','Task Done'],datasets:[{data:[229,173,20],backgroundColor:['#5b8cff','#32d6b0','#ffb35c'],borderRadius:8}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'#263258'},ticks:{color:'#9aa8cf'}},y:{grid:{color:'#263258'},ticks:{color:'#9aa8cf'},suggestedMax:250}}}
+  });
+}
+</script>
+</body>
+</html>
