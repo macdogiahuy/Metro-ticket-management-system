@@ -53,11 +53,7 @@ try {
             $totalPassed += [int]$counter.passed
         }
         foreach ($testResult in $result.GetElementsByTagName('UnitTestResult')) {
-<<<<<<< HEAD
-            if ($testResult.testName -match '\.(PostgresLiveIntegrationTests|TicketingFinancePostgresTests|AuthEndpointsTests|CatalogEndpointsTests|ProfileEndpointsTests|BookingEndpointsTests|OperationsEndpointsTests|TicketEndpointsTests|GateEndpointsTests|PaymentEndpointsTests|PaymentOwnershipTests|Be09PaymentIntegrationTests|FareMappingPostgresTests|FareQuoteEndpointsTests|AdminProductEndpointsTests|AdminFareEndpointsTests|AdminEligibilityPolicyEndpointsTests|AdminNetworkEndpointsTests|AdminScheduleEndpointsTests|AdminTripEndpointsTests|AdminTripLoadEndpointsTests)\.' -and
-=======
-            if ($testResult.testName -match '\.(PostgresLiveIntegrationTests|TicketingFinancePostgresTests|AuthEndpointsTests|CatalogEndpointsTests|ProfileEndpointsTests|BookingEndpointsTests|TicketEndpointsTests|PaymentEndpointsTests|PaymentOwnershipTests|Be09PaymentIntegrationTests|FareMappingPostgresTests|FareQuoteEndpointsTests|AdminProductEndpointsTests|AdminFareEndpointsTests|AdminEligibilityPolicyEndpointsTests|AdminNetworkEndpointsTests|AdminScheduleEndpointsTests|AdminTripEndpointsTests|AdminTripLoadEndpointsTests|AdminNoticeEndpointsTests)\.' -and
->>>>>>> 06a9400 (feat(be-13): add admin service notices lifecycle, OpenAPI examples, and Postman collection (#24))
+            if ($testResult.testName -match '\.(PostgresLiveIntegrationTests|TicketingFinancePostgresTests|AuthEndpointsTests|CatalogEndpointsTests|ProfileEndpointsTests|BookingEndpointsTests|OperationsEndpointsTests|TicketEndpointsTests|GateEndpointsTests|PaymentEndpointsTests|PaymentOwnershipTests|Be09PaymentIntegrationTests|FareMappingPostgresTests|FareQuoteEndpointsTests|AdminProductEndpointsTests|AdminFareEndpointsTests|AdminEligibilityPolicyEndpointsTests|AdminNetworkEndpointsTests|AdminScheduleEndpointsTests|AdminTripEndpointsTests|AdminTripLoadEndpointsTests|AdminNoticeEndpointsTests)\.' -and
                 $testResult.outcome -eq 'Passed') {
                 $postgresPassed++
             }
