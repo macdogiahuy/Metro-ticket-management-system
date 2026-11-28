@@ -27,6 +27,14 @@ INSERT INTO public."AspNetUserRoles" ("UserId", "RoleId") VALUES
     ('demo-admin', 'demo-role-admin')
 ON CONFLICT DO NOTHING;
 
+-- Profiles are required by GET /api/v1/me (UC05/UC06). Without these rows the
+-- demo accounts can log in but their profile endpoints return 404.
+INSERT INTO metro.user_profiles (user_id, full_name, normalized_full_name, birth_date, status) VALUES
+    ('demo-passenger', 'Demo Passenger', 'DEMO PASSENGER', DATE '1990-01-01', 'ACTIVE'),
+    ('demo-staff', 'Demo Station Staff', 'DEMO STATION STAFF', DATE '1990-01-01', 'ACTIVE'),
+    ('demo-admin', 'Demo Administrator', 'DEMO ADMINISTRATOR', DATE '1990-01-01', 'ACTIVE')
+ON CONFLICT (user_id) DO NOTHING;
+
 INSERT INTO metro.operators (id, code, name) VALUES
     ('10000000-0000-0000-0000-000000000018', 'DEMO-METRO', 'Metro Demo Operator')
 ON CONFLICT (code) DO NOTHING;
