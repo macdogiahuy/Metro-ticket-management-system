@@ -68,6 +68,16 @@ public sealed class SwaggerContractTests(MetroWebApplicationFactory factory)
         Assert.Contains("/api/v1/admin/schedules", swagger.Paths.Keys);
         Assert.Contains("/api/v1/admin/schedules/{id}/approve", swagger.Paths.Keys);
         Assert.Contains("/api/v1/admin/schedules/{id}/publish", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/trips", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/trips/{id}", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/trips/{id}/allocations", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/trip-load/trainsets", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/trip-load/profiles", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/trip-load/profiles/{id}/approve", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/trip-load/profiles/{id}/publish", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/trip-load", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/trip-load/observations", swagger.Paths.Keys);
+        Assert.Contains("/api/v1/admin/trip-load/eta", swagger.Paths.Keys);
         Assert.Contains("/api/v1/service-status", swagger.Paths.Keys);
         Assert.Contains("/api/v1/payments", swagger.Paths.Keys);
         Assert.Contains("/api/v1/payments/{id}/retry", swagger.Paths.Keys);

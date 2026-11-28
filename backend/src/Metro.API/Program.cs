@@ -161,6 +161,8 @@ app.MapAdminFareEndpoints();
 app.MapAdminEligibilityPolicyEndpoints();
 app.MapAdminNetworkEndpoints();
 app.MapAdminScheduleEndpoints();
+app.MapAdminTripEndpoints();
+app.MapAdminTripLoadEndpoints();
 app.MapPaymentEndpoints();
 app.MapTicketEndpoints();
 app.MapGateEndpoints();
