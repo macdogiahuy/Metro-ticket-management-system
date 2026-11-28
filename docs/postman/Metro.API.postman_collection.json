@@ -185,6 +185,10 @@
       "value": ""
     },
     {
+      "key": "gatePhone",
+      "value": ""
+    },
+    {
       "key": "gateEvidenceReference",
       "value": "staff-case-reference"
     },
@@ -2025,6 +2029,28 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"ticketCode\": \"{{gateTicketCode}}\",\n  \"reason\": \"Passenger support\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Audited lookup by passenger phone (BE-11)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/gate/lookup?operatorCode={{operatorCode}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticketCode\": \"\",\n  \"reason\": \"Passenger support\",\n  \"phone\": \"{{gatePhone}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

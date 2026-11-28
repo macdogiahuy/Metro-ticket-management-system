@@ -101,13 +101,18 @@ public sealed class AuthService(
         var id = await db.Users.AsNoTracking().Where(x => x.NormalizedEmail == email).Select(x => x.Id).SingleOrDefaultAsync(cancellationToken);
         if (id is null)
             throw new AuthException("INVALID_CREDENTIALS", StatusCodes.Status401Unauthorized, "Invalid email or password.");
+
+        // Password verification is CPU-bound PBKDF2 and touches no shared state, so it
+        // must run before the per-user advisory lock; holding that lock across the hash
+        // serializes every concurrent login of the same account (~16 req/s).
+        var user = await users.FindByIdAsync(id);
+        if (user is null || !await users.CheckPasswordAsync(user, request.Password))
+            throw new AuthException("INVALID_CREDENTIALS", StatusCodes.Status401Unauthorized, "Invalid email or password.");
+        if (!user.EmailConfirmed)
+            throw new AuthException("EMAIL_NOT_VERIFIED", StatusCodes.Status403Forbidden, "Email must be verified before login.");
+
         return await WithAccountLockAsync(id, async () =>
         {
-            var user = await users.FindByIdAsync(id);
-            if (user is null || !await users.CheckPasswordAsync(user, request.Password))
-                throw new AuthException("INVALID_CREDENTIALS", StatusCodes.Status401Unauthorized, "Invalid email or password.");
-            if (!user.EmailConfirmed)
-                throw new AuthException("EMAIL_NOT_VERIFIED", StatusCodes.Status403Forbidden, "Email must be verified before login.");
             await RequireActiveAsync(user.Id, cancellationToken);
             return await IssueTokensAsync(user, cancellationToken);
         }, cancellationToken);
