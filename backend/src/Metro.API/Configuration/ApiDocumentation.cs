@@ -38,6 +38,7 @@ public static class ApiDocumentation
         options.OperationFilter<GateOpenApiFilter>();
         options.OperationFilter<OperationsOpenApiFilter>();
         options.OperationFilter<ReportOpenApiFilter>();
+        options.OperationFilter<NetworkAdminOpenApiFilter>();
 
         var xmlFile = $"{typeof(ApiDocumentation).Assembly.GetName().Name}.xml";
         var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);

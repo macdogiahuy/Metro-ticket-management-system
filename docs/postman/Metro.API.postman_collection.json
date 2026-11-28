@@ -227,6 +227,38 @@
     {
       "key": "gateQrSupportReason",
       "value": "Verified passenger support"
+    },
+    {
+      "key": "adminLineId",
+      "value": ""
+    },
+    {
+      "key": "adminStationId",
+      "value": ""
+    },
+    {
+      "key": "adminCalendarId",
+      "value": ""
+    },
+    {
+      "key": "adminScheduleId",
+      "value": ""
+    },
+    {
+      "key": "adminTripId",
+      "value": ""
+    },
+    {
+      "key": "adminTrainsetId",
+      "value": ""
+    },
+    {
+      "key": "adminLoadProfileId",
+      "value": ""
+    },
+    {
+      "key": "adminNoticeId",
+      "value": ""
     }
   ],
   "item": [
@@ -2266,6 +2298,312 @@
                 }
               }
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Network & Operations (BE-13)",
+      "description": "BE-13 (UC24, UC29, UC31, UC37/38): lines/stations with travel_time_seconds & min_transfer_seconds, schedules & trips, max_load_kg profiles, manual load kg, manual ETA, and service notices with validity/expiry. Requires Admin JWT in adminAccessToken.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{adminAccessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "UC24 — Create line",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('create line returns 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('adminLineId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-line-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"T01-{{$timestamp}}\",\n  \"name\": \"Tuyen Metro 01\",\n  \"status\": \"ACTIVE\",\n  \"openedOn\": \"2026-01-01\",\n  \"reason\": \"Create line\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/lines"
+          }
+        },
+        {
+          "name": "UC24 — Create station (min_transfer_seconds)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('create station returns 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('adminStationId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-station-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"ST-{{$timestamp}}\",\n  \"name\": \"Ga Trung Tam C\",\n  \"stationType\": \"INTERCHANGE\",\n  \"latitude\": 21.0285,\n  \"longitude\": 105.8542,\n  \"minTransferSeconds\": 300,\n  \"status\": \"ACTIVE\",\n  \"reason\": \"Create interchange station\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/stations"
+          }
+        },
+        {
+          "name": "UC24 — Set line station order & travel_time_seconds",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-stops-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": 0,\n  \"stops\": [\n    { \"stationId\": \"{{adminStationId}}\", \"sequenceNo\": 1, \"distanceFromOriginM\": 0, \"travelTimeSeconds\": 180 }\n  ],\n  \"reason\": \"Configure line topology\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/lines/{{adminLineId}}/stations"
+          }
+        },
+        {
+          "name": "UC29 — Create service calendar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('create calendar returns 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('adminCalendarId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-cal-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"CAL-{{$timestamp}}\",\n  \"name\": \"Lich ngay thuong\",\n  \"dayType\": \"WEEKDAY\",\n  \"daysOfWeek\": [1, 2, 3, 4, 5],\n  \"effectiveFrom\": \"2026-11-01\",\n  \"effectiveTo\": \"2027-12-31\",\n  \"priority\": 10,\n  \"status\": \"PUBLISHED\",\n  \"reason\": \"Init calendar\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/schedules/calendars"
+          }
+        },
+        {
+          "name": "UC29 — Create schedule version",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('create schedule returns 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('adminScheduleId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-sch-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lineId\": \"{{adminLineId}}\",\n  \"serviceCalendarId\": \"{{adminCalendarId}}\",\n  \"code\": \"SCH-{{$timestamp}}\",\n  \"effectiveFrom\": \"2026-11-26T00:00:00Z\",\n  \"effectiveTo\": \"2027-01-01T00:00:00Z\",\n  \"reason\": \"Create timetable version\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/schedules"
+          }
+        },
+        {
+          "name": "UC29 — Create planned trip",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('create trip returns 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('adminTripId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-trip-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scheduleVersionId\": \"{{adminScheduleId}}\",\n  \"lineId\": \"{{adminLineId}}\",\n  \"tripCode\": \"T01-{{$timestamp}}\",\n  \"serviceDate\": \"2026-11-26\",\n  \"direction\": 0,\n  \"plannedStartAt\": \"2026-11-26T05:00:00Z\",\n  \"plannedEndAt\": \"2026-11-26T05:30:00Z\",\n  \"reason\": \"Schedule morning trip\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/trips"
+          }
+        },
+        {
+          "name": "UC37 — Create trainset & car max_load_kg",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('create trainset returns 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('adminTrainsetId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-ts-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"DT01-{{$timestamp}}\",\n  \"depotCode\": \"DEPOT-01\",\n  \"status\": \"AVAILABLE\",\n  \"cars\": [\n    { \"code\": \"C1-{{$timestamp}}\", \"sequenceNo\": 1, \"carType\": \"TC\", \"maxLoadKg\": 6000.0 },\n    { \"code\": \"C2-{{$timestamp}}\", \"sequenceNo\": 2, \"carType\": \"M\", \"maxLoadKg\": 6000.0 },\n    { \"code\": \"C3-{{$timestamp}}\", \"sequenceNo\": 3, \"carType\": \"TC\", \"maxLoadKg\": 6000.0 }\n  ],\n  \"reason\": \"BR-054 3 cars x 6000 kg\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/trip-load/trainsets"
+          }
+        },
+        {
+          "name": "UC37 — Create versioned load profile (max_load_kg)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('create load profile returns 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('adminLoadProfileId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-lp-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"LP-{{$timestamp}}\",\n  \"lineId\": \"{{adminLineId}}\",\n  \"trainsetId\": \"{{adminTrainsetId}}\",\n  \"maxLoadKg\": 18000.0,\n  \"effectiveFrom\": \"2026-11-26T00:00:00Z\",\n  \"effectiveTo\": \"2027-01-01T00:00:00Z\",\n  \"reason\": \"18000 kg trainset limit\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/trip-load/profiles"
+          }
+        },
+        {
+          "name": "UC38 — Record manual trip load (kg)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-obs-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plannedTripId\": \"{{adminTripId}}\",\n  \"observedLoadKg\": 17999.9,\n  \"note\": \"Manual kg observation\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/trip-load/observations"
+          }
+        },
+        {
+          "name": "UC29 — Record manual ETA update",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-eta-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plannedTripId\": \"{{adminTripId}}\",\n  \"stationId\": \"{{adminStationId}}\",\n  \"expectedArrivalAt\": \"2026-11-26T05:10:00Z\",\n  \"expectedDepartureAt\": \"2026-11-26T05:11:00Z\",\n  \"note\": \"Manual ETA\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/trip-load/eta"
+          }
+        },
+        {
+          "name": "UC38 — Get trip load status",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/admin/trip-load?tripId={{adminTripId}}"
+          }
+        },
+        {
+          "name": "UC31 — Create service notice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('create notice returns 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('adminNoticeId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-notice-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"NTC-{{$timestamp}}\",\n  \"audience\": \"PUBLIC\",\n  \"title\": \"Thong bao van hanh\",\n  \"content\": \"Cac tuyen van hanh binh thuong 10 phut/chuyen.\",\n  \"emergencyTemplate\": true,\n  \"validFrom\": \"2026-11-26T00:00:00Z\",\n  \"validTo\": \"2026-11-27T00:00:00Z\",\n  \"reason\": \"Daily service bulletin\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/notices"
+          }
+        },
+        {
+          "name": "UC31 — Publish service notice",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-notice-pub-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Verified and published\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/notices/{{adminNoticeId}}/publish"
+          }
+        },
+        {
+          "name": "UC31 — Cancel/expire service notice",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pm-be13-notice-exp-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Notice ended\",\n  \"expire\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/notices/{{adminNoticeId}}/cancel"
           }
         }
       ]
