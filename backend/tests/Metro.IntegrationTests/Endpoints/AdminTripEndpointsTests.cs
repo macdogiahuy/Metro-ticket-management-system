@@ -35,6 +35,16 @@ public sealed class AdminTripEndpointsTests(MetroWebApplicationFactory factory)
         var tripStart = now.AddHours(1);
         var tripEnd = tripStart.AddMinutes(30);
 
+        // 0. Reject attaching non-PUBLISHED (DRAFT) load profile on trip creation (UC37 maker-checker guard).
+        await AssertProblemAsync(
+            await client.PostAsJsonAsync("/api/v1/admin/trips", new
+            {
+                scheduleVersionId = seed.ScheduleId, lineId = seed.LineId, tripCode = $"TRD-{seed.Suffix}", serviceDate = today,
+                direction = (short)0, plannedStartAt = tripStart, plannedEndAt = tripEnd,
+                loadProfileId = seed.DraftLoadProfileId, reason = "Draft profile should be rejected"
+            }),
+            HttpStatusCode.Conflict, "LOAD_PROFILE_NOT_PUBLISHED");
+
         // 1. Create Trip 1 with Idempotency-Key + auto-generated stop times from travel_time_seconds (180s) & trainset 1.
         var t1Body = new
         {
@@ -65,7 +75,7 @@ public sealed class AdminTripEndpointsTests(MetroWebApplicationFactory factory)
             }),
             HttpStatusCode.Conflict, "TRAINSET_ALLOCATION_OVERLAP");
 
-        // 3. IN_SERVICE + actual arrival; BR-056 blocks swapping trainset while boarding OPEN, succeeds once PAUSED.
+        // 3. IN_SERVICE + actual arrival; updating only actualDepartureAt must still audit changed_fields & hash diff.
         Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/v1/admin/trips/{trip1Id}", new
         {
             status = "IN_SERVICE", boardingStationId = seed.S1Id, boardingStatus = "OPEN",
@@ -73,14 +83,50 @@ public sealed class AdminTripEndpointsTests(MetroWebApplicationFactory factory)
         })).StatusCode);
 
         await AssertProblemAsync(
+            await client.PutAsJsonAsync($"/api/v1/admin/trips/{trip1Id}", new
+            {
+                status = "IN_SERVICE", boardingStationId = seed.S1Id, boardingStatus = "OPEN",
+                actualDepartureAt = tripStart.AddMinutes(-1), reason = "Invalid departure before arrival"
+            }),
+            HttpStatusCode.BadRequest, "INVALID_STOP_TIME");
+
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/v1/admin/trips/{trip1Id}", new
+        {
+            status = "IN_SERVICE", boardingStationId = seed.S1Id, boardingStatus = "OPEN",
+            actualDepartureAt = tripStart.AddMinutes(2), reason = "Departed S1"
+        })).StatusCode);
+
+        // 3b. BR-056 blocks swapping trainset while boarding OPEN; DRAFT/APPROVED load profiles rejected; PUBLISHED succeeds once PAUSED.
+        await AssertProblemAsync(
             await client.PostAsJsonAsync($"/api/v1/admin/trips/{trip1Id}/allocations", new { trainsetId = seed.Trainset2Id, reason = "Swap while open" }),
             HttpStatusCode.Conflict, "BOARDING_MUST_PAUSE_FOR_SWAP");
 
         Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/v1/admin/trips/{trip1Id}",
             new { status = "IN_SERVICE", boardingStationId = seed.S1Id, boardingStatus = "PAUSED", reason = "Pause for swap" })).StatusCode);
 
+        await AssertProblemAsync(
+            await client.PutAsJsonAsync($"/api/v1/admin/trips/{trip1Id}",
+                new { status = "IN_SERVICE", boardingStationId = seed.S1Id, boardingStatus = "PAUSED", loadProfileId = seed.DraftLoadProfileId, reason = "Draft profile" }),
+            HttpStatusCode.Conflict, "LOAD_PROFILE_NOT_PUBLISHED");
+
+        await AssertProblemAsync(
+            await client.PutAsJsonAsync($"/api/v1/admin/trips/{trip1Id}",
+                new { status = "IN_SERVICE", boardingStationId = seed.S1Id, boardingStatus = "PAUSED", loadProfileId = seed.ApprovedLoadProfileId, reason = "Unpublished profile" }),
+            HttpStatusCode.Conflict, "LOAD_PROFILE_NOT_PUBLISHED");
+
+        var attachPublishedRes = await client.PutAsJsonAsync($"/api/v1/admin/trips/{trip1Id}",
+            new { status = "IN_SERVICE", boardingStationId = seed.S1Id, boardingStatus = "PAUSED", loadProfileId = seed.PublishedLoadProfileId, reason = "Attach published profile" });
+        Assert.Equal(HttpStatusCode.OK, attachPublishedRes.StatusCode);
+        using (var attachedDoc = JsonDocument.Parse(await attachPublishedRes.Content.ReadAsStringAsync()))
+            Assert.Equal(seed.PublishedLoadProfileId, attachedDoc.RootElement.GetProperty("loadProfileId").GetGuid());
+
+        await AssertProblemAsync(
+            await client.PostAsJsonAsync($"/api/v1/admin/trips/{trip1Id}/allocations",
+                new { trainsetId = seed.Trainset2Id, loadProfileId = seed.DraftLoadProfileId, reason = "Draft on alloc" }),
+            HttpStatusCode.Conflict, "LOAD_PROFILE_NOT_PUBLISHED");
+
         var swapRes = await SendWithIdemAsync(client, HttpMethod.Post, $"/api/v1/admin/trips/{trip1Id}/allocations",
-            new { trainsetId = seed.Trainset2Id, reason = "Swapped to DT02" }, $"swap-{seed.Suffix}");
+            new { trainsetId = seed.Trainset2Id, loadProfileId = seed.PublishedLoadProfileId, reason = "Swapped to DT02" }, $"swap-{seed.Suffix}");
         Assert.Equal(HttpStatusCode.OK, swapRes.StatusCode);
 
         // 4. Cancellation requires non-empty reason (400), then cancelling succeeds and blocks resurrecting (409).
@@ -99,7 +145,24 @@ public sealed class AdminTripEndpointsTests(MetroWebApplicationFactory factory)
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var audits = await db.AuditLogs.AsNoTracking()
                 .Where(a => a.EntityType == "PLANNED_TRIP" && a.EntityId == trip1Id.ToString()).ToListAsync();
-            Assert.True(audits.Count >= 4);
+            Assert.True(audits.Count >= 5);
+
+            var arrivalAudit = audits.Single(a => a.Action == "UPDATE_PLANNED_TRIP" && a.Reason == "Arrived S1");
+            Assert.Contains("actual_arrival_at", arrivalAudit.ChangedFields);
+            Assert.DoesNotContain("actual_departure_at", arrivalAudit.ChangedFields);
+            Assert.NotEqual(arrivalAudit.BeforeHash, arrivalAudit.AfterHash);
+
+            var departAudit = audits.Single(a => a.Action == "UPDATE_PLANNED_TRIP" && a.Reason == "Departed S1");
+            Assert.Contains("actual_departure_at", departAudit.ChangedFields);
+            Assert.DoesNotContain("actual_arrival_at", departAudit.ChangedFields);
+            Assert.NotNull(departAudit.BeforeHash);
+            Assert.NotNull(departAudit.AfterHash);
+            Assert.NotEqual(departAudit.BeforeHash, departAudit.AfterHash);
+
+            var actualStop = await db.ActualStopTimes.AsNoTracking()
+                .SingleAsync(s => s.StationId == seed.S1Id && s.ActualTrip.PlannedTripId == trip1Id);
+            Assert.NotNull(actualStop.ActualArrivalAt);
+            Assert.NotNull(actualStop.ActualDepartureAt);
         }
 
         var logs = string.Join(Environment.NewLine, factory.TestLogs.Messages);
@@ -155,12 +218,21 @@ public sealed class AdminTripEndpointsTests(MetroWebApplicationFactory factory)
 
         var ts1 = Guid.NewGuid();
         var ts2 = Guid.NewGuid();
+        var draftProfileId = Guid.NewGuid();
+        var approvedProfileId = Guid.NewGuid();
+        var publishedProfileId = Guid.NewGuid();
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO metro.trainsets (id, operator_id, code, depot_code, status)
             VALUES ({ts1}, {opId}, {$"DT01-{suffix}"}, 'DEPOT-1', 'AVAILABLE'),
                    ({ts2}, {opId}, {$"DT02-{suffix}"}, 'DEPOT-1', 'AVAILABLE')
             """);
-        return new SeededData(opId, suffix, line.Id, sch.Id, s1.Id, s2.Id, ts1, ts2, passenger, admin);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO metro.capacity_profiles (id, operator_id, code, version, line_id, trainset_id, seated_capacity, standing_capacity, max_load_kg, status, effective_from, created_by_user_id)
+            VALUES ({draftProfileId}, {opId}, {$"LP-D-{suffix}"}, 1, {line.Id}, {ts1}, 0, 0, 18000.0, 'DRAFT', {now.AddDays(-1)}, {admin.Id}),
+                   ({approvedProfileId}, {opId}, {$"LP-A-{suffix}"}, 1, {line.Id}, {ts1}, 0, 0, 18000.0, 'APPROVED', {now.AddDays(-1)}, {admin.Id}),
+                   ({publishedProfileId}, {opId}, {$"LP-P-{suffix}"}, 1, {line.Id}, {ts2}, 0, 0, 18000.0, 'PUBLISHED', {now.AddDays(-1)}, {admin.Id})
+            """);
+        return new SeededData(opId, suffix, line.Id, sch.Id, s1.Id, s2.Id, ts1, ts2, draftProfileId, approvedProfileId, publishedProfileId, passenger, admin);
     }
 
     private static async Task<ActorCreds> CreateUserAsync(
@@ -187,5 +259,8 @@ public sealed class AdminTripEndpointsTests(MetroWebApplicationFactory factory)
     }
 
     private sealed record ActorCreds(string Id, string Email, string Password);
-    private sealed record SeededData(Guid OperatorId, string Suffix, Guid LineId, Guid ScheduleId, Guid S1Id, Guid S2Id, Guid Trainset1Id, Guid Trainset2Id, ActorCreds Passenger, ActorCreds Admin);
+    private sealed record SeededData(
+        Guid OperatorId, string Suffix, Guid LineId, Guid ScheduleId, Guid S1Id, Guid S2Id,
+        Guid Trainset1Id, Guid Trainset2Id, Guid DraftLoadProfileId, Guid ApprovedLoadProfileId, Guid PublishedLoadProfileId,
+        ActorCreds Passenger, ActorCreds Admin);
 }

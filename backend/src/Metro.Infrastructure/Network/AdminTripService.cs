@@ -52,8 +52,8 @@ public sealed class AdminTripService(
             ?? throw new NetworkAdminException("SCHEDULE_NOT_FOUND", StatusCodes.Status404NotFound, "Schedule version was not found.");
         if (schedule.LineId != req.LineId)
             throw new NetworkAdminException("SCHEDULE_LINE_MISMATCH", StatusCodes.Status400BadRequest, "Schedule version does not belong to the requested line.");
-        if (req.LoadProfileId.HasValue && !await LoadProfileExistsAsync(opId, req.LoadProfileId.Value, ct))
-            throw new NetworkAdminException("LOAD_PROFILE_NOT_FOUND", StatusCodes.Status404NotFound, "Load profile was not found.");
+        if (req.LoadProfileId.HasValue)
+            await EnsurePublishedLoadProfileAsync(opId, req.LoadProfileId.Value, ct);
 
         var stopInputs = req.StopTimes is { Count: > 0 }
             ? req.StopTimes.Select(s => new TripStopTimeRuleInput(s.StationId, s.SequenceNo, NetworkAdminRules.ToUtc(s.PlannedArrivalAt), NetworkAdminRules.ToUtc(s.PlannedDepartureAt), s.DwellSeconds)).ToArray()
@@ -111,8 +111,7 @@ public sealed class AdminTripService(
         {
             if (trip.Status == "IN_SERVICE" && trip.BoardingStatus == "OPEN" && nextBoarding == "OPEN")
                 throw new NetworkAdminException("BOARDING_MUST_PAUSE_FOR_SWAP", StatusCodes.Status409Conflict, "Pause boarding before changing load profile on an in-service trip (BR-056).");
-            if (!await LoadProfileExistsAsync(opId, req.LoadProfileId.Value, ct))
-                throw new NetworkAdminException("LOAD_PROFILE_NOT_FOUND", StatusCodes.Status404NotFound, "Load profile was not found.");
+            await EnsurePublishedLoadProfileAsync(opId, req.LoadProfileId.Value, ct);
         }
         if (req.BoardingStationId.HasValue)
         {
@@ -122,8 +121,17 @@ public sealed class AdminTripService(
                 throw new NetworkAdminException("STATION_NOT_FOUND", StatusCodes.Status404NotFound, "Boarding station was not found.");
         }
 
-        var before = TripSnapshot(trip);
+        var targetStationId = req.BoardingStationId ?? trip.BoardingStationId;
+        var hasActualTimes = req.ActualArrivalAt.HasValue || req.ActualDepartureAt.HasValue;
+        if (hasActualTimes && !targetStationId.HasValue)
+            throw new NetworkAdminException("BOARDING_STATION_REQUIRED", StatusCodes.Status400BadRequest, "boardingStationId is required when updating actual arrival or departure times.");
+
         var now = DateTime.UtcNow;
+        ActualStopSnapshot? beforeStop = null, afterStop = null;
+        if (hasActualTimes)
+            (beforeStop, afterStop) = await UpsertActualStopAsync(opId, trip, nextStatus, targetStationId!.Value, req.ActualArrivalAt, req.ActualDepartureAt, req.Reason, now, ct);
+
+        var before = TripSnapshot(trip, beforeStop);
         trip.Status = nextStatus;
         trip.BoardingStatus = nextBoarding;
         if (req.BoardingStationId.HasValue) trip.BoardingStationId = req.BoardingStationId;
@@ -131,11 +139,11 @@ public sealed class AdminTripService(
         if (nextStatus == "CANCELLED") trip.CancellationReason = req.CancellationReason!.Trim();
         trip.UpdatedAt = now;
 
-        if ((req.ActualArrivalAt.HasValue || req.ActualDepartureAt.HasValue) && trip.BoardingStationId.HasValue)
-            await UpsertActualStopAsync(opId, trip, trip.BoardingStationId.Value, req.ActualArrivalAt, req.ActualDepartureAt, req.Reason, now, ct);
-
+        List<string> changedFields = ["status", "boarding_station_id", "boarding_status", "load_profile_id", "cancellation_reason"];
+        if (req.ActualArrivalAt.HasValue) changedFields.Add("actual_arrival_at");
+        if (req.ActualDepartureAt.HasValue) changedFields.Add("actual_departure_at");
         NetworkAdminHelper.AddAuditLog(db, opId, adminUserId, "UPDATE_PLANNED_TRIP", "PLANNED_TRIP", trip.Id,
-            ["status", "boarding_station_id", "boarding_status", "load_profile_id", "cancellation_reason"], before, TripSnapshot(trip), req.Reason);
+            [.. changedFields], before, TripSnapshot(trip, afterStop), req.Reason);
         await SaveMappedAsync("TRIP_CONFLICT", "Trip update conflicted.", ct);
         await catalogCache.InvalidateOperatorAsync(opId, ct);
         return await GetTripAsync(trip.Id, adminUserId, ct);
@@ -158,8 +166,8 @@ public sealed class AdminTripService(
             ?? throw new NetworkAdminException("TRAINSET_NOT_FOUND", StatusCodes.Status404NotFound, "Trainset was not found.");
         if (trainset.Status is "MAINTENANCE" or "OUT_OF_SERVICE")
             throw new NetworkAdminException("TRAINSET_UNAVAILABLE", StatusCodes.Status409Conflict, $"Trainset '{trainset.Code}' is '{trainset.Status}' and cannot be allocated (BR-053).");
-        if (req.LoadProfileId.HasValue && !await LoadProfileExistsAsync(opId, req.LoadProfileId.Value, ct))
-            throw new NetworkAdminException("LOAD_PROFILE_NOT_FOUND", StatusCodes.Status404NotFound, "Load profile was not found.");
+        if (req.LoadProfileId.HasValue)
+            await EnsurePublishedLoadProfileAsync(opId, req.LoadProfileId.Value, ct);
 
         var allocationId = Guid.Empty;
         await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -207,24 +215,33 @@ public sealed class AdminTripService(
         return result.ToArray();
     }
 
-    private async Task UpsertActualStopAsync(Guid opId, PlannedTrip trip, Guid stationId, DateTime? arr, DateTime? dep, string? reason, DateTime now, CancellationToken ct)
+    private async Task<(ActualStopSnapshot? Before, ActualStopSnapshot After)> UpsertActualStopAsync(
+        Guid opId, PlannedTrip trip, string nextStatus, Guid stationId, DateTime? arr, DateTime? dep, string? reason, DateTime now, CancellationToken ct)
     {
         var actual = await db.ActualTrips.Include(a => a.StopTimes).SingleOrDefaultAsync(a => a.PlannedTripId == trip.Id, ct);
         var arrUtc = arr.HasValue ? NetworkAdminRules.ToUtc(arr.Value) : (DateTime?)null;
         var depUtc = dep.HasValue ? NetworkAdminRules.ToUtc(dep.Value) : (DateTime?)null;
-        if (arrUtc.HasValue && depUtc.HasValue && depUtc.Value < arrUtc.Value)
+        var stop = actual?.StopTimes.SingleOrDefault(s => s.StationId == stationId);
+        var beforeStop = stop is null ? null : new ActualStopSnapshot(stationId, stop.ActualArrivalAt, stop.ActualDepartureAt);
+        var nextArr = arrUtc ?? stop?.ActualArrivalAt;
+        var nextDep = depUtc ?? stop?.ActualDepartureAt;
+        if (nextArr.HasValue && nextDep.HasValue && nextDep.Value < nextArr.Value)
             throw new NetworkAdminException("INVALID_STOP_TIME", StatusCodes.Status400BadRequest, "actualDepartureAt cannot precede actualArrivalAt.");
+        var actualStatus = nextStatus == "PLANNED" ? "READY" : nextStatus;
         if (actual is null)
         {
-            actual = new ActualTrip { OperatorId = opId, PlannedTripId = trip.Id, Status = trip.Status == "PLANNED" ? "READY" : trip.Status, ActualStartAt = arrUtc, Source = "MANUAL", Reason = reason?.Trim(), CreatedAt = now, UpdatedAt = now };
+            actual = new ActualTrip { OperatorId = opId, PlannedTripId = trip.Id, Status = actualStatus, ActualStartAt = nextArr, Source = "MANUAL", Reason = reason?.Trim(), CreatedAt = now, UpdatedAt = now };
             db.ActualTrips.Add(actual);
         }
-        else { actual.Status = trip.Status == "PLANNED" ? "READY" : trip.Status; actual.Reason = reason?.Trim() ?? actual.Reason; actual.UpdatedAt = now; }
-        var seq = trip.StopTimes.FirstOrDefault(s => s.StationId == stationId)?.SequenceNo ?? (short)(actual.StopTimes.Count + 1);
-        var stop = actual.StopTimes.SingleOrDefault(s => s.StationId == stationId);
+        else { actual.Status = actualStatus; actual.Reason = reason?.Trim() ?? actual.Reason; actual.UpdatedAt = now; }
         if (stop is null)
-            actual.StopTimes.Add(new ActualStopTime { OperatorId = opId, ActualTripId = actual.Id, StationId = stationId, SequenceNo = seq, ActualArrivalAt = arrUtc, ActualDepartureAt = depUtc, Source = "MANUAL" });
-        else { stop.ActualArrivalAt = arrUtc ?? stop.ActualArrivalAt; stop.ActualDepartureAt = depUtc ?? stop.ActualDepartureAt; }
+        {
+            var seq = trip.StopTimes.FirstOrDefault(s => s.StationId == stationId)?.SequenceNo ?? (short)(actual.StopTimes.Count + 1);
+            stop = new ActualStopTime { OperatorId = opId, ActualTripId = actual.Id, StationId = stationId, SequenceNo = seq, ActualArrivalAt = nextArr, ActualDepartureAt = nextDep, Source = "MANUAL" };
+            actual.StopTimes.Add(stop);
+        }
+        else { stop.ActualArrivalAt = nextArr; stop.ActualDepartureAt = nextDep; }
+        return (beforeStop, new ActualStopSnapshot(stationId, stop.ActualArrivalAt, stop.ActualDepartureAt));
     }
 
     private async Task<Guid> InsertAllocationSqlAsync(Guid opId, Guid tripId, Guid trainsetId, DateTime fromUtc, DateTime toUtc, string actorId, CancellationToken ct)
@@ -259,8 +276,13 @@ public sealed class AdminTripService(
         { var r = g.First(); return new AdminTripAllocationResponse(r.Id, r.TrainsetId, r.TrainsetCode, r.AllocatedFrom, r.AllocatedTo, r.Status, r.CreatedAt); });
     }
 
-    private Task<bool> LoadProfileExistsAsync(Guid opId, Guid profileId, CancellationToken ct) =>
-        db.Database.SqlQuery<bool>($"""SELECT EXISTS (SELECT 1 FROM metro.capacity_profiles WHERE operator_id = {opId} AND id = {profileId}) AS "Value" """).SingleAsync(ct);
+    private async Task EnsurePublishedLoadProfileAsync(Guid opId, Guid profileId, CancellationToken ct)
+    {
+        var status = await db.Database.SqlQuery<string>($"""SELECT status AS "Value" FROM metro.capacity_profiles WHERE operator_id = {opId} AND id = {profileId}""").SingleOrDefaultAsync(ct)
+            ?? throw new NetworkAdminException("LOAD_PROFILE_NOT_FOUND", StatusCodes.Status404NotFound, "Load profile was not found.");
+        if (status != "PUBLISHED")
+            throw new NetworkAdminException("LOAD_PROFILE_NOT_PUBLISHED", StatusCodes.Status409Conflict, $"Load profile status is '{status}'; only PUBLISHED load profiles can be assigned to a trip.");
+    }
 
     private Task<TrainsetBrief?> LoadTrainsetBriefAsync(Guid opId, Guid trainsetId, CancellationToken ct) =>
         db.Database.SqlQuery<TrainsetBrief>($"""SELECT id AS "Id", code AS "Code", status AS "Status" FROM metro.trainsets WHERE operator_id = {opId} AND id = {trainsetId}""").SingleOrDefaultAsync(ct);
@@ -271,12 +293,13 @@ public sealed class AdminTripService(
         catch (DbUpdateException ex) { throw NetworkAdminHelper.MapPostgresException(ex, dupCode, dupMsg); }
     }
 
-    private static object TripSnapshot(PlannedTrip t) => new { t.Id, t.TripCode, t.ServiceDate, t.Direction, t.Status, t.BoardingStationId, t.BoardingStatus, t.LoadProfileId, t.CancellationReason };
+    private static object TripSnapshot(PlannedTrip t, ActualStopSnapshot? actualStop = null) => new { t.Id, t.TripCode, t.ServiceDate, t.Direction, t.Status, t.BoardingStationId, t.BoardingStatus, t.LoadProfileId, t.CancellationReason, ActualStop = actualStop };
     private static AdminTripResponse ToTripResponse(PlannedTrip t, AdminTripAllocationResponse? alloc) => new(
         t.Id, t.ScheduleVersionId, t.LineId, t.TripCode, t.ServiceDate, t.Direction, t.PlannedStartAt, t.PlannedEndAt,
         t.Status, t.LoadProfileId, t.BoardingStationId, t.BoardingStatus, t.CancellationReason, t.CreatedAt, t.UpdatedAt,
         t.StopTimes.OrderBy(s => s.SequenceNo).Select(s => new AdminTripStopResponse(s.Id, s.StationId, s.Station?.Code ?? string.Empty, s.Station?.Name ?? string.Empty, s.SequenceNo, s.PlannedArrivalAt, s.PlannedDepartureAt, s.DwellSeconds)).ToArray(), alloc);
 
+    private sealed record ActualStopSnapshot(Guid StationId, DateTime? ActualArrivalAt, DateTime? ActualDepartureAt);
     private sealed record TrainsetBrief(Guid Id, string Code, string Status);
     private sealed record AllocationRow(Guid PlannedTripId, Guid Id, Guid TrainsetId, string TrainsetCode, DateTime AllocatedFrom, DateTime AllocatedTo, string Status, DateTime CreatedAt);
 }
