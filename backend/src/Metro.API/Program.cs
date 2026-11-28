@@ -95,6 +95,14 @@ builder.Services.AddHttpClient<IPaymentGateway, MoMoPaymentGateway>(client =>
     client.Timeout = TimeSpan.FromSeconds(15);
 });
 
+// BE-17 hardening: options + fixed-window limiter + audit guard.
+builder.Services.Configure<HardeningOptions>(builder.Configuration.GetSection("Hardening"));
+builder.Services.AddSingleton(sp =>
+{
+    var cfg = sp.GetRequiredService<IOptions<HardeningOptions>>().Value.RateLimiting;
+    return new FixedWindowRateLimiter(cfg.PermitLimit, TimeSpan.FromSeconds(Math.Max(1, cfg.WindowSeconds)));
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options => options.ConfigureMetroApi());
 
@@ -124,7 +132,10 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseMiddleware<ClientRateLimitMiddleware>();
+app.UseMiddleware<AuditGuardMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
