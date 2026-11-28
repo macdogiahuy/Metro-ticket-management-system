@@ -162,6 +162,35 @@ public sealed class AuthEndpointsTests(MetroWebApplicationFactory factory)
         return account;
     }
 
+    [PostgreSqlFact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task Concurrent_logins_for_one_account_issue_distinct_valid_sessions()
+    {
+        using var client = factory.CreateClient();
+        var account = await RegisterAsync(client, UniqueEmail("parallel"));
+        var verified = await client.PostAsJsonAsync("/api/v1/auth/verify-email",
+            new { email = account.Email, code = account.VerificationCode });
+        Assert.Equal(HttpStatusCode.NoContent, verified.StatusCode);
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ =>
+            client.PostAsJsonAsync("/api/v1/auth/login",
+                new { email = account.Email, password = account.Password })));
+        Assert.All(responses, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
+        var tokens = await Task.WhenAll(responses.Select(ReadTokensAsync));
+        Assert.Equal(8, tokens.Select(x => x.RefreshToken).Distinct().Count());
+        Assert.Equal(8, tokens.Select(x => x.AccessToken).Distinct().Count());
+
+        var sessions = await LoadSessionsAsync(account.UserId);
+        Assert.Equal(8, sessions.Length);
+        Assert.All(sessions, session => Assert.Null(session.RevokedAt));
+        foreach (var token in tokens)
+        {
+            using var authorized = factory.CreateClient();
+            authorized.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
+            Assert.Equal(HttpStatusCode.OK, (await authorized.GetAsync("/api/v1/auth/me")).StatusCode);
+        }
+    }
+
     private static async Task<TokenPair> LoginAsync(HttpClient client, RegisteredAccount account)
     {
         var response = await client.PostAsJsonAsync("/api/v1/auth/login",
