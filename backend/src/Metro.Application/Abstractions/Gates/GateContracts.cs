@@ -16,7 +16,7 @@ public sealed record GateResolutionRequest(Guid RequestId, Guid SourceRequestId,
     DateTimeOffset? ProvenEnteredAt = null, Guid? EntryStationId = null,
     Guid? EntryPlannedTripId = null, short? EntryDirection = null);
 
-public sealed record GateLookupRequest(string TicketCode, string Reason);
+public sealed record GateLookupRequest(string TicketCode, string Reason, string? Phone = null);
 public sealed record GateTicketLookup(Guid TicketId, string TicketCode, string Status,
     string ProductType, DateTimeOffset? EffectiveFrom, DateTimeOffset? ExpiresAt,
     Guid? OriginStationId, Guid? DestinationStationId, Guid? OpenJourneyId,
