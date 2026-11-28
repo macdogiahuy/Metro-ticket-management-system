@@ -101,7 +101,7 @@ Mỗi người mở đúng khối của mình, làm từ trên xuống: xong tas
 | --- | --- | --- | --- | --- |
 | 18/11 | `BE-18B` | Test harness + CI | S0 | Done |
 | 02/12 | `BE-15` | Báo cáo vé/doanh thu + export CSV | S1 | Done |
-| 05/12 | `BE-11` | Hỗ trợ tại cổng | S2 | To Do |
+| 05/12 | `BE-11` | Hỗ trợ tại cổng | S2 | Done |
 | 09/12 | `FE-01` | App shell, routing, design token, axios/react-query, layout… | S2 | To Do |
 | 13/12 | `FE-08` | Báo cáo doanh thu/vé + export CSV | S2 | To Do |
 | 17/12 | `FE-09` | Responsive, accessibility, loading/empty/error toàn cục | S2 | To Do |
@@ -129,7 +129,7 @@ Mỗi người mở đúng khối của mình, làm từ trên xuống: xong tas
 | **02/12** | [#29](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/29) | `BE-15` | Báo cáo vé/doanh thu + export CSV | Tiên | My | S1 | 30/11 | 3 | Done |
 | **04/12** | [#26](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/26) | `BE-08` | Payment MoMo TEST | Huy | — | S1 | 01/12 | 5 | Done |
 | **04/12** | [#30](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/30) | `BE-10` | Soát vé tại cổng | Thành | Tiên | S2 | 01/12 | 5 | Done |
-| **05/12** | [#31](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/31) | `BE-11` | Hỗ trợ tại cổng | Tiên | Thành | S2 | 05/12 | 1 | To Do |
+| **05/12** | [#31](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/31) | `BE-11` | Hỗ trợ tại cổng | Tiên | Thành | S2 | 05/12 | 1 | Done |
 | **06/12** | [#28](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/28) | `BE-16` | Hủy đơn chưa thu + hoàn khoản thu lỗi + đổi vé do gián đoạn… | Tuyên | Hoàng | S1 | 05/12 | 2 | Done |
 | **09/12** | [#33](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/33) | `FE-01` | App shell, routing, design token, axios/react-query, layout… | Tiên | My | S2 | 07/12 | 3 | To Do |
 | **09/12** | [#34](https://github.com/macdogiahuy/Metro-ticket-management-system/issues/34) | `FE-02` | Auth + hồ sơ + trạng thái ưu đãi | Hoàng | Tuyên | S2 | 07/12 | 3 | To Do |
