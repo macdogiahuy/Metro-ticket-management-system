@@ -2,6 +2,11 @@
 
 > **DOC-01** (issue #44) · Nhóm 6 · Bàn giao 20/12/2026 · Nộp bài 23/12/2026
 > Demo chính thức ở cổng G5 (S3, 18–20/12). Video dự phòng quay trước demo ≥ 1 ngày.
+>
+> **Cập nhật 28/11/2026:** backend, seed demo và hardening đã sẵn sàng; FE-01→FE-09
+> đang triển khai theo board. Đến khi FE/QA xong, dùng slide `slides/index.html` và
+> video dự phòng slide-based `video/metro-demo-fallback.mp4` (xem `slides/README.md`).
+> Bản quay màn hình thật cần làm sau QA-03.
 
 ## 0. Chuẩn bị trước demo (checklist)
 
@@ -101,7 +106,7 @@
 | 6.3 | Xuất báo cáo vé/doanh thu (UC33) | Báo cáo sinh từ dữ liệu demo |
 | 6.4 | Thêm service notice (UC29) | Notice hiện ở khối tra cứu (nhớ lại 2.3) |
 
-**Kết demo:** tổng kết 27 Must-have UC, chỉ lại điểm mạnh (schema 93 bảng, audit, capacity), mời hỏi đáp.
+**Kết demo:** tổng kết 27 Must-have UC, chỉ lại điểm mạnh (schema theo SRS v1.2, audit, idempotency), mời hỏi đáp.
 
 ---
 

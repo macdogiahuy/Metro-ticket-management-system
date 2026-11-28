@@ -102,12 +102,13 @@ public sealed class GlobalExceptionHandler(
         if (status >= StatusCodes.Status500InternalServerError)
         {
             logger.LogError(exception, "Unhandled exception on {Method} {Path}",
-                httpContext.Request.Method, httpContext.Request.Path);
+                httpContext.Request.Method, PiiRedactor.Redact(httpContext.Request.Path.ToString()));
         }
         else
         {
             logger.LogWarning("Handled {ExceptionType} ({ErrorCode}) on {Method} {Path}",
-                exception.GetType().Name, errorCode ?? "NONE", httpContext.Request.Method, httpContext.Request.Path);
+                exception.GetType().Name, errorCode ?? "NONE", httpContext.Request.Method,
+                PiiRedactor.Redact(httpContext.Request.Path.ToString()));
         }
 
         httpContext.Response.StatusCode = status;
@@ -116,7 +117,7 @@ public sealed class GlobalExceptionHandler(
         {
             Status = status,
             Title = title,
-            Detail = safeDetail,
+            Detail = safeDetail is null ? null : PiiRedactor.Redact(safeDetail),
         };
         if (errorCode is not null)
         {
