@@ -191,8 +191,9 @@ public sealed partial class GateService
     }
     public async Task<GateTicketLookup> LookupAsync(string actor, string? code, GateLookupRequest request, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(request.TicketCode) || request.TicketCode.Length > 60 || string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 1000)
-            throw new GateException("INVALID_GATE_LOOKUP", 400);
+        GateLookupRules.Validate(request);
+        var ticketCode = (request.TicketCode ?? string.Empty).Trim();
+        var phone = GateLookupRules.NormalizePhone(request.Phone);
         GateTicketLookup? found = null;
         var outcome = await Transaction(actor, code, Guid.NewGuid(), null, async s =>
         {
@@ -202,9 +203,14 @@ public sealed partial class GateService
                   t.destination_station_id AS "DestinationStationId",j.id AS "OpenJourneyId",j.paired_journey_id AS "PairedJourneyId",u.full_name AS "PassengerName"
                 FROM metro.tickets t JOIN metro.ticket_products p ON p.operator_id=t.operator_id AND p.id=t.ticket_product_id
                   LEFT JOIN metro.user_profiles u ON u.user_id=t.holder_user_id
+                  LEFT JOIN public."AspNetUsers" acct ON acct."Id"=t.holder_user_id
                   LEFT JOIN metro.journeys j ON j.operator_id=t.operator_id AND j.ticket_id=t.id AND j.status IN ('OPEN','MANUAL_REVIEW')
-                WHERE t.operator_id=@op AND t.ticket_code=@code
-                """, ct, ("code", request.TicketCode))).SingleOrDefault() ?? throw new GateException("TICKET_NOT_FOUND", 404);
+                WHERE t.operator_id=@op AND (
+                    (@byCode AND t.ticket_code=@code) OR
+                    (@byPhone AND regexp_replace(regexp_replace(coalesce(acct."PhoneNumber",''),'\D','','g'),'^(84|0)','','')=@phone))
+                ORDER BY t.issued_at DESC,t.id DESC LIMIT 1
+                """, ct, ("byCode", ticketCode.Length > 0), ("code", ticketCode),
+                    ("byPhone", phone.Length > 0), ("phone", phone))).FirstOrDefault() ?? throw new GateException("TICKET_NOT_FOUND", 404);
             await s.Audit(found.TicketId, "LOOKUP", request.Reason, ct);
             return new(Guid.Empty, "Deny", "LOOKUP_ONLY", s.Now, []);
         }, ct);

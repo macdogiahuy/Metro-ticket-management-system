@@ -31,7 +31,7 @@ public static class GateEndpoints
             .Produces<GateResult>().Produces<GateResult>(202).ProducesProblem(400).ProducesProblem(403).ProducesProblem(404).ProducesProblem(409);
         group.MapPost("/lookup", (HttpContext http, GateLookupRequest request, string? operatorCode, IGateService gate, CancellationToken ct) =>
             gate.LookupAsync(Actor(http), operatorCode, request, ct))
-            .WithName("LookupGateTicket").WithSummary("UC18 — Audited minimal ticket lookup; does not reveal or reissue QR")
+            .WithName("LookupGateTicket").WithSummary("UC18/UC19 - Audited minimal lookup by ticket code or passenger phone; never reveals or reissues QR")
             .Produces<GateTicketLookup>().ProducesProblem(400).ProducesProblem(403).ProducesProblem(404);
         group.MapGet("/escalations",(HttpContext http,string? operatorCode,int? page,string? status,IGateService gate,CancellationToken ct)=>
             gate.EscalationsAsync(Actor(http),operatorCode,page??1,status??"OPEN",ct))
